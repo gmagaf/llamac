@@ -122,6 +122,6 @@ main = do
   s <- getContents
   -- s <- getLine
   let tokens = lexer s
-  in mapM_ (\(token, lexeme, _) -> print $ "Token: " ++ (show token) ++ " with lexeme: " ++ lexeme) tokens
+  mapM_ (\(token, lexeme, _) -> print $ "Token: " ++ (show token) ++ " with lexeme: " ++ lexeme) tokens
 
 }

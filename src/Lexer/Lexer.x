@@ -1,9 +1,9 @@
 {
-module Main where
+module Lexer.Lexer (lexer, lexerLine, scanFile) where
 
 import Text.Read (readMaybe)
 import Control.Monad (when)
-import Debug.Trace
+import Debug.Trace (trace)
 }
 
 %wrapper "monadUserState"
@@ -70,10 +70,12 @@ unknownCharacter (posn, _, _, current_string) len =
 
 alexEOF :: Alex Token
 alexEOF = do
-  sc <- alexGetStartCode
-  case sc of
-    0 -> return T_eof
-    comment -> alexError "Lexical error: Reached end of file without closing all comments"
+  code <- alexGetStartCode
+  if code == comment
+    then alexError "Lexical error: Reached end of file without closing all comments"
+    else case code of
+      0 -> return T_eof
+      c -> alexError $ "Lexical error: Reached end of file in unsupported start code: " ++ (show c)
 
 
 data Token = T_eof | T_and | T_array | T_begin | T_bool | T_char | T_delete | T_dim |
@@ -91,33 +93,33 @@ data Token = T_eof | T_and | T_array | T_begin | T_bool | T_char | T_delete | T_
   deriving (Eq, Show)
 
 keyword :: Token -> AlexAction Token
-keyword token = \input -> \len -> Alex $ \state -> Right (state, token)
+keyword tokenConstr _ _ = return tokenConstr
 
 identifiersAction :: (String -> Token) -> AlexAction Token
-identifiersAction tokenConstr (posn, prev_char, rest_bytes, current_string) len =
+identifiersAction tokenConstr (_, _, _, current_string) len =
   return $ tokenConstr (take len current_string)
 
 intAction :: AlexAction Token
-intAction (posn, prev_char, rest_bytes, current_string) len =
+intAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in case readMaybe lexeme :: Maybe Int of
     Just v  -> return (T_const_int v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into an Int")
 
 realAction :: AlexAction Token
-realAction (posn, prev_char, rest_bytes, current_string) len =
+realAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in case readMaybe lexeme :: Maybe Float of
     Just v  -> return (T_const_real v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a Float")
 
 stringActionSimple :: AlexAction Token
-stringActionSimple (posn, prev_char, rest_bytes, current_string) len =
+stringActionSimple (_, _, _, current_string) len =
   let lexeme = (take len current_string)
   in return (T_const_string lexeme)
 
 charActionSimple :: AlexAction Token
-charActionSimple (posn, prev_char, rest_bytes, current_string) len =
+charActionSimple (_, _, _, current_string) len =
   let lexeme = (take len current_string)
   in return (T_const_char lexeme)
 
@@ -167,7 +169,7 @@ lexer s = runAlex s gather  where
      t <- alexMonadScan
      case t of
        T_eof     -> return [t]
-       otherwise -> (t:) <$> gather
+       _         -> (t:) <$> gather
 
 -- scan a file
 scanFile f = do
@@ -180,13 +182,13 @@ lexerLine = do
   let res = lexer line
   case res of
     Left err -> putStrLn err
-    Right tokens -> mapM_ (\token -> putStrLn $ "Token: " ++ (show token)) tokens
+    Right tokens -> mapM_ (\t -> putStrLn $ "Token: " ++ (show t)) tokens
 
-main :: IO ()
-main = do
-  s <- getContents
-  let res = lexer s
-  case res of
-    Left err -> putStrLn err
-    Right tokens -> mapM_ (\token -> putStrLn $ "Token: " ++ (show token)) tokens
+-- main :: IO ()
+-- main = do
+--   s <- getContents
+--   let res = lexer s
+--   case res of
+--     Left err -> putStrLn err
+--     Right tokens -> mapM_ (\token -> putStrLn $ "Token: " ++ (show token)) tokens
 }

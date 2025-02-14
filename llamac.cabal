@@ -24,7 +24,6 @@ executable llamac
   build-tool-depends:  alex:alex >= 3.3
   other-modules:       Lexer.Lexer
   ghc-options:         -Wall
-                       -Werror
                        -Wcompat
                        -Widentities
                        -Wincomplete-record-updates

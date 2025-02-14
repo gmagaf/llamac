@@ -153,23 +153,23 @@ beginComment input len = do
   skip input len
 
 endComment :: AlexAction Token
-endComment input len = do
+endComment input@(posn, _, _, _) len = do
   d <- getCommentDepth
   when (d == 1) (alexSetStartCode 0)
   if d > 0
     then setCommentDepth (d - 1)
-    else alexError "More closing comments than opening"
+    else lexicalError posn "A comment closed without being opened"
   skip input len
 
 -- scan a string until EOF is encountered
 lexer :: String -> Either String [Token]
-lexer s = runAlex s gather  where
+lexer s = runAlex s gather where
   gather :: Alex [Token]
   gather = do
      t <- alexMonadScan
      case t of
-       T_eof     -> return [t]
-       _         -> (t:) <$> gather
+       T_eof -> return [t]
+       _     -> (t:) <$> gather
 
 -- scan a file
 scanFile f = do
@@ -184,11 +184,4 @@ lexerLine = do
     Left err -> putStrLn err
     Right tokens -> mapM_ (\t -> putStrLn $ "Token: " ++ (show t)) tokens
 
--- main :: IO ()
--- main = do
---   s <- getContents
---   let res = lexer s
---   case res of
---     Left err -> putStrLn err
---     Right tokens -> mapM_ (\token -> putStrLn $ "Token: " ++ (show token)) tokens
 }

@@ -21,6 +21,69 @@ $white    = [\ \t\r\n]            -- white characters
 
 rules :-
   <0> "and"                                     { keyword T_and }
+  <0> "array"                                   { keyword T_array }
+  <0> "begin"                                   { keyword T_begin }
+  <0> "bool"                                    { keyword T_bool }
+  <0> "char"                                    { keyword T_char }
+  <0> "delete"                                  { keyword T_delete }
+  <0> "dim"                                     { keyword T_dim }
+  <0> "do"                                      { keyword T_do }
+  <0> "done"                                    { keyword T_done }
+  <0> "downto"                                  { keyword T_downto }
+  <0> "else"                                    { keyword T_else }
+  <0> "end"                                     { keyword T_end }
+  <0> "false"                                   { keyword T_false }
+  <0> "float"                                   { keyword T_float }
+  <0> "for"                                     { keyword T_for }
+  <0> "if"                                      { keyword T_if }
+  <0> "in"                                      { keyword T_in }
+  <0> "int"                                     { keyword T_int }
+  <0> "let"                                     { keyword T_let }
+  <0> "match"                                   { keyword T_match }
+  <0> "mod"                                     { keyword T_mod }
+  <0> "mutable"                                 { keyword T_mutable }
+  <0> "new"                                     { keyword T_new }
+  <0> "not"                                     { keyword T_not }
+  <0> "of"                                      { keyword T_of }
+  <0> "rec"                                     { keyword T_rec }
+  <0> "ref"                                     { keyword T_ref }
+  <0> "then"                                    { keyword T_then }
+  <0> "to"                                      { keyword T_to }
+  <0> "true"                                    { keyword T_true }
+  <0> "type"                                    { keyword T_type }
+  <0> "unit"                                    { keyword T_unit }
+  <0> "while"                                   { keyword T_while }
+  <0> "with"                                    { keyword T_with }
+  <0> "->"                                      { keyword T_arrow }
+  <0> "="                                       { keyword T_assign }
+  <0> "|"                                       { keyword T_bar }
+  <0> "+"                                       { keyword T_plus }
+  <0> "-"                                       { keyword T_minus }
+  <0> "*"                                       { keyword T_times }
+  <0> "/"                                       { keyword T_div }
+  <0> "+."                                      { keyword T_plus_real }
+  <0> "-."                                      { keyword T_minus_real }
+  <0> "*."                                      { keyword T_times_real }
+  <0> "/."                                      { keyword T_div_real }
+  <0> "**"                                      { keyword T_exp }
+  <0> "!"                                       { keyword T_bang }
+  <0> ";"                                       { keyword T_semicolon }
+  <0> "&&"                                      { keyword T_and_op }
+  <0> "||"                                      { keyword T_or_op }
+  <0> "<>"                                      { keyword T_not_eq_op }
+  <0> "<"                                       { keyword T_less_than }
+  <0> ">"                                       { keyword T_more_than }
+  <0> "<="                                      { keyword T_less_than_eq }
+  <0> ">="                                      { keyword T_more_than_eq }
+  <0> "=="                                      { keyword T_equals }
+  <0> "!="                                      { keyword T_not_equals }
+  <0> ":="                                      { keyword T_assign_mutable }
+  <0> "("                                       { keyword T_lparen }
+  <0> ")"                                       { keyword T_rparen }
+  <0> "["                                       { keyword T_lbracket }
+  <0> "]"                                       { keyword T_rbracket }
+  <0> ","                                       { keyword T_comma }
+  <0> ":"                                       { keyword T_colon }
   <0> $lls+($ls_ds|_)*                          { identifiersAction T_id }
   <0> $uls+($ls_ds|_)*                          { identifiersAction T_id_constr }  -- identifiers for constructors
   <0> $digits+                                  { intAction }

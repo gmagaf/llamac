@@ -13,7 +13,7 @@ $digits   = [0-9]                 -- digits
 $hex      = [0-9a-fA-f]           -- hex digits
 $white    = [\ \t\r\n]            -- white characters
 
-@escape   = \\n | \\t | \\r | \\0 | \\\\ | \' | "\"" | \\x$hex$hex -- escape sequences
+@escape   = \\n|\\t|\\r|\\0|\\\\|\\'|\\\"|\\x$hex$hex -- escape sequences"
 
 -- Each action has type :: AlexPosn -> String -> token where
 -- data AlexPosn = AlexPn
@@ -56,12 +56,12 @@ rules :-
   "unit"                                    {\p -> \s -> (T_unit, s, p)}
   "while"                                   {\p -> \s -> (T_while, s, p)}
   "with"                                    {\p -> \s -> (T_with, s, p)}
-  $lls+($ls_ds | _)*                        {\p -> \s -> (T_id, s, p)}
-  $uls+($ls_ds | _)*                        {\p -> \s -> (T_id_constr, s, p)}
+  $lls+($ls_ds|_)*                          {\p -> \s -> (T_id, s, p)}
+  $uls+($ls_ds|_)*                          {\p -> \s -> (T_id_constr, s, p)}
   $digits+                                  {\p -> \s -> (T_const_int, s, p)}
   $digits+\.$digits+([eE][\+\-]?$digits+)?  {\p -> \s -> (T_const_real, s, p)}
-  \'([^\\ \']|@escape)\'                    {\p -> \s -> (T_const_char, s, p)}
-  \"([^\\ \"]|@escape)*\"                   {\p -> \s -> (T_const_string, s, p)} --"
+  \'([^\\\']|@escape)\'                     {\p -> \s -> (T_const_char, s, p)}
+  \"([^\\\"]|@escape)*\"                    {\p -> \s -> (T_const_string, s, p)} --"
   "->"                                      {\p -> \s -> (T_arrow, s, p)}
   "="                                       {\p -> \s -> (T_assign, s, p)}
   "|"                                       {\p -> \s -> (T_bar, s, p)}
@@ -94,7 +94,7 @@ rules :-
   ":"                                       {\p -> \s -> (T_colon, s, p)}
   $white+                                   ;
   \-\-.*                                    ; -- one line comment
-  "(*"([^\*]+ | \*+[^\*\)])* \*+")"         ; -- multiline comments TODO: support nested comments
+  "(*"([^\*]+|\*+[^\*\)])*\*+")"            ; -- multiline comments TODO: support nested comments
 -- .                                        {ERROR}
 
 {

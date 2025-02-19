@@ -2,8 +2,7 @@ cabal-version:       2.2
 
 name:                llamac
 version:             0.1.0.0
--- synopsis:
-description:         A compiler for the language llama implemented in Haskell
+synopsis:            A compiler for the language llama implemented in Haskell
 homepage:            https://github.com/gmagaf/llamac#readme
 license:             BSD-3-Clause
 license-file:        LICENSE
@@ -16,18 +15,55 @@ extra-source-files:  README.md
                      src/Lexer/Lexer.x
                      src/Parser/Parser.y
 
-executable llamac
+description:         A compiler for the language llama implemented in Haskell
+
+source-repository head
+  type:     git
+  location: https://github.com/gmagaf/llamac.git
+
+library
   hs-source-dirs:      src
-  main-is:             Main.hs
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5,
                        array >= 0.4 && < 0.6
   build-tool-depends:  alex:alex >= 3.3,
                        happy:happy >= 1.20
-  other-modules:       Lexer.Lexer
+  exposed-modules:     Lexer.Lexer
                        Parser.Parser
                        Common.Token
                        Common.AST
+  ghc-options:         -Wall
+                       -Wcompat
+                       -Widentities
+                       -Wincomplete-record-updates
+                       -Wincomplete-uni-patterns
+                       -Wmissing-export-lists
+                       -Wmissing-home-modules
+                       -Wpartial-fields
+                       -Wredundant-constraints
+
+executable llamac
+  hs-source-dirs:      src
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5,
+                       llamac
+  ghc-options:         -Wall
+                       -Wcompat
+                       -Widentities
+                       -Wincomplete-record-updates
+                       -Wincomplete-uni-patterns
+                       -Wmissing-export-lists
+                       -Wmissing-home-modules
+                       -Wpartial-fields
+                       -Wredundant-constraints
+
+executable lexer
+  hs-source-dirs:      exe
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5,
+                       llamac
   ghc-options:         -Wall
                        -Wcompat
                        -Widentities

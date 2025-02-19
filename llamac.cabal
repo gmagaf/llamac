@@ -14,6 +14,7 @@ category:            Compiler
 build-type:          Simple
 extra-source-files:  README.md
                      src/Lexer/Lexer.x
+                     src/Parser/Parser.y
 
 executable llamac
   hs-source-dirs:      src
@@ -21,8 +22,12 @@ executable llamac
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5,
                        array >= 0.4 && < 0.6
-  build-tool-depends:  alex:alex >= 3.3
+  build-tool-depends:  alex:alex >= 3.3,
+                       happy:happy >= 1.20
   other-modules:       Lexer.Lexer
+                       Parser.Parser
+                       Common.Token
+                       Common.AST
   ghc-options:         -Wall
                        -Wcompat
                        -Widentities

@@ -1,6 +1,9 @@
 {
-module Lexer.Lexer (lexer, lexerLine, scanFile) where
+module Lexer.Lexer (Alex, runAlex, alexError,
+                    alexGetInput, getColumnOfPosn, getLineOfPosn,
+                    lexer, lexerLine, scanFile, lexerWrap) where
 
+import Common.Token
 import Text.Read (readMaybe)
 import Control.Monad (when)
 import Debug.Trace (trace)
@@ -61,22 +64,22 @@ rules :-
   <0> "-"                                       { keyword T_minus }
   <0> "*"                                       { keyword T_times }
   <0> "/"                                       { keyword T_div }
-  <0> "+."                                      { keyword T_plus_real }
-  <0> "-."                                      { keyword T_minus_real }
-  <0> "*."                                      { keyword T_times_real }
-  <0> "/."                                      { keyword T_div_real }
+  <0> "+."                                      { keyword T_plus_float }
+  <0> "-."                                      { keyword T_minus_float }
+  <0> "*."                                      { keyword T_times_float }
+  <0> "/."                                      { keyword T_div_float }
   <0> "**"                                      { keyword T_exp }
   <0> "!"                                       { keyword T_bang }
   <0> ";"                                       { keyword T_semicolon }
   <0> "&&"                                      { keyword T_and_op }
   <0> "||"                                      { keyword T_or_op }
-  <0> "<>"                                      { keyword T_not_eq_op }
+  <0> "<>"                                      { keyword T_not_struct_eq_op }
   <0> "<"                                       { keyword T_less_than }
   <0> ">"                                       { keyword T_more_than }
   <0> "<="                                      { keyword T_less_than_eq }
   <0> ">="                                      { keyword T_more_than_eq }
-  <0> "=="                                      { keyword T_equals }
-  <0> "!="                                      { keyword T_not_equals }
+  <0> "=="                                      { keyword T_nat_eq_op }
+  <0> "!="                                      { keyword T_not_nat_eq_op }
   <0> ":="                                      { keyword T_assign_mutable }
   <0> "("                                       { keyword T_lparen }
   <0> ")"                                       { keyword T_rparen }
@@ -87,7 +90,7 @@ rules :-
   <0> $lls+($ls_ds|_)*                          { identifiersAction T_id }
   <0> $uls+($ls_ds|_)*                          { identifiersAction T_id_constr }  -- identifiers for constructors
   <0> $digits+                                  { intAction }
-  <0> $digits+\.$digits+([eE][\+\-]?$digits+)?  { realAction }
+  <0> $digits+\.$digits+([eE][\+\-]?$digits+)?  { floatAction }
   <0> \'([^\\\']|@escape)\'                     { charActionSimple }
   <0> \"([^\\\"]|@escape)*\"                    { stringActionSimple } --"
   <0> $white+                                   { skip }
@@ -141,20 +144,6 @@ alexEOF = do
       c -> alexError $ "Lexical error: Reached end of file in unsupported start code: " ++ (show c)
 
 
-data Token = T_eof | T_and | T_array | T_begin | T_bool | T_char | T_delete | T_dim |
-  T_do | T_done | T_downto | T_else | T_end | T_false | T_float |
-  T_for | T_if | T_in | T_int | T_let | T_match | T_mod | T_mutable |
-  T_new | T_not | T_of | T_rec | T_ref | T_then | T_to | T_true |
-  T_type | T_unit | T_while | T_with |
-  T_id String | T_id_constr String | T_const_int Int | T_const_real Float | T_const_char String | T_const_string String |
-  T_arrow | T_assign | T_bar | T_plus | T_minus | T_times | T_div |
-  T_plus_real | T_minus_real | T_times_real | T_div_real | T_exp |
-  T_bang | T_semicolon | T_and_op | T_or_op | T_not_eq_op |
-  T_less_than | T_more_than | T_less_than_eq | T_more_than_eq |
-  T_equals | T_not_equals | T_assign_mutable | T_lparen | T_rparen |
-  T_lbracket | T_rbracket | T_comma | T_colon
-  deriving (Eq, Show)
-
 keyword :: Token -> AlexAction Token
 keyword tokenConstr _ _ = return tokenConstr
 
@@ -169,11 +158,11 @@ intAction (posn, _, _, current_string) len =
     Just v  -> return (T_const_int v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into an Int")
 
-realAction :: AlexAction Token
-realAction (posn, _, _, current_string) len =
+floatAction :: AlexAction Token
+floatAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in case readMaybe lexeme :: Maybe Float of
-    Just v  -> return (T_const_real v)
+    Just v  -> return (T_const_float v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a Float")
 
 stringActionSimple :: AlexAction Token
@@ -247,4 +236,8 @@ lexerLine = do
     Left err -> putStrLn err
     Right tokens -> mapM_ (\t -> putStrLn $ "Token: " ++ (show t)) tokens
 
+lexerWrap :: (Token -> Alex a) -> Alex a
+lexerWrap cont = do
+  a <- alexMonadScan
+  cont a
 }

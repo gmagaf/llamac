@@ -13,12 +13,12 @@ data LetDef = Let [Def]
             | LetRec [Def]
   deriving Show
 
-data Def = Def Identifier [Param] Expr
-         | TypedDef Identifier [Param] Type Expr
-         | MutDef Identifier
-         | MutTypedDef Identifier Type
+data Def = FunDef Identifier [Param] Expr
+         | FunDefTyped Identifier [Param] Type Expr
+         | VarDef Identifier
+         | VarDefTyped Identifier Type
          | ArrayDef Identifier [Expr]
-         | ArrayTypedDef Identifier [Expr] Type
+         | ArrayDefTyped Identifier [Expr] Type
   deriving Show
 
 data TypeDef = Type [TDef]
@@ -35,8 +35,11 @@ data Param = Param Identifier
   deriving Show
 
 data Type = UnitType | IntType | CharType | BoolType | FloatType
-          | NestedType Type | FunType Type Type | RefType Type
-          | ArrayType Int Type | UserDefinedType Identifier
+          | NestedType Type
+          | FunType Type Type
+          | RefType Type
+          | ArrayType Int Type
+          | UserDefinedType Identifier
   deriving Show
 
 data Expr = IntCExpr IntConstant
@@ -52,8 +55,7 @@ data Expr = IntCExpr IntConstant
           | FunAppExpr Identifier [Expr]
           | ConstrAppExpr ConstrIdentifier [Expr]
           | ArrayAccess Identifier [Expr]
-          | ArrayDim Identifier
-          | ArrayDimMult Identifier Int
+          | ArrayDim Identifier Int
           | NewType Type
           | DeleteExpr Expr
           | LetIn LetDef Expr
@@ -67,25 +69,29 @@ data Expr = IntCExpr IntConstant
   deriving Show
 
 
-data UnOp = PlusUnOp | MinusUnOp | PlusFloatUnOp
-          | MinusFloatUnOp | BangOp | NotOp
+data UnOp = PlusUnOp | MinusUnOp
+          | PlusFloatUnOp | MinusFloatUnOp
+          | BangOp | NotOp
   deriving Show
 
 data BinOp = PlusOp | MinusOp | TimesOp | DivOp
            | PlusFloatOp | MinusFloatOp | TimesFloatOp | DivFloatOp
-           | ModOp | ExpOp | AssignOp | NotStructEqOp
+           | ModOp | ExpOp
+           | AssignOp | NotStructEqOp
            | LTOp | GTOp | LEqOp | GEqOp
-           | NatEqOp | NotNatEqOp | AndOp | OrOp
+           | NatEqOp | NotNatEqOp
+           | AndOp | OrOp
            | SemicolonOp | AssignMutableOp
   deriving Show
 
 data Clause = Match Pattern Expr
   deriving Show
 
-data Pattern = IntConstPattern IntConstant
-             | PlusIntConstPattern IntConstant | MinusIntConstPattern IntConstant
-             | FloatConstPattern FloatConstant
-             | PlusFloatConstPattern FloatConstant | MinusFloatConstPattern FloatConstant
+data PatternSign = NoSign | Plus | Minus
+  deriving Show
+
+data Pattern = IntConstPattern PatternSign IntConstant
+             | FloatConstPattern PatternSign FloatConstant
              | CharConstPattern CharConstant
              | TruePattern | FalsePattern
              | IdPattern Identifier

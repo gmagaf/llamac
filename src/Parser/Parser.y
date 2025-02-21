@@ -108,13 +108,13 @@ Defs :: { [Def] }
   | Defs and Def                    { $3 : $1 }
 
 Def :: { Def }
-  : id Params '=' Expr              { Def $1 (reverse $2) $4}
-  | id Params ':' Type '=' Expr     { TypedDef $1 (reverse $2) $4 $6 }
-  | mutable id                      { MutDef $2 }
-  | mutable id ':' Type             { MutTypedDef $2 $4}
-  | mutable id '[' ExprsComma ']'   { ArrayDef $2 (reverse $4)}
+  : id Params '=' Expr              { FunDef $1 (reverse $2) $4 }
+  | id Params ':' Type '=' Expr     { FunDefTyped $1 (reverse $2) $4 $6 }
+  | mutable id                      { VarDef $2 }
+  | mutable id ':' Type             { VarDefTyped $2 $4 }
+  | mutable id '[' ExprsComma ']'   { ArrayDef $2 (reverse $4) }
   | mutable id '[' ExprsComma ']' ':' Type
-                                    { ArrayTypedDef $2 (reverse $4) $7 }
+                                    { ArrayDefTyped $2 (reverse $4) $7 }
 
 Params :: { [Param] }
   : {- empty -}                     { [] }
@@ -123,10 +123,6 @@ Params :: { [Param] }
 ExprsComma :: { [Expr] }
   : Expr                            { $1 : [] }
   | ExprsComma ',' Expr             { $3 : $1 }
-
-Exprs :: { [Expr] }
-  : {- empty -}                     { [] }
-  | Exprs Expr                      { $2 : $1 }
 
 TypeDef :: { TypeDef }
   : type TDefs                      { Type (reverse $2) }
@@ -188,8 +184,8 @@ Expr :: { Expr }
   | id Exprs                        { FunAppExpr $1 (reverse $2) }
   | id_constr Exprs                 { ConstrAppExpr $1 (reverse $2) }
   | id '[' ExprsComma ']'           { ArrayAccess $1 $3 }
-  | dim id                          { ArrayDim $2 }
-  | dim const_int id                { ArrayDimMult $3 $2 }
+  | dim id                          { ArrayDim $2 1 }
+  | dim const_int id                { ArrayDim $3 $2 }
   | new Type                        { NewType $2 }
   | delete Expr                     { DeleteExpr $2 }
   | LetDef in Expr                  { LetIn $1 $3 }
@@ -202,6 +198,10 @@ Expr :: { Expr }
   | for id '=' Expr downto Expr do Expr done
                                     { ForDownExpr $2 $4 $6 $8 }
   | match Expr with Clauses end     { MatchExpr $2 (reverse $4) }
+
+Exprs :: { [Expr] }
+  : {- empty -}                     { [] }
+  | Exprs Expr                      { $2 : $1 }
 
 Clauses :: { [Clause] }
   : Clause                          { $1 : [] }
@@ -243,12 +243,12 @@ Clause :: { Clause }
   : Pattern '->' Expr               { Match $1 $3}
 
 Pattern :: { Pattern }
-  : const_int                       { IntConstPattern $1 }
-  | '+' const_int                   { PlusIntConstPattern $2 }
-  | '-' const_int                   { MinusIntConstPattern $2 }
-  | const_float                     { FloatConstPattern $1 }
-  | '+.' const_float                { PlusFloatConstPattern $2 }
-  | '-.' const_float                { MinusFloatConstPattern $2 }
+  : const_int                       { IntConstPattern NoSign $1 }
+  | '+' const_int                   { IntConstPattern Plus $2 }
+  | '-' const_int                   { IntConstPattern Minus $2 }
+  | const_float                     { FloatConstPattern NoSign $1 }
+  | '+.' const_float                { FloatConstPattern Plus $2 }
+  | '-.' const_float                { FloatConstPattern Minus $2 }
   | const_char                      { CharConstPattern $1 }
   | true                            { TruePattern }
   | false                           { FalsePattern }

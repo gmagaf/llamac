@@ -35,7 +35,6 @@ data Param = Param Identifier
   deriving Show
 
 data Type = UnitType | IntType | CharType | BoolType | FloatType
-          | NestedType Type
           | FunType Type Type
           | RefType Type
           | ArrayType Int Type
@@ -49,7 +48,6 @@ data Expr = IntCExpr IntConstant
           | TrueCExpr
           | FalseCExpr
           | UnitCExpr
-          | NestedExpr Expr
           | UnOpExpr UnOp Expr
           | BinOpExpr BinOp Expr Expr
           | FunAppExpr Identifier [Expr]
@@ -95,6 +93,5 @@ data Pattern = IntConstPattern PatternSign IntConstant
              | CharConstPattern CharConstant
              | TruePattern | FalsePattern
              | IdPattern Identifier
-             | NestedPattern Pattern
              | ConstrPattern ConstrIdentifier [Pattern]
   deriving Show

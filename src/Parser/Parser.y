@@ -88,11 +88,23 @@ import Common.AST
   ','                   { T_comma }
   ':'                   { T_colon }
 
+%right in
+%left ';'
+%nonassoc then
+%nonassoc else
+%nonassoc ':='
+%left '||'
+%left '&&'
+%nonassoc '=' '<>' '>' '<' '<=' '>=' '==' '!='
+%left '+' '-' '+.' '-.'
+%left '*' '/' '*.' '/.' mod
+%right '**'
+
 %%
 
 Program :: { Program }
   : Program_                        { reverse $1 }
--- reversing the list so that all definitions are in the correct order
+-- reversing the lists so that all definitions are in the correct order
 
 Program_ :: { Program }
   : {- emtpy -}                     { [] }
@@ -151,16 +163,12 @@ Param :: { Param }
   | '(' id ':' Type ')'             { TypedParam $2 $4 }
 
 Type :: { Type }
-  : unit                            { UnitType }
-  | int                             { IntType }
-  | char                            { CharType }
-  | bool                            { BoolType }
-  | float                           { FloatType }
-  | '(' Type ')'                    { NestedType $2 }
-  | Type '->' Type                  { FunType $1 $3 }
-  | Type ref                        { RefType $1 }
-  | array Dims of Type              { ArrayType $2 $4 }
-  | id                              { UserDefinedType $1 }
+  : ArrayType '->' Type             { FunType $1 $3 }
+  | ArrayType                       { $1 }
+
+ArrayType :: { Type }
+  : array Dims of ArrayType         { ArrayType $2 $4 }
+  | RefType                         { $1 }
 
 Dims :: { Int }
   : {- empty -}                     { 1 }
@@ -170,7 +178,87 @@ Stars :: { Int }
   : '*'                             { 1 }
   | Stars ',' '*'                   { $1 + 1 }
 
+RefType :: { Type }
+  : RefType ref                     { RefType $1 }
+  | BaseType                        { $1 }
+
+BaseType :: { Type }
+  : unit                            { UnitType }
+  | int                             { IntType }
+  | char                            { CharType }
+  | bool                            { BoolType }
+  | float                           { FloatType }
+  | id                              { UserDefinedType $1 }
+  | '(' Type ')'                    { $2 }
+
+-- TODO: Fix dangling if
 Expr :: { Expr }
+  : LetDef in Expr                  { LetIn $1 $3 }
+  | Expr ';' Expr                   { BinOpExpr SemicolonOp $1 $3 }
+  | if Expr then Expr               { IfThenExpr $2 $4 }
+  | if Expr then Expr else Expr     { IfThenElseExpr $2 $4 $6 }
+  | LogicalExpr                     { $1 }
+
+LogicalExpr :: { Expr }
+  : LogicalExpr ':=' LogicalExpr    { BinOpExpr AssignMutableOp $1 $3 }
+  | LogicalExpr '||' LogicalExpr    { BinOpExpr OrOp $1 $3 }
+  | LogicalExpr '&&' LogicalExpr    { BinOpExpr AndOp $1 $3 }
+  | LogicalExpr '='  LogicalExpr    { BinOpExpr AssignOp $1 $3 }
+  | LogicalExpr '<>' LogicalExpr    { BinOpExpr NotStructEqOp $1 $3 }
+  | LogicalExpr '<'  LogicalExpr    { BinOpExpr LTOp $1 $3 }
+  | LogicalExpr '>'  LogicalExpr    { BinOpExpr GTOp $1 $3 }
+  | LogicalExpr '<=' LogicalExpr    { BinOpExpr LEqOp $1 $3 }
+  | LogicalExpr '>=' LogicalExpr    { BinOpExpr GEqOp $1 $3 }
+  | LogicalExpr '==' LogicalExpr    { BinOpExpr NatEqOp $1 $3 }
+  | LogicalExpr '!=' LogicalExpr    { BinOpExpr NotNatEqOp $1 $3 }
+  | ArithmExpr                      { $1 }
+
+ArithmExpr :: { Expr }
+  : ArithmExpr '+'  ArithmExpr      { BinOpExpr PlusOp $1 $3 }
+  | ArithmExpr '-'  ArithmExpr      { BinOpExpr MinusOp $1 $3 }
+  | ArithmExpr '*'  ArithmExpr      { BinOpExpr TimesOp $1 $3 }
+  | ArithmExpr '/'  ArithmExpr      { BinOpExpr DivOp $1 $3 }
+  | ArithmExpr '+.' ArithmExpr      { BinOpExpr PlusFloatOp $1 $3 }
+  | ArithmExpr '-.' ArithmExpr      { BinOpExpr MinusFloatOp $1 $3 }
+  | ArithmExpr '*.' ArithmExpr      { BinOpExpr TimesFloatOp $1 $3 }
+  | ArithmExpr '/.' ArithmExpr      { BinOpExpr DivFloatOp $1 $3 }
+  | ArithmExpr mod  ArithmExpr      { BinOpExpr ModOp $1 $3 }
+  | ArithmExpr '**' ArithmExpr      { BinOpExpr ExpOp $1 $3 }
+  | UnOpExpr                        { $1 }
+
+UnOpExpr :: { Expr }
+  : '+' UnOpExpr                    { UnOpExpr PlusUnOp $2 }
+  | '-' UnOpExpr                    { UnOpExpr MinusUnOp $2 }
+  | '+.' UnOpExpr                   { UnOpExpr PlusFloatUnOp $2 }
+  | '-.' UnOpExpr                   { UnOpExpr MinusFloatUnOp $2 }
+  | not UnOpExpr                    { UnOpExpr NotOp $2 }
+  | delete UnOpExpr                 { DeleteExpr $2 }
+  | dim id                          { ArrayDim $2 1 }
+  | dim const_int id                { ArrayDim $3 $2 }
+  | FunAppExpr                      { $1 }
+
+FunAppExpr :: { Expr }
+  : id Args                         { FunAppExpr $1 (reverse $2) }
+  | id_constr Args                  { ConstrAppExpr $1 (reverse $2) }
+  | DerefExp                        { $1 }
+
+Args :: { [Expr] }
+  : DerefExp                        { $1 : [] }
+  | Args DerefExp                   { $2 : $1 }
+
+DerefExp :: { Expr }
+  : '!' DerefExp                    { UnOpExpr BangOp $2 }
+  | ArrayExpr                       { $1 }
+
+ArrayExpr :: { Expr }
+  : id '[' ExprsComma ']'           { ArrayAccess $1 (reverse $3) }
+  | NewTExpr                        { $1 }
+
+NewTExpr :: { Expr }
+  : new Type                        { NewType $2 }
+  | BaseExpr                        { $1 }
+
+BaseExpr :: { Expr }
   : const_int                       { IntCExpr $1 }
   | const_float                     { FloatCExpr $1 }
   | const_char                      { CharCExpr $1 }
@@ -178,20 +266,10 @@ Expr :: { Expr }
   | true                            { TrueCExpr }
   | false                           { FalseCExpr }
   | '('')'                          { UnitCExpr }
-  | '(' Expr ')'                    { NestedExpr $2 }
-  | UnOp Expr                       { UnOpExpr $1 $2 }
-  | Expr BinOp Expr                 { BinOpExpr $2 $1 $3 }
-  | id Exprs                        { FunAppExpr $1 (reverse $2) }
-  | id_constr Exprs                 { ConstrAppExpr $1 (reverse $2) }
-  | id '[' ExprsComma ']'           { ArrayAccess $1 $3 }
-  | dim id                          { ArrayDim $2 1 }
-  | dim const_int id                { ArrayDim $3 $2 }
-  | new Type                        { NewType $2 }
-  | delete Expr                     { DeleteExpr $2 }
-  | LetDef in Expr                  { LetIn $1 $3 }
+  | id                              { FunAppExpr $1 [] }
+  | id_constr                       { ConstrAppExpr $1 [] }
+  | '(' Expr ')'                    { $2 }
   | begin Expr end                  { BeginExpr $2 }
-  | if Expr then Expr               { IfThenExpr $2 $4 }
-  | if Expr then Expr else Expr     { IfThenElseExpr $2 $4 $6 }
   | while Expr do Expr done         { WhileExpr $2 $4 }
   | for id '=' Expr to Expr do Expr done
                                     { ForExpr $2 $4 $6 $8 }
@@ -199,50 +277,22 @@ Expr :: { Expr }
                                     { ForDownExpr $2 $4 $6 $8 }
   | match Expr with Clauses end     { MatchExpr $2 (reverse $4) }
 
-Exprs :: { [Expr] }
-  : {- empty -}                     { [] }
-  | Exprs Expr                      { $2 : $1 }
-
 Clauses :: { [Clause] }
   : Clause                          { $1 : [] }
   | Clauses '|' Clause              { $3 : $1 }
 
-UnOp :: { UnOp }
-  : '+'                             { PlusUnOp }
-  | '-'                             { MinusUnOp }
-  | '+.'                            { PlusFloatUnOp }
-  | '-.'                            { MinusFloatUnOp }
-  | '!'                             { BangOp }
-  | not                             { NotOp }
-
-BinOp :: { BinOp }
-  : '+'                             { PlusOp }
-  | '-'                             { MinusOp }
-  | '*'                             { TimesOp }
-  | '/'                             { DivOp }
-  | '+.'                            { PlusFloatOp }
-  | '-.'                            { MinusFloatOp }
-  | '*.'                            { TimesFloatOp }
-  | '/.'                            { DivFloatOp }
-  | mod                             { ModOp }
-  | '**'                            { ExpOp }
-  | '='                             { AssignOp }
-  | '<>'                            { NotStructEqOp }
-  | '<'                             { LTOp }
-  | '>'                             { GTOp }
-  | '<='                            { LEqOp }
-  | '>='                            { GEqOp }
-  | '=='                            { NatEqOp }
-  | '!='                            { NotNatEqOp }
-  | '&&'                            { AndOp }
-  | '||'                            { OrOp }
-  | ';'                             { SemicolonOp }
-  | ':='                            { AssignMutableOp }
-
 Clause :: { Clause }
-  : Pattern '->' Expr               { Match $1 $3}
+  : Pattern '->' Expr               { Match $1 $3 }
 
 Pattern :: { Pattern }
+  : id_constr PatArgs               { ConstrPattern $1 (reverse $2) }
+  | PatArg                          { $1 }
+
+PatArgs :: { [Pattern] }
+  : PatArg                          { $1 : [] }
+  | PatArgs PatArg                  { $2 : $1 }
+
+PatArg :: { Pattern }
   : const_int                       { IntConstPattern NoSign $1 }
   | '+' const_int                   { IntConstPattern Plus $2 }
   | '-' const_int                   { IntConstPattern Minus $2 }
@@ -253,12 +303,8 @@ Pattern :: { Pattern }
   | true                            { TruePattern }
   | false                           { FalsePattern }
   | id                              { IdPattern $1 }
-  | '(' Pattern ')'                 { NestedPattern $2 }
-  | id_constr Patterns              { ConstrPattern $1 (reverse $2) }
-
-Patterns :: { [Pattern] }
-  : {- empty -}                     { [] }
-  | Patterns Pattern                { $2 : $1 }
+  | id_constr                       { ConstrPattern $1 [] }
+  | '(' Pattern ')'                 { $2 }
 
 {
 parseError :: Token -> Alex a

@@ -6,7 +6,6 @@ module Lexer.Lexer (Alex, runAlex, alexError,
 import Common.Token
 import Text.Read (readMaybe)
 import Control.Monad (when)
-import Debug.Trace (trace)
 }
 
 %wrapper "monadUserState"

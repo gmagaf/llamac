@@ -7,11 +7,13 @@ import Common.Token (Identifier,
                      CharConstant,
                      StringConstant)
 
+
 type Program = [Either LetDef TypeDef]
+
 
 data LetDef = Let [Def]
             | LetRec [Def]
-  deriving Show
+  deriving (Eq, Show)
 
 data Def = FunDef Identifier [Param] Expr
          | FunDefTyped Identifier [Param] Type Expr
@@ -19,27 +21,29 @@ data Def = FunDef Identifier [Param] Expr
          | VarDefTyped Identifier Type
          | ArrayDef Identifier [Expr]
          | ArrayDefTyped Identifier [Expr] Type
-  deriving Show
-
-data TypeDef = Type [TDef]
-  deriving Show
-
-data TDef = TDef Identifier [Constr]
-  deriving Show
-
-data Constr = Constr ConstrIdentifier [Type]
-  deriving Show
+  deriving (Eq, Show)
 
 data Param = Param Identifier
            | TypedParam Identifier Type
-  deriving Show
+  deriving (Eq, Show)
+
+
+data TypeDef = Type [TDef]
+  deriving (Eq, Show)
+
+data TDef = TDef Identifier [Constr]
+  deriving (Eq, Show)
+
+data Constr = Constr ConstrIdentifier [Type]
+  deriving (Eq, Show)
 
 data Type = UnitType | IntType | CharType | BoolType | FloatType
           | FunType Type Type
           | RefType Type
           | ArrayType Int Type
           | UserDefinedType Identifier
-  deriving Show
+  deriving (Eq, Show)
+
 
 data Expr = IntCExpr IntConstant
           | FloatCExpr FloatConstant
@@ -64,13 +68,12 @@ data Expr = IntCExpr IntConstant
           | ForExpr Identifier Expr Expr Expr
           | ForDownExpr Identifier Expr Expr Expr
           | MatchExpr Expr [Clause]
-  deriving Show
-
+  deriving (Eq, Show)
 
 data UnOp = PlusUnOp | MinusUnOp
           | PlusFloatUnOp | MinusFloatUnOp
           | BangOp | NotOp
-  deriving Show
+  deriving (Eq, Show)
 
 data BinOp = PlusOp | MinusOp | TimesOp | DivOp
            | PlusFloatOp | MinusFloatOp | TimesFloatOp | DivFloatOp
@@ -80,13 +83,13 @@ data BinOp = PlusOp | MinusOp | TimesOp | DivOp
            | NatEqOp | NotNatEqOp
            | AndOp | OrOp
            | SemicolonOp | AssignMutableOp
-  deriving Show
+  deriving (Eq, Show)
 
 data Clause = Match Pattern Expr
-  deriving Show
+  deriving (Eq, Show)
 
 data PatternSign = NoSign | Plus | Minus
-  deriving Show
+  deriving (Eq, Show)
 
 data Pattern = IntConstPattern PatternSign IntConstant
              | FloatConstPattern PatternSign FloatConstant
@@ -94,4 +97,4 @@ data Pattern = IntConstPattern PatternSign IntConstant
              | TruePattern | FalsePattern
              | IdPattern Identifier
              | ConstrPattern ConstrIdentifier [Pattern]
-  deriving Show
+  deriving (Eq, Show)

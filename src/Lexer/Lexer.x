@@ -1,11 +1,13 @@
 {
 module Lexer.Lexer (Alex, runAlex, alexError,
                     alexGetInput, getColumnOfPosn, getLineOfPosn,
-                    lexer, lexerLine, scanFile, lexerWrap) where
+                    lexer, lexerLine, scanFile, lexerWrap,
+                    removeFromHead, removeFromTail) where
 
 import Common.Token
 import Text.Read (readMaybe)
 import Control.Monad (when)
+-- import Debug.Trace (trace)
 }
 
 %wrapper "monadUserState"
@@ -90,8 +92,8 @@ rules :-
   <0> $uls+($ls_ds|_)*                          { identifiersAction T_id_constr }  -- identifiers for constructors
   <0> $digits+                                  { intAction }
   <0> $digits+\.$digits+([eE][\+\-]?$digits+)?  { floatAction }
-  <0> \'([^\\\']|@escape)\'                     { charActionSimple }
-  <0> \"([^\\\"]|@escape)*\"                    { stringActionSimple } --"
+  <0> \'([^\\\']|@escape)\'                     { charAction }
+  <0> \"([^\\\"]|@escape)*\"                    { stringAction } --"
   <0> $white+                                   { skip }
   <0> \-\-.*                                    { skip }                           -- one line comment
   <0> "(*"                                      { beginComment }                   -- support for multiline nested comments
@@ -155,46 +157,42 @@ intAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in case readMaybe lexeme :: Maybe Int of
     Just v  -> return (T_const_int v)
-    Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into an Int")
+    Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into an int")
 
 floatAction :: AlexAction Token
 floatAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in case readMaybe lexeme :: Maybe Float of
     Just v  -> return (T_const_float v)
-    Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a Float")
+    Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a float")
 
-stringActionSimple :: AlexAction Token
-stringActionSimple (_, _, _, current_string) len =
+
+removeFromHead :: (Eq a) => a -> [a] -> Maybe [a]
+removeFromHead _ [] = Nothing
+removeFromHead a (x:xs) | a == x    = Just xs
+                        | otherwise = Nothing
+
+removeFromTail :: (Eq a) => a -> [a] -> Maybe [a]
+removeFromTail _ []     = Nothing
+removeFromTail a (x:[]) | a == x    = Just []
+                        | otherwise = Nothing
+removeFromTail a (x:xs) = (x:) <$> removeFromTail a xs
+
+stringAction :: AlexAction Token
+stringAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
-  in return (T_const_string lexeme)
+      noQuotes = removeFromHead '"' lexeme >>= removeFromTail '"'
+  in case noQuotes of
+    Just str -> return (T_const_string str)
+    Nothing  -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a string")
 
-charActionSimple :: AlexAction Token
-charActionSimple (_, _, _, current_string) len =
+charAction :: AlexAction Token
+charAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
-  in return (T_const_char lexeme)
-
--- removeQuotes :: String -> Maybe String
--- removeQuotes ('\"':ls) = removeLastQuote ls where
---   removeLastQuote [] = Just []
---   removeLastQuote ('\"':[]) = Just []
---   removeLastQuote (_:[]) = Nothing
---   removeLastQuote (c:cs) = fmap (c:) (removeLastQuote cs)
--- removeQuotes _ = Nothing
---
--- stringAction :: AlexAction Token
--- stringAction (posn, prev_char, rest_bytes, current_string) len =
---   let lexeme = (take len current_string)
---   in case (trace lexeme $ removeQuotes lexeme) of
---     Just s -> return (T_const_string s)
---     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a String")
---
--- charAction :: AlexAction Token
--- charAction (posn, prev_char, rest_bytes, current_string) len =
---   let lexeme = (take len current_string)
---   in case lexeme of
---     '\'' : c : '\'' : [] -> return (T_const_char c)
---     otherwise -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a Char")
+      noQuotes = removeFromHead '\'' lexeme >>= removeFromTail '\''
+  in case noQuotes of
+    Just ch -> return (T_const_char ch)
+    Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char")
 
 beginComment :: AlexAction Token
 beginComment input len = do

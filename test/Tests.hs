@@ -1,4 +1,4 @@
-module Main where
+module Main (checkForSize, main) where
 
 import Test.QuickCheck
 import Lexer.Lexer
@@ -7,8 +7,8 @@ import Common.AST
 import Property.ArbitraryAST
 import Property.PrintAST
 
-parsedAstIsAst :: Gen Program -> Property
-parsedAstIsAst gen =
+parsedPrettyASTisAST :: Gen Program -> Property
+parsedPrettyASTisAST gen =
   forAll gen (\p ->
     let s = prettyProgram p
         ast = runAlex s calc
@@ -16,10 +16,16 @@ parsedAstIsAst gen =
         Right pp -> p == pp
         _        -> False)
 
-checkForSize :: Int -> IO ()
-checkForSize size = quickCheck . parsedAstIsAst $ resize size arbitraryProgram
+checkForSize :: (Gen a -> Property) -> Gen a -> Int -> IO ()
+checkForSize prop gen size = quickCheck . prop $ resize size gen
+
+checkParsedPrettyAST :: Int -> IO ()
+checkParsedPrettyAST n = do
+ putStrLn $ "Testing property (parsed . pretty $ AST == AST) for size: " ++ (show n)
+ checkForSize parsedPrettyASTisAST arbitraryProgram n
 
 main :: IO ()
 main = do
-    putStrLn "Hello from tests!"
-    checkForSize 30
+  putStrLn "Hello from tests!"
+  mapM_ checkParsedPrettyAST sizes where
+     sizes = [0, 1, 2, 3, 4, 5, 10, 30, 100, 1000, 2000, 5000]

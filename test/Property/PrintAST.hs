@@ -1,8 +1,10 @@
-module Property.PrintAST where
+module Property.PrintAST (Pretty,
+                          pretty,
+                          showPretty,
+                          prettyProgram) where
 
 import Common.AST
 import Common.Token
-import Debug.Trace (trace)
 
 class Pretty a where
   prettyPrec :: Int -> a -> ShowS
@@ -91,19 +93,19 @@ instance Pretty Type where
       BoolType -> showPretty T_bool
       FloatType -> showPretty T_float
       UserDefinedType ide -> prettyId ide
-      RefType t -> showParen (always || d > ref_prec) $
-            prettyPrec (ref_prec + 1) t .
+      RefType u -> showParen (always || d > ref_prec) $
+            prettyPrec (ref_prec + 1) u .
             showString " " .
             showPretty T_ref
-      ArrayType 1 t -> showParen (always || d > array_prec) $
+      ArrayType 1 u -> showParen (always || d > array_prec) $
             showPretty T_array . showString " " .
             showPretty T_of . showString " " .
-            prettyPrec (array_prec + 1) t
-      ArrayType n t -> showParen (always || d > array_prec) $
+            prettyPrec (array_prec + 1) u
+      ArrayType n u -> showParen (always || d > array_prec) $
             showPretty T_array . showString " " .
             showPretty T_lbracket . showsStars n . showPretty T_rbracket .
             showString " " . showPretty T_of . showString " " .
-            prettyPrec (array_prec + 1) t
+            prettyPrec (array_prec + 1) u
       FunType u v -> showParen (always || d > fun_prec) $
             prettyPrec (fun_prec + 1) u .
             showString " " . showPretty T_arrow . showString " " .

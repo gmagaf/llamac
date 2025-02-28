@@ -22,11 +22,6 @@ arbitraryCharConstant = elements ["a", "7", "\\n", "\\\"", "\\xE9"]
 arbitraryStringConstant :: Gen StringConstant
 arbitraryStringConstant = elements ["foo", "bar", "Route66", "Name:\\t\\\"DouglasAdams\\\"\\nValue:\\t42\\n"]
 
-listOf :: Gen a -> Gen [a]
-listOf gen = sized $ \n ->
-  do k <- choose (0, n)
-     vectorOf k gen
-
 boundedListOf :: (Int, Int) -> Gen a -> Gen [a]
 boundedListOf (l, u) gen = do
   k <- choose (l, u)

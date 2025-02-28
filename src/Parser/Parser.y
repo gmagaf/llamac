@@ -1,5 +1,5 @@
 {
-module Parser.Parser (calc, test) where
+module Parser.Parser (calc, parse) where
 
 import Lexer.Lexer
 import Common.Token
@@ -315,6 +315,6 @@ parseError t =
     (posn, _, _, _) <- alexGetInput
     alexError $ (position posn) ++ "Unable to process token " ++ (show t)
 
-test :: String -> Either String Program
-test s = runAlex s calc
+parse :: String -> Either String Program
+parse s = runAlex s calc
 }

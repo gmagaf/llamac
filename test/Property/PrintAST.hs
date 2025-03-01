@@ -145,13 +145,43 @@ instance Pretty Param where
 -- TODO
 instance Pretty Expr where
   prettyPrec d e =
-    let mut_assign_prec = 4
+    let bang_prec = 13
+        app_prec = 12
+        on_op_prec = 11
+        opToTok :: UnOp -> Token
+        opToTok PlusUnOp = T_plus
+        opToTok MinusUnOp = T_minus
+        opToTok PlusFloatUnOp = T_plus_float
+        opToTok MinusFloatUnOp = T_minus_float
+        opToTok BangOp = T_bang
+        opToTok NotOp = T_not
+        prec :: BinOp -> (Assoc, Int, Token)
+        prec ExpOp = (R, 10, T_exp)
+        prec TimesOp = (L, 9, T_times)
+        prec DivOp = (L, 9, T_div)
+        prec TimesFloatOp = (L, 9, T_times_float)
+        prec DivFloatOp = (L, 9, T_div_float)
+        prec ModOp = (L, 9, T_mod)
+        prec PlusOp = (L, 8, T_plus)
+        prec MinusOp = (L, 8, T_minus)
+        prec PlusFloatOp = (L, 8, T_plus_float)
+        prec MinusFloatOp = (L, 8, T_minus_float)
+        prec AssignOp = (Non, 7, T_assign)
+        prec NotStructEqOp = (Non, 7, T_not_struct_eq_op)
+        prec GTOp = (Non, 7, T_more_than)
+        prec LTOp = (Non, 7, T_less_than)
+        prec GEqOp = (Non, 7, T_more_than_eq)
+        prec LEqOp = (Non, 7, T_less_than_eq)
+        prec NatEqOp = (Non, 7, T_nat_eq_op)
+        prec NotNatEqOp = (Non, 7, T_not_nat_eq_op)
+        prec AndOp = (L, 6, T_and_op)
+        prec OrOp = (L, 5, T_or_op)
+        prec AssignMutableOp = (Non, 4, T_assign_mutable)
+        prec SemicolonOp = (L, 1, T_semicolon)
         else_prec = 3
         then_prec = 2
         if_prec = 2
-        semicolon_prec = 1
         let_prec = 0
-        cond = not always
     in case e of
       IntCExpr i -> prettyIntC i
       FloatCExpr f -> prettyFloatC f
@@ -160,9 +190,22 @@ instance Pretty Expr where
       TrueCExpr -> showPretty T_true
       FalseCExpr -> showPretty T_false
       UnitCExpr -> showPretty T_lparen . showPretty T_rparen
-      -- BinOpExpr SemicolonOp u v -> showParen (always || d > semicolon_prec) $
-      --   prettyPrec semicolon_prec u . showPretty T_semicolon . showString " " .
-      --   prettyPrec (semicolon_prec + 1) v
+      FunAppExpr i ps -> showParen (always || (d > app_prec && ps /= [])) $
+        prettyId i . showString " " .
+        prettyPrecSepList (app_prec + 1) " " ps
+      ConstrAppExpr i ps -> showParen (always || (d > app_prec && ps /= [])) $
+        prettyConstrId i . showString " " .
+        prettyPrecSepList (app_prec + 1) " " ps
+      UnOpExpr BangOp u -> showParen (always || d > bang_prec) $
+        showPretty T_bang . prettyPrec (bang_prec + 1) u
+      UnOpExpr NotOp u -> showParen (always || d > on_op_prec) $
+        showPretty T_not . showString " " . prettyPrec (on_op_prec + 1) u
+      UnOpExpr op u -> showParen (always || d > on_op_prec) $
+        showPretty (opToTok op) . prettyPrec (on_op_prec + 1) u
+      DeleteExpr u -> showParen (always || d > on_op_prec) $
+        showPretty T_delete . showString " " . prettyPrec (on_op_prec + 1) u
+      BinOpExpr op u w -> let (assoc, p, tok) = prec op
+        in prettyBinOpExp assoc p tok d u w where
       IfThenExpr u v -> showParen (always || d > if_prec) $
         showPretty T_if . showString " " . prettyPrec (if_prec + 1) u . showString " " .
         showPretty T_then . showString " " . prettyPrec then_prec v
@@ -171,6 +214,35 @@ instance Pretty Expr where
         showPretty T_then . showString " " .
         prettyPrec (then_prec + 1) v . showString " " .
         showPretty T_else . showString " " . prettyPrec (else_prec + 1) w
+      LetIn def u -> showParen (always || d > let_prec) $
+        prettyPrec d def . showString " " . showPretty T_in .
+        showString " " . prettyPrec (let_prec + 1) u
+
+data Assoc = L | R | Non
+  deriving Eq
+
+prettyBinOpExp :: Assoc -> Int -> Token -> Int -> Expr -> Expr -> ShowS
+prettyBinOpExp L = prettyBinOpExpL
+prettyBinOpExp R = prettyBinOpExpR
+prettyBinOpExp Non = prettyBinOpExpNon
+
+prettyBinOpExpL :: Int -> Token -> Int -> Expr -> Expr -> ShowS
+prettyBinOpExpL prec tok d u w = showParen (always || d > prec) $
+  prettyPrec prec u . showString " " .
+  showPretty tok . showString " " .
+  prettyPrec (prec + 1) w
+
+prettyBinOpExpR :: Int -> Token -> Int -> Expr -> Expr -> ShowS
+prettyBinOpExpR prec tok d u w = showParen (always || d > prec) $
+  prettyPrec (prec + 1) u . showString " " .
+  showPretty tok . showString " " .
+  prettyPrec prec w
+
+prettyBinOpExpNon :: Int -> Token -> Int -> Expr -> Expr -> ShowS
+prettyBinOpExpNon prec tok d u w = showParen (always || d > prec) $
+  prettyPrec (prec + 1) u . showString " " .
+  showPretty tok . showString " " .
+  prettyPrec (prec + 1) w
 
 instance Pretty Pattern where
   prettyPrec d p = case p of

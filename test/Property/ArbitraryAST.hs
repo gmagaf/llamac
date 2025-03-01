@@ -1,4 +1,5 @@
-module Property.ArbitraryAST (arbitraryProgram) where
+-- module Property.ArbitraryAST (arbitraryProgram) where
+module Property.ArbitraryAST where
 
 import Test.QuickCheck
 import Common.Token
@@ -29,95 +30,102 @@ boundedListOf (l, u) gen = do
 
 arbitraryProgram :: Gen Program
 arbitraryProgram = boundedListOf (0, 6) g where
-  g = frequency [(2, Left <$> arbitrary), (1, Right <$> arbitrary)]
+  g = frequency [(2, Left <$> arbLetDef), (1, Right <$> arbTypeDef)]
 
-instance Arbitrary TypeDef where
-  arbitrary = Type <$> (boundedListOf (1, 2) arbitrary)
+arbTypeDef :: Gen TypeDef
+arbTypeDef = Type <$> (boundedListOf (1, 2) arbTDef)
 
-instance Arbitrary TDef where
-  arbitrary = TDef <$> arbitraryIdentifier <*> (boundedListOf (1, 2) arbitrary)
+arbTDef :: Gen TDef
+arbTDef = TDef <$> arbitraryIdentifier <*> (boundedListOf (1, 2) arbConstr)
 
-instance Arbitrary Constr where
-  arbitrary = Constr <$> arbitraryConstrIdentifier <*> (boundedListOf (0, 2) arbitrary)
+arbConstr :: Gen Constr
+arbConstr = Constr <$> arbitraryConstrIdentifier <*> (boundedListOf (0, 2) arbType)
 
-instance Arbitrary Type where
-  arbitrary = sized gen where
-    gen 0 = do
-      i <- arbitraryIdentifier
-      elements [UnitType, IntType, CharType, BoolType, FloatType, UserDefinedType i]
-    gen n = do
-      i <- choose (1, 3) :: Gen Int
-      let r = gen (div n 2)
-      oneof [r, RefType <$> r, ArrayType i <$> r, FunType <$> r <*> r]
+arbType :: Gen Type
+arbType = sized gen where
+  gen 0 = do
+    i <- arbitraryIdentifier
+    elements [UnitType, IntType, CharType, BoolType, FloatType, UserDefinedType i]
+  gen n = do
+    i <- choose (1, 3) :: Gen Int
+    let r = gen (div n 2)
+    oneof [r, RefType <$> r, ArrayType i <$> r, FunType <$> r <*> r]
 
-instance Arbitrary LetDef where
-  arbitrary = frequency [(3, Let <$> g), (1, LetRec <$> g)] where
-    g = boundedListOf (1, 2) arbitrary
+arbLetDef :: Gen LetDef
+arbLetDef = sized $ \n -> frequency [(3, Let <$> g n), (1, LetRec <$> g n)] where
+  g n = boundedListOf (1, 2) $ resize n arbDef
 
-instance Arbitrary Def where
-  arbitrary = frequency [(3, FunDef <$> i <*> ps <*> arbitrary),
-      (3, FunDefTyped <$> i <*> ps <*> arbitrary <*> arbitrary),
-      (1, VarDef <$> i), (1, VarDefTyped <$> i <*> arbitrary),
-      (1, ArrayDef <$> i <*> es), (1, ArrayDefTyped <$> i <*> es <*> arbitrary)] where
-    i = arbitraryIdentifier
-    ps = boundedListOf (0, 3) arbitrary
-    es = boundedListOf (1, 3) arbitrary
+arbDef :: Gen Def
+arbDef = sized $ \n -> frequency [(3, FunDef <$> i <*> ps <*> (g n)),
+    (3, FunDefTyped <$> i <*> ps <*> arbType <*> (g n)),
+    (1, VarDef <$> i), (1, VarDefTyped <$> i <*> arbType),
+    (1, ArrayDef <$> i <*> (es n)), (1, ArrayDefTyped <$> i <*> (es n) <*> arbType)] where
+  i = arbitraryIdentifier
+  g n = resize n arbExpr
+  es n = boundedListOf (1, 3) (g n)
+  ps = boundedListOf (0, 3) arbParam
 
-instance Arbitrary Param where
-  arbitrary = oneof [Param <$> arbitraryIdentifier,
-                TypedParam <$> arbitraryIdentifier <*> arbitrary]
-
+arbParam :: Gen Param
+arbParam = oneof [Param <$> arbitraryIdentifier,
+              TypedParam <$> arbitraryIdentifier <*> arbType]
 -- TODO
-instance Arbitrary Expr where
-  arbitrary = sized gen where
-    baseGens = [IntCExpr <$> arbitraryIntConstant, FloatCExpr <$> arbitraryFloatConstant,
-      CharCExpr <$> arbitraryCharConstant, StringCExpr <$> arbitraryStringConstant,
-      return TrueCExpr, return FalseCExpr, return UnitCExpr]
-    gen 0 = oneof baseGens
-    gen n = do
-      let r = gen (div n 2)
-      -- unOp <- arbitrary
-      -- binOp <- arbitrary
-      oneof [r,
-              -- UnOpExpr unOp <$> r,
-              -- BinOpExpr binOp expr expr, FunAppExpr identifier exprs,
-              -- ConstrAppExpr constr exprs, ArrayAccess identifier exprs,
-              -- ArrayDim identifier, ArrayDimMult identifier int,
-              -- NewType t, DeleteExpr expr, LetIn LetDef expr, BeginExpr expr,
-              IfThenExpr <$> r <*> r, IfThenElseExpr <$> r <*> r <*> r
-              -- WhileExpr <$> r <*> r,
-              -- ForExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
-              -- ForDownExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
-              -- MatchExpr <$> r <*> arbitrary
-            ]
+arbExpr :: Gen Expr
+arbExpr = sized gen where
+  baseGens = [IntCExpr <$> arbitraryIntConstant, FloatCExpr <$> arbitraryFloatConstant,
+    CharCExpr <$> arbitraryCharConstant, StringCExpr <$> arbitraryStringConstant,
+    return TrueCExpr, return FalseCExpr, return UnitCExpr]
+  gen 0 = oneof baseGens
+  gen n = do
+    let r = gen (div n 2)
+    unOp <- arbUnOp
+    binOp <- arbBinOp
+    let clauses = boundedListOf (1, 3) $ resize (div n 2) arbClause
+    let letdef = resize (div n 2) arbLetDef
+    oneof [r,
+      UnOpExpr unOp <$> r,
+      BinOpExpr binOp <$> r <*> r,
+      FunAppExpr <$> arbitraryIdentifier <*> boundedListOf (0, 3) r,
+      ConstrAppExpr <$> arbitraryConstrIdentifier <*> boundedListOf (0, 3) r,
+      -- ArrayAccess <$> arbitraryIdentifier <*> boundedListOf (1, 3) r,
+      -- ArrayDim <$> arbitraryIdentifier <*> arbitraryIntConstant,
+      -- NewType <$> arbType,
+      DeleteExpr <$> r,
+      LetIn <$> letdef <*> r,
+      -- BeginExpr <$> r,
+      IfThenExpr <$> r <*> r,
+      IfThenElseExpr <$> r <*> r <*> r]
+      -- WhileExpr <$> r <*> r,
+      -- ForExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
+      -- ForDownExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
+      -- MatchExpr <$> r <*> clauses]
 
-instance Arbitrary UnOp where
-  arbitrary = elements [PlusUnOp, MinusUnOp, PlusFloatUnOp, MinusFloatUnOp,
+arbUnOp :: Gen UnOp
+arbUnOp = elements [PlusUnOp, MinusUnOp, PlusFloatUnOp, MinusFloatUnOp,
                         BangOp, NotOp]
 
-instance Arbitrary BinOp where
-  arbitrary = elements [PlusOp, MinusOp, TimesOp, DivOp, PlusFloatOp,
-                        MinusFloatOp, TimesFloatOp, DivFloatOp, ModOp, ExpOp,
-                        AssignOp, NotStructEqOp, LTOp, GTOp, LEqOp, GEqOp,
-                        NatEqOp, NotNatEqOp, AndOp, OrOp, SemicolonOp, AssignMutableOp]
+arbBinOp :: Gen BinOp
+arbBinOp = elements [PlusOp, MinusOp, TimesOp, DivOp, PlusFloatOp,
+                      MinusFloatOp, TimesFloatOp, DivFloatOp, ModOp, ExpOp,
+                      AssignOp, NotStructEqOp, LTOp, GTOp, LEqOp, GEqOp,
+                      NatEqOp, NotNatEqOp, AndOp, OrOp, SemicolonOp, AssignMutableOp]
 
-instance Arbitrary Clause where
-  arbitrary = do
-    p <- arbitrary
-    e <- arbitrary
-    return (Match p e)
+arbClause :: Gen Clause
+arbClause = sized $ \n -> do
+  p <- arbPattern
+  e <- resize n arbExpr
+  return (Match p e)
 
-instance Arbitrary Pattern where
-  arbitrary = sized gen where
-    gen n = do
-      sign <- elements [NoSign, Plus, Minus]
-      let baseGens = [IntConstPattern sign <$> arbitraryIntConstant,
-             FloatConstPattern sign <$> arbitraryFloatConstant,
-             CharConstPattern <$> arbitraryCharConstant,
-             return TruePattern, return FalsePattern,
-             IdPattern <$> arbitraryIdentifier]
-      let r = gen (div n 2)
-      let ps = boundedListOf (0, 3) r
-      if n == 0 then
-        oneof baseGens
-      else frequency [(1, ConstrPattern <$> arbitraryConstrIdentifier <*> ps), (1, oneof baseGens)]
+arbPattern :: Gen Pattern
+arbPattern = sized gen where
+  gen n = do
+    sign <- elements [NoSign, Plus, Minus]
+    let baseGens = [IntConstPattern sign <$> arbitraryIntConstant,
+           FloatConstPattern sign <$> arbitraryFloatConstant,
+           CharConstPattern <$> arbitraryCharConstant,
+           return TruePattern, return FalsePattern,
+           IdPattern <$> arbitraryIdentifier]
+    let r = gen (div n 2)
+    let ps = boundedListOf (0, 3) r
+    if n == 0 then
+      oneof baseGens
+    else frequency [(1, ConstrPattern <$> arbitraryConstrIdentifier <*> ps), (1, oneof baseGens)]

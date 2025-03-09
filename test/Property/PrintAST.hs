@@ -120,11 +120,13 @@ instance Pretty LetDef where
 
 instance Pretty Def where
   pretty def = case def of
-    FunDef i ps e -> prettyId i . showString " " . prettyPrecSepList 0 " " ps .
-      showString " " . showPretty T_assign . showString " " $ pretty e
-    FunDefTyped i ps t e -> prettyId i . showString " " . prettyPrecSepList 0 " " ps .
+    FunDef i ps e -> prettyId i . showString sep . prettyPrecSepList 0 " " ps .
+      showString " " . showPretty T_assign . showString " " $ pretty e where
+        sep = if ps == [] then "" else " "
+    FunDefTyped i ps t e -> prettyId i . showString sep . prettyPrecSepList 0 " " ps .
       showString " " . showPretty T_colon . showString " " . showPretty t .
-      showString " " . showPretty T_assign . showString " " $ pretty e
+      showString " " . showPretty T_assign . showString " " $ pretty e where
+        sep = if ps == [] then "" else " "
     VarDef i -> showPretty T_mutable . showString " " $ prettyId i ""
     VarDefTyped i t -> showPretty T_mutable . showString " " . prettyId i .
       showString " " . showPretty T_colon . showString " " $ showPretty t ""
@@ -142,12 +144,13 @@ instance Pretty Param where
     param = prettyId i . showString " " . showPretty T_colon .
             showString " " . showPretty t
 
--- TODO
 instance Pretty Expr where
   prettyPrec d e =
-    let bang_prec = 13
+    let new_prec = 15
+        array_access_prec = 14
+        bang_prec = 13
         app_prec = 12
-        on_op_prec = 11
+        un_op_prec = 11
         opToTok :: UnOp -> Token
         opToTok PlusUnOp = T_plus
         opToTok MinusUnOp = T_minus
@@ -190,20 +193,34 @@ instance Pretty Expr where
       TrueCExpr -> showPretty T_true
       FalseCExpr -> showPretty T_false
       UnitCExpr -> showPretty T_lparen . showPretty T_rparen
+      ArrayDim i 1 -> showParen (always || d > un_op_prec) $
+        showPretty T_dim . showString " " . prettyId i
+      ArrayDim i n -> showParen (always || d > un_op_prec) $
+        showPretty T_dim . showString " " . prettyIntC n .
+        showString " " . prettyId i
+      NewType t -> showParen (always || d > new_prec) $
+        showPretty T_new . showString " " .
+        showPretty t
+      ArrayAccess i es -> showParen (always || d > array_access_prec) $
+        prettyId i . showPretty T_lbracket .
+        prettyPrecSepList 0 ", " es .
+        showPretty T_rbracket
       FunAppExpr i ps -> showParen (always || (d > app_prec && ps /= [])) $
-        prettyId i . showString " " .
-        prettyPrecSepList (app_prec + 1) " " ps
+        prettyId i . showString sep .
+        prettyPrecSepList (app_prec + 1) " " ps where
+          sep = if ps == [] then "" else " "
       ConstrAppExpr i ps -> showParen (always || (d > app_prec && ps /= [])) $
-        prettyConstrId i . showString " " .
-        prettyPrecSepList (app_prec + 1) " " ps
+        prettyConstrId i . showString sep .
+        prettyPrecSepList (app_prec + 1) " " ps where
+          sep = if ps == [] then "" else " "
       UnOpExpr BangOp u -> showParen (always || d > bang_prec) $
         showPretty T_bang . prettyPrec (bang_prec + 1) u
-      UnOpExpr NotOp u -> showParen (always || d > on_op_prec) $
-        showPretty T_not . showString " " . prettyPrec (on_op_prec + 1) u
-      UnOpExpr op u -> showParen (always || d > on_op_prec) $
-        showPretty (opToTok op) . prettyPrec (on_op_prec + 1) u
-      DeleteExpr u -> showParen (always || d > on_op_prec) $
-        showPretty T_delete . showString " " . prettyPrec (on_op_prec + 1) u
+      UnOpExpr NotOp u -> showParen (always || d > un_op_prec) $
+        showPretty T_not . showString " " . prettyPrec (un_op_prec + 1) u
+      UnOpExpr op u -> showParen (always || d > un_op_prec) $
+        showPretty (opToTok op) . prettyPrec (un_op_prec + 1) u
+      DeleteExpr u -> showParen (always || d > un_op_prec) $
+        showPretty T_delete . showString " " . prettyPrec (un_op_prec + 1) u
       BinOpExpr op u w -> let (assoc, p, tok) = prec op
         in prettyBinOpExp assoc p tok d u w where
       IfThenExpr u v -> showParen (always || d > if_prec) $
@@ -217,6 +234,29 @@ instance Pretty Expr where
       LetIn def u -> showParen (always || d > let_prec) $
         prettyPrec d def . showString " " . showPretty T_in .
         showString " " . prettyPrec (let_prec + 1) u
+      BeginExpr u -> showParen always $
+        showPretty T_begin . showString " " . showPretty u .
+        showString " " . showPretty T_end
+      WhileExpr u v -> showParen always $
+        showPretty T_while . showString " " .
+        showPretty u . showString " " . showPretty T_do .
+        showString " " . showPretty v . showString " " . showPretty T_done
+      ForExpr i u v w -> showParen always $
+        showPretty T_for . showString " " . prettyId i .
+        showString " " . showPretty T_assign . showString " " .
+        showPretty u . showString " " . showPretty T_to . showString " " .
+        showPretty v . showString " " . showPretty T_do . showString " " .
+        showPretty w . showString " " . showPretty T_done
+      ForDownExpr i u v w -> showParen always $
+        showPretty T_for . showString " " . prettyId i .
+        showString " " . showPretty T_assign . showString " " .
+        showPretty u . showString " " . showPretty T_downto . showString " " .
+        showPretty v . showString " " . showPretty T_do . showString " " .
+        showPretty w . showString " " . showPretty T_done
+      MatchExpr u cs -> showPretty T_match . showString " " .
+        showPretty u . showString " " . showPretty T_with . showString "\n" .
+        prettyPrecSepList 0 ("\n" ++ (pretty T_bar) ++ " ") cs . showString "\n" .
+        showPretty T_end
 
 data Assoc = L | R | Non
   deriving Eq
@@ -244,6 +284,10 @@ prettyBinOpExpNon prec tok d u w = showParen (always || d > prec) $
   showPretty tok . showString " " .
   prettyPrec (prec + 1) w
 
+instance Pretty Clause where
+  pretty (Match p e) = showPretty p . showString " " . showPretty T_arrow .
+    showString " " . showPretty e $ ""
+
 instance Pretty Pattern where
   prettyPrec d p = case p of
     IntConstPattern NoSign i -> prettyIntC i
@@ -257,5 +301,6 @@ instance Pretty Pattern where
     FalsePattern -> showPretty T_false
     IdPattern i -> prettyId i
     ConstrPattern i ps -> showParen (always || (d > prec && ps /= [])) $
-      prettyConstrId i . prettyPrecSepList (prec + 1) " " ps where
+      prettyConstrId i . showString sep . prettyPrecSepList (prec + 1) " " ps where
+        sep = if ps == [] then "" else " "
         prec = 1

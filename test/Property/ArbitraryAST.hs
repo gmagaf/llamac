@@ -1,5 +1,4 @@
--- module Property.ArbitraryAST (arbitraryProgram) where
-module Property.ArbitraryAST where
+module Property.ArbitraryAST (arbitraryProgram) where
 
 import Test.QuickCheck
 import Common.Token
@@ -68,7 +67,7 @@ arbDef = sized $ \n -> frequency [(3, FunDef <$> i <*> ps <*> (g n)),
 arbParam :: Gen Param
 arbParam = oneof [Param <$> arbitraryIdentifier,
               TypedParam <$> arbitraryIdentifier <*> arbType]
--- TODO
+
 arbExpr :: Gen Expr
 arbExpr = sized gen where
   baseGens = [IntCExpr <$> arbitraryIntConstant, FloatCExpr <$> arbitraryFloatConstant,
@@ -86,22 +85,23 @@ arbExpr = sized gen where
       BinOpExpr binOp <$> r <*> r,
       FunAppExpr <$> arbitraryIdentifier <*> boundedListOf (0, 3) r,
       ConstrAppExpr <$> arbitraryConstrIdentifier <*> boundedListOf (0, 3) r,
-      -- ArrayAccess <$> arbitraryIdentifier <*> boundedListOf (1, 3) r,
-      -- ArrayDim <$> arbitraryIdentifier <*> arbitraryIntConstant,
-      -- NewType <$> arbType,
+      ArrayAccess <$> arbitraryIdentifier <*> boundedListOf (1, 3) r,
+      ArrayDim <$> arbitraryIdentifier <*> arbitraryIntConstant,
+      NewType <$> arbType,
       DeleteExpr <$> r,
       LetIn <$> letdef <*> r,
-      -- BeginExpr <$> r,
+      BeginExpr <$> r,
       IfThenExpr <$> r <*> r,
-      IfThenElseExpr <$> r <*> r <*> r]
-      -- WhileExpr <$> r <*> r,
-      -- ForExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
-      -- ForDownExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
-      -- MatchExpr <$> r <*> clauses]
+      IfThenElseExpr <$> r <*> r <*> r,
+      WhileExpr <$> r <*> r,
+      ForExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
+      ForDownExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
+      MatchExpr <$> r <*> clauses
+      ]
 
 arbUnOp :: Gen UnOp
 arbUnOp = elements [PlusUnOp, MinusUnOp, PlusFloatUnOp, MinusFloatUnOp,
-                        BangOp, NotOp]
+                    BangOp, NotOp]
 
 arbBinOp :: Gen BinOp
 arbBinOp = elements [PlusOp, MinusOp, TimesOp, DivOp, PlusFloatOp,

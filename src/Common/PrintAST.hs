@@ -1,7 +1,7 @@
-module Property.PrintAST (Pretty,
-                          pretty,
-                          showPretty,
-                          prettyProgram) where
+module Common.PrintAST (Pretty,
+                        pretty,
+                        showPretty,
+                        prettyProgram) where
 
 import Common.AST
 import Common.Token
@@ -151,36 +151,6 @@ instance Pretty Expr where
         bang_prec = 13
         app_prec = 12
         un_op_prec = 11
-        opToTok :: UnOp -> Token
-        opToTok PlusUnOp = T_plus
-        opToTok MinusUnOp = T_minus
-        opToTok PlusFloatUnOp = T_plus_float
-        opToTok MinusFloatUnOp = T_minus_float
-        opToTok BangOp = T_bang
-        opToTok NotOp = T_not
-        prec :: BinOp -> (Assoc, Int, Token)
-        prec ExpOp = (R, 10, T_exp)
-        prec TimesOp = (L, 9, T_times)
-        prec DivOp = (L, 9, T_div)
-        prec TimesFloatOp = (L, 9, T_times_float)
-        prec DivFloatOp = (L, 9, T_div_float)
-        prec ModOp = (L, 9, T_mod)
-        prec PlusOp = (L, 8, T_plus)
-        prec MinusOp = (L, 8, T_minus)
-        prec PlusFloatOp = (L, 8, T_plus_float)
-        prec MinusFloatOp = (L, 8, T_minus_float)
-        prec AssignOp = (Non, 7, T_assign)
-        prec NotStructEqOp = (Non, 7, T_not_struct_eq_op)
-        prec GTOp = (Non, 7, T_more_than)
-        prec LTOp = (Non, 7, T_less_than)
-        prec GEqOp = (Non, 7, T_more_than_eq)
-        prec LEqOp = (Non, 7, T_less_than_eq)
-        prec NatEqOp = (Non, 7, T_nat_eq_op)
-        prec NotNatEqOp = (Non, 7, T_not_nat_eq_op)
-        prec AndOp = (L, 6, T_and_op)
-        prec OrOp = (L, 5, T_or_op)
-        prec AssignMutableOp = (Non, 4, T_assign_mutable)
-        prec SemicolonOp = (L, 1, T_semicolon)
         else_prec = 3
         then_prec = 2
         if_prec = 2
@@ -221,7 +191,7 @@ instance Pretty Expr where
         showPretty (opToTok op) . prettyPrec (un_op_prec + 1) u
       DeleteExpr u -> showParen (always || d > un_op_prec) $
         showPretty T_delete . showString " " . prettyPrec (un_op_prec + 1) u
-      BinOpExpr op u w -> let (assoc, p, tok) = prec op
+      BinOpExpr op u w -> let (assoc, p, tok) = binOpPrec op
         in prettyBinOpExp assoc p tok d u w where
       IfThenExpr u v -> showParen (always || d > if_prec) $
         showPretty T_if . showString " " . prettyPrec (if_prec + 1) u . showString " " .
@@ -283,6 +253,38 @@ prettyBinOpExpNon prec tok d u w = showParen (always || d > prec) $
   prettyPrec (prec + 1) u . showString " " .
   showPretty tok . showString " " .
   prettyPrec (prec + 1) w
+
+opToTok :: UnOp -> Token
+opToTok PlusUnOp = T_plus
+opToTok MinusUnOp = T_minus
+opToTok PlusFloatUnOp = T_plus_float
+opToTok MinusFloatUnOp = T_minus_float
+opToTok BangOp = T_bang
+opToTok NotOp = T_not
+
+binOpPrec :: BinOp -> (Assoc, Int, Token)
+binOpPrec ExpOp = (R, 10, T_exp)
+binOpPrec TimesOp = (L, 9, T_times)
+binOpPrec DivOp = (L, 9, T_div)
+binOpPrec TimesFloatOp = (L, 9, T_times_float)
+binOpPrec DivFloatOp = (L, 9, T_div_float)
+binOpPrec ModOp = (L, 9, T_mod)
+binOpPrec PlusOp = (L, 8, T_plus)
+binOpPrec MinusOp = (L, 8, T_minus)
+binOpPrec PlusFloatOp = (L, 8, T_plus_float)
+binOpPrec MinusFloatOp = (L, 8, T_minus_float)
+binOpPrec AssignOp = (Non, 7, T_assign)
+binOpPrec NotStructEqOp = (Non, 7, T_not_struct_eq_op)
+binOpPrec GTOp = (Non, 7, T_more_than)
+binOpPrec LTOp = (Non, 7, T_less_than)
+binOpPrec GEqOp = (Non, 7, T_more_than_eq)
+binOpPrec LEqOp = (Non, 7, T_less_than_eq)
+binOpPrec NatEqOp = (Non, 7, T_nat_eq_op)
+binOpPrec NotNatEqOp = (Non, 7, T_not_nat_eq_op)
+binOpPrec AndOp = (L, 6, T_and_op)
+binOpPrec OrOp = (L, 5, T_or_op)
+binOpPrec AssignMutableOp = (Non, 4, T_assign_mutable)
+binOpPrec SemicolonOp = (L, 1, T_semicolon)
 
 instance Pretty Clause where
   pretty (Match p e) = showPretty p . showString " " . showPretty T_arrow .

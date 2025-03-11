@@ -221,6 +221,7 @@ lexer s = runAlex s gather where
        _     -> (t:) <$> gather
 
 -- scan a file
+scanFile :: FilePath -> IO (Either String [Token])
 scanFile f = do
   inp <- readFile f
   return $ lexer inp

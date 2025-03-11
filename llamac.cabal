@@ -27,6 +27,7 @@ library
                       Parser.Parser
                       Common.Token
                       Common.AST
+                      Common.PrintAST
   build-depends:      base >= 4.7 && < 5,
                       array >= 0.4 && < 0.6
   build-tool-depends: alex:alex >= 3.3,
@@ -73,7 +74,7 @@ test-suite test
                       QuickCheck,
                       llamac
  other-modules:       Property.ArbitraryAST
-                      Property.PrintAST
+                      Property.Property
  ghc-options:         -Wall
                       -Wcompat
                       -Widentities

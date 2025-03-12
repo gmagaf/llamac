@@ -72,9 +72,12 @@ test-suite test
                       array >= 0.4 && < 0.6,
                       generic-random >=1.5,
                       QuickCheck,
+                      hspec,
                       llamac
  other-modules:       Property.ArbitraryAST
                       Property.Property
+                      Unit.TestExpectations
+                      Unit.Unit
  ghc-options:         -Wall
                       -Wcompat
                       -Widentities

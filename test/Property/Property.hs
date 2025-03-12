@@ -4,7 +4,6 @@ module Property.Property (parsedPrettyASTisAST,
                           checkParsedPrettyAST) where
 
 import Test.QuickCheck
-import Lexer.Lexer
 import Parser.Parser
 import Common.AST
 import Common.PrintAST
@@ -14,7 +13,7 @@ parsedPrettyASTisAST :: Gen Program -> Property
 parsedPrettyASTisAST gen =
   forAll gen (\p ->
     let s = prettyProgram p
-        ast = runAlex s calc
+        ast = parse s
     in case ast of
         Right pp -> p == pp
         _        -> False)

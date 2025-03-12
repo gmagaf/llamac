@@ -1,10 +1,15 @@
 module Main (main) where
 
-import Property.Property (checkForSizes, checkParsedPrettyAST)
+import Property.Property
+import Unit.Unit
 
 main :: IO ()
 main = do
   putStrLn "Hello from tests!"
+  putStrLn "Starting unit (non-guided) testing using HSpec"
+  testParserSuite 20
+  putStrLn "Starting unit guided testing using HSpec"
+  testParserGuidedSuite
   putStrLn "Starting property based testing using QuickCheck"
   checkForSizes checkParsedPrettyAST sizes
   putStrLn "Finished testing!" where

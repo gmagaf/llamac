@@ -1,5 +1,5 @@
 {
-module Parser.Parser (calc, parse) where
+module Parser.Parser (calc, parse, parseFile) where
 
 import Lexer.Lexer
 import Common.Token
@@ -317,4 +317,12 @@ parseError t =
 
 parse :: String -> Either String Program
 parse s = runAlex s calc
+
+parseFile :: FilePath -> IO ()
+parseFile f = do
+  s <- readFile f
+  let res = parse s
+  case res of
+    Left err -> putStrLn err
+    Right p  -> putStrLn (show p)
 }

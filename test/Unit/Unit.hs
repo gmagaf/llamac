@@ -17,7 +17,10 @@ testGuidedParser (descr, p, f) = do
 
 testParserGuidedSuite :: IO ()
 testParserGuidedSuite = mapM_ testGuidedParser suite where
-    suite = [("helloWorld.llama", helloWorldAST, "./test/resources/helloWorld.llama")]
+    suite = [("helloWorld.llama", helloWorldAST, "./test/resources/helloWorld.llama"),
+             ("hanoi.llama", hanoiAST, "./test/resources/hanoi.llama"),
+             ("hanoiType.llama", hanoiTypeAST, "./test/resources/hanoiType.llama"),
+             ("primes.llama", primesAST, "./test/resources/primes.llama")]
 
 parserSpec :: [(String, String)] -> Spec
 parserSpec [] = return ()

@@ -34,10 +34,14 @@ parserSpec ((descr, s):ts) = do
 
 testParserSuite :: Int -> IO ()
 testParserSuite k = do
-  ns <- generate $ vectorOf k (elements [1..1000] :: Gen Int)
+  randNs <- generate $ vectorOf k (elements [1..1000] :: Gen Int)
+  let ns = if k == 1000 then [1..1000] else randNs
+  let descr = if k == 1000
+      then "Unit testing suite: (parse program -> Correct Syntax)"
+      else "Unit (random " ++ (show k) ++ ") testing suite: (parse program -> Correct Syntax)"
   s <- mapM fun ns
   hspec $ do
-    describe "Unit (random) testing suite: (parse program -> Correct Syntax)" $ do
+    describe descr $ do
       parserSpec s where
     fun n = do
       let fileName = "p" ++ (show n) ++ ".lla"

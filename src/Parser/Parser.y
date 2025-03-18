@@ -88,10 +88,7 @@ import Common.AST
   ','                   { T_comma }
   ':'                   { T_colon }
 
-%right in
 %left ';'
-%nonassoc then
-%nonassoc else
 %nonassoc ':='
 %left '||'
 %left '&&'
@@ -99,6 +96,8 @@ import Common.AST
 %left '+' '-' '+.' '-.'
 %left '*' '/' '*.' '/.' mod
 %right '**'
+
+%expect 1 -- always choose shift in dangling else conflict
 
 %%
 
@@ -191,12 +190,29 @@ BaseType :: { Type }
   | id                              { UserDefinedType $1 }
   | '(' Type ')'                    { $2 }
 
--- TODO: Fix dangling if
 Expr :: { Expr }
+  : LetExpr                         { $1 }
+  | SemicolonExpr                   { $1 }
+  | SemicolonLetExpr                { $1 }
+
+LetExpr :: { Expr }
   : LetDef in Expr                  { LetIn $1 $3 }
-  | Expr ';' Expr                   { BinOpExpr SemicolonOp $1 $3 }
-  | if Expr then Expr               { IfThenExpr $2 $4 }
-  | if Expr then Expr else Expr     { IfThenElseExpr $2 $4 $6 }
+
+SemicolonExpr :: { Expr }
+  : SemicolonExpr ';' SemicolonExpr { BinOpExpr SemicolonOp $1 $3 }
+  | IfExpr                          { $1 }
+
+SemicolonLetExpr :: { Expr } -- Cannot have let in lhs
+  : SemicolonExpr ';' LetExpr       { BinOpExpr SemicolonOp $1 $3 }
+
+LetIfExpr :: { Expr }
+  : LetDef in IfExpr                { LetIn $1 $3 }
+  | IfExpr                          { $1 }
+
+IfExpr :: { Expr } -- Cannot have semicolon in last Expr
+  : if Expr then LetIfExpr          { IfThenExpr $2 $4 }
+  | if Expr then LetIfExpr else LetIfExpr
+                                    { IfThenElseExpr $2 $4 $6 }
   | LogicalExpr                     { $1 }
 
 LogicalExpr :: { Expr }

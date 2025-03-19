@@ -106,7 +106,7 @@ arbUnOp = elements [PlusUnOp, MinusUnOp, PlusFloatUnOp, MinusFloatUnOp,
 arbBinOp :: Gen BinOp
 arbBinOp = elements [PlusOp, MinusOp, TimesOp, DivOp, PlusFloatOp,
                       MinusFloatOp, TimesFloatOp, DivFloatOp, ModOp, ExpOp,
-                      AssignOp, NotStructEqOp, LTOp, GTOp, LEqOp, GEqOp,
+                      EqOp, NotEqOp, LTOp, GTOp, LEqOp, GEqOp,
                       NatEqOp, NotNatEqOp, AndOp, OrOp, SemicolonOp, AssignMutableOp]
 
 arbClause :: Gen Clause

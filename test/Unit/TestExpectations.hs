@@ -72,13 +72,13 @@ primesAST =
       (FunAppExpr "prime" [UnOpExpr MinusUnOp (FunAppExpr "n" [])])
       (IfThenElseExpr (BinOpExpr LTOp (FunAppExpr "n" []) (IntCExpr 2))
         FalseCExpr
-        (IfThenElseExpr (BinOpExpr AssignOp (FunAppExpr "n" []) (IntCExpr 2))
+        (IfThenElseExpr (BinOpExpr EqOp (FunAppExpr "n" []) (IntCExpr 2))
           TrueCExpr
-          (IfThenElseExpr (BinOpExpr AssignOp (BinOpExpr ModOp (FunAppExpr "n" []) (IntCExpr 2)) (IntCExpr 0))
+          (IfThenElseExpr (BinOpExpr EqOp (BinOpExpr ModOp (FunAppExpr "n" []) (IntCExpr 2)) (IntCExpr 0))
           FalseCExpr
           (LetIn (LetRec [FunDef "loop" [Param "i"]
             (IfThenElseExpr (BinOpExpr LEqOp (FunAppExpr "i" []) (BinOpExpr DivOp (FunAppExpr "n" []) (IntCExpr 2)))
-              (IfThenElseExpr (BinOpExpr AssignOp (BinOpExpr ModOp (FunAppExpr "n" []) (FunAppExpr "i" [])) (IntCExpr 0))
+              (IfThenElseExpr (BinOpExpr EqOp (BinOpExpr ModOp (FunAppExpr "n" []) (FunAppExpr "i" [])) (IntCExpr 0))
                 FalseCExpr
                 (FunAppExpr "loop" [BinOpExpr PlusOp (FunAppExpr "i" []) (IntCExpr 2)]))
               TrueCExpr)])
@@ -119,7 +119,7 @@ primesAST =
                                     (FunAppExpr "incr" [FunAppExpr "counter" []])
                                     (FunAppExpr "print_int" [BinOpExpr MinusOp (FunAppExpr "number" []) (IntCExpr 1)]))
                                     (FunAppExpr "print_string" [StringCExpr "\\n"]))))
-                                (IfThenExpr (BinOpExpr AndOp (BinOpExpr NotStructEqOp (FunAppExpr "number" []) (FunAppExpr "limit" [])) (FunAppExpr "prime" [BinOpExpr PlusOp (FunAppExpr "number" []) (IntCExpr 1)]))
+                                (IfThenExpr (BinOpExpr AndOp (BinOpExpr NotEqOp (FunAppExpr "number" []) (FunAppExpr "limit" [])) (FunAppExpr "prime" [BinOpExpr PlusOp (FunAppExpr "number" []) (IntCExpr 1)]))
                                   (BeginExpr
                                     (BinOpExpr SemicolonOp
                                       (BinOpExpr SemicolonOp

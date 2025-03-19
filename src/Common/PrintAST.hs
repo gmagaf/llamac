@@ -69,7 +69,7 @@ instance Pretty TypeDef where
 
 instance Pretty TDef where
   pretty (TDef ide constrs) = prettyId ide . showString " " .
-    showPretty T_assign . showString " " $
+    showPretty T_equals . showString " " $
     prettySepList (" " ++ pretty T_bar ++ " ") constrs
 
 instance Pretty Constr where
@@ -121,11 +121,11 @@ instance Pretty LetDef where
 instance Pretty Def where
   pretty def = case def of
     FunDef i ps e -> prettyId i . showString sep . prettyPrecSepList 0 " " ps .
-      showString " " . showPretty T_assign . showString " " $ pretty e where
+      showString " " . showPretty T_equals . showString " " $ pretty e where
         sep = if ps == [] then "" else " "
     FunDefTyped i ps t e -> prettyId i . showString sep . prettyPrecSepList 0 " " ps .
       showString " " . showPretty T_colon . showString " " . showPretty t .
-      showString " " . showPretty T_assign . showString " " $ pretty e where
+      showString " " . showPretty T_equals . showString " " $ pretty e where
         sep = if ps == [] then "" else " "
     VarDef i -> showPretty T_mutable . showString " " $ prettyId i ""
     VarDefTyped i t -> showPretty T_mutable . showString " " . prettyId i .
@@ -191,8 +191,9 @@ instance Pretty Expr where
         showPretty (opToTok op) . prettyPrec (un_op_prec + 1) u
       DeleteExpr u -> showParen (always || d > un_op_prec) $
         showPretty T_delete . showString " " . prettyPrec (un_op_prec + 1) u
-      BinOpExpr op u w -> let (assoc, p, tok) = binOpPrec op
-        in prettyBinOpExp assoc p tok d u w where
+      BinOpExpr op u w ->
+        let (assoc, p, tok) = binOpPrec op
+        in prettyBinOpExp assoc p tok d u w
       IfThenExpr u v -> showParen (always || d > if_prec) $
         showPretty T_if . showString " " . prettyPrec (if_prec + 1) u . showString " " .
         showPretty T_then . showString " " . prettyPrec then_prec v
@@ -213,13 +214,13 @@ instance Pretty Expr where
         showString " " . showPretty v . showString " " . showPretty T_done
       ForExpr i u v w -> showParen always $
         showPretty T_for . showString " " . prettyId i .
-        showString " " . showPretty T_assign . showString " " .
+        showString " " . showPretty T_equals . showString " " .
         showPretty u . showString " " . showPretty T_to . showString " " .
         showPretty v . showString " " . showPretty T_do . showString " " .
         showPretty w . showString " " . showPretty T_done
       ForDownExpr i u v w -> showParen always $
         showPretty T_for . showString " " . prettyId i .
-        showString " " . showPretty T_assign . showString " " .
+        showString " " . showPretty T_equals . showString " " .
         showPretty u . showString " " . showPretty T_downto . showString " " .
         showPretty v . showString " " . showPretty T_do . showString " " .
         showPretty w . showString " " . showPretty T_done
@@ -273,11 +274,11 @@ binOpPrec PlusOp = (L, 8, T_plus)
 binOpPrec MinusOp = (L, 8, T_minus)
 binOpPrec PlusFloatOp = (L, 8, T_plus_float)
 binOpPrec MinusFloatOp = (L, 8, T_minus_float)
-binOpPrec AssignOp = (Non, 7, T_assign)
-binOpPrec NotStructEqOp = (Non, 7, T_not_struct_eq_op)
-binOpPrec GTOp = (Non, 7, T_more_than)
+binOpPrec EqOp = (Non, 7, T_equals)
+binOpPrec NotEqOp = (Non, 7, T_not_equals)
+binOpPrec GTOp = (Non, 7, T_greater_than)
 binOpPrec LTOp = (Non, 7, T_less_than)
-binOpPrec GEqOp = (Non, 7, T_more_than_eq)
+binOpPrec GEqOp = (Non, 7, T_greater_than_eq)
 binOpPrec LEqOp = (Non, 7, T_less_than_eq)
 binOpPrec NatEqOp = (Non, 7, T_nat_eq_op)
 binOpPrec NotNatEqOp = (Non, 7, T_not_nat_eq_op)

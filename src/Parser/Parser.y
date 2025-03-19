@@ -58,7 +58,7 @@ import Common.AST
   const_string          { T_const_string $$ }
   -- Symbols
   '->'                  { T_arrow }
-  '='                   { T_assign }
+  '='                   { T_equals }
   '|'                   { T_bar }
   '+'                   { T_plus }
   '-'                   { T_minus }
@@ -73,11 +73,11 @@ import Common.AST
   ';'                   { T_semicolon }
   '&&'                  { T_and_op }
   '||'                  { T_or_op }
-  '<>'                  { T_not_struct_eq_op }
+  '<>'                  { T_not_equals }
   '<'                   { T_less_than }
-  '>'                   { T_more_than }
+  '>'                   { T_greater_than }
   '<='                  { T_less_than_eq }
-  '>='                  { T_more_than_eq }
+  '>='                  { T_greater_than_eq }
   '=='                  { T_nat_eq_op }
   '!='                  { T_not_nat_eq_op }
   ':='                  { T_assign_mutable }
@@ -219,8 +219,8 @@ LogicalExpr :: { Expr }
   : LogicalExpr ':=' LogicalExpr    { BinOpExpr AssignMutableOp $1 $3 }
   | LogicalExpr '||' LogicalExpr    { BinOpExpr OrOp $1 $3 }
   | LogicalExpr '&&' LogicalExpr    { BinOpExpr AndOp $1 $3 }
-  | LogicalExpr '='  LogicalExpr    { BinOpExpr AssignOp $1 $3 }
-  | LogicalExpr '<>' LogicalExpr    { BinOpExpr NotStructEqOp $1 $3 }
+  | LogicalExpr '='  LogicalExpr    { BinOpExpr EqOp $1 $3 }
+  | LogicalExpr '<>' LogicalExpr    { BinOpExpr NotEqOp $1 $3 }
   | LogicalExpr '<'  LogicalExpr    { BinOpExpr LTOp $1 $3 }
   | LogicalExpr '>'  LogicalExpr    { BinOpExpr GTOp $1 $3 }
   | LogicalExpr '<=' LogicalExpr    { BinOpExpr LEqOp $1 $3 }

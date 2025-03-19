@@ -59,7 +59,7 @@ rules :-
   <0> "while"                                   { keyword T_while }
   <0> "with"                                    { keyword T_with }
   <0> "->"                                      { keyword T_arrow }
-  <0> "="                                       { keyword T_assign }
+  <0> "="                                       { keyword T_equals }
   <0> "|"                                       { keyword T_bar }
   <0> "+"                                       { keyword T_plus }
   <0> "-"                                       { keyword T_minus }
@@ -74,11 +74,11 @@ rules :-
   <0> ";"                                       { keyword T_semicolon }
   <0> "&&"                                      { keyword T_and_op }
   <0> "||"                                      { keyword T_or_op }
-  <0> "<>"                                      { keyword T_not_struct_eq_op }
+  <0> "<>"                                      { keyword T_not_equals }
   <0> "<"                                       { keyword T_less_than }
-  <0> ">"                                       { keyword T_more_than }
+  <0> ">"                                       { keyword T_greater_than }
   <0> "<="                                      { keyword T_less_than_eq }
-  <0> ">="                                      { keyword T_more_than_eq }
+  <0> ">="                                      { keyword T_greater_than_eq }
   <0> "=="                                      { keyword T_nat_eq_op }
   <0> "!="                                      { keyword T_not_nat_eq_op }
   <0> ":="                                      { keyword T_assign_mutable }

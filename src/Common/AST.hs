@@ -78,7 +78,7 @@ data UnOp = PlusUnOp | MinusUnOp
 data BinOp = PlusOp | MinusOp | TimesOp | DivOp
            | PlusFloatOp | MinusFloatOp | TimesFloatOp | DivFloatOp
            | ModOp | ExpOp
-           | AssignOp | NotStructEqOp
+           | EqOp | NotEqOp
            | LTOp | GTOp | LEqOp | GEqOp
            | NatEqOp | NotNatEqOp
            | AndOp | OrOp

@@ -21,7 +21,7 @@ $digits   = [0-9]                 -- digits
 $hex      = [0-9a-fA-f]           -- hex digits
 $white    = [\ \t\r\n]            -- white characters
 
-@escape   = \\n|\\t|\\r|\\0|\\\\|\\'|\\\"|\\x$hex$hex -- escape sequences "
+@escape   = \\n|\\t|\\r|\\0|\\\\|\\\'|\\\"|\\x$hex$hex -- escape sequences
 
 rules :-
   <0> "and"                                     { keyword T_and }
@@ -93,7 +93,7 @@ rules :-
   <0> $digits+                                  { intAction }
   <0> $digits+\.$digits+([eE][\+\-]?$digits+)?  { floatAction }
   <0> \'([^\\\']|@escape)\'                     { charAction }
-  <0> \"([^\\\"]|@escape)*\"                    { stringAction } --"
+  <0> \"([^\\\"]|@escape)*\"                    { stringAction }
   <0> $white+                                   { skip }
   <0> \-\-.*                                    { skip }                           -- one line comment
   <0> "(*"                                      { beginComment }                   -- support for multiline nested comments

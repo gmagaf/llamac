@@ -69,7 +69,7 @@ test-suite test
                       array >= 0.4 && < 0.6,
                       generic-random >=1.5,
                       QuickCheck >= 2.5,
-                      hspec >= 2.11,
+                      hspec >= 2.10,
                       llamac
  other-modules:       Property.ArbitraryAST
                       Property.Property

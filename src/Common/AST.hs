@@ -10,7 +10,7 @@ import Common.Token (Identifier,
 
 type Program = [Either LetDef TypeDef]
 
-
+-- Definitions
 data LetDef = Let [Def]
             | LetRec [Def]
   deriving (Eq, Show)
@@ -27,7 +27,7 @@ data Param = Param Identifier
            | TypedParam Identifier Type
   deriving (Eq, Show)
 
-
+-- Types
 data TypeDef = Type [TDef]
   deriving (Eq, Show)
 
@@ -44,7 +44,7 @@ data Type = UnitType | IntType | CharType | BoolType | FloatType
           | UserDefinedType Identifier
   deriving (Eq, Show)
 
-
+-- Expressions
 data Expr = IntCExpr IntConstant
           | FloatCExpr FloatConstant
           | CharCExpr CharConstant

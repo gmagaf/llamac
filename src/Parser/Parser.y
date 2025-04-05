@@ -1,14 +1,17 @@
 {
 module Parser.Parser (calc, parse, parseFile) where
 
-import Lexer.Lexer
-import Common.Token
+import Lexer.Lexer (getLineOfPosn, getColumnOfPosn)
+import Common.Token (Token(..))
 import Common.AST
+import Parser.ParserM (Parser, lexerWrap, runParser, getAlexPos,
+                       ParserState, initParserState,
+                       Error, throwParsingError)
 }
 
 %name calc
 %tokentype { Token }
-%monad { Alex }
+%monad { Parser }
 %lexer { lexerWrap } { T_eof }
 %error { parseError }
 
@@ -323,22 +326,27 @@ PatArg :: { Pattern }
   | '(' Pattern ')'                 { $2 }
 
 {
-parseError :: Token -> Alex a
+-- Handle errors
+parseError :: Token -> Parser a
 parseError t =
-  let position p = "Parse error at line: " ++ (show $ getLineOfPosn p) ++
-                   " and column: " ++ (show $ getColumnOfPosn p) ++ ". "
+  let position p = "Error at line: " ++ show (getLineOfPosn p) ++
+                   " and column: " ++ show (getColumnOfPosn p) ++ ". "
   in do
-    (posn, _, _, _) <- alexGetInput
-    alexError $ (position posn) ++ "Unable to process token " ++ (show t)
+    posn <- getAlexPos
+    throwParsingError $ (position posn) ++ "Unable to process token " ++ show t
 
-parse :: String -> Either String Program
-parse s = runAlex s calc
+-- The parsing function
+parse :: String -> Either Error Program
+parse s = runParser initState calc where
+  initState :: ParserState
+  initState = initParserState s
 
+-- Parsing utils for files
 parseFile :: FilePath -> IO ()
 parseFile f = do
   s <- readFile f
   let res = parse s
   case res of
-    Left err -> putStrLn err
+    Left err -> putStrLn (show err)
     Right p  -> putStrLn (show p)
 }

@@ -4,7 +4,30 @@ module Common.PrintAST (Pretty,
                         prettyProgram) where
 
 import Common.AST
+    ( Type(..),
+      Expr(..),
+      UnOp(..),
+      BinOp(..),
+      Clause(..),
+      Constr(..),
+      Def(..),
+      LetDef(..),
+      Param(..),
+      Pattern(..),
+      PatternSign(Minus, NoSign, Plus),
+      Program,
+      TDef(..),
+      TypeDef(..) )
 import Common.Token
+    ( FloatConstant,
+      Identifier,
+      ConstrIdentifier,
+      CharConstant,
+      IntConstant,
+      StringConstant,
+      Token(..) )
+
+-- Pretty printing utils
 
 class Pretty a where
   prettyPrec :: Int -> a -> ShowS
@@ -44,12 +67,12 @@ prettyStringC = showPretty . T_const_string
 
 prettySepList :: Pretty a => String -> [a] -> String
 prettySepList _ []     = ""
-prettySepList _ (x:[]) = pretty x
+prettySepList _ [x]    = pretty x
 prettySepList s (x:xs) = showPretty x . showString s $ prettySepList s xs
 
 prettyPrecSepList :: Pretty a => Int -> String -> [a] -> ShowS
 prettyPrecSepList _ _ []     = id
-prettyPrecSepList d _ (x:[]) = prettyPrec d x
+prettyPrecSepList d _ [x]    = prettyPrec d x
 prettyPrecSepList d s (x:xs) = prettyPrec d x . showString s . prettyPrecSepList d s xs
 
 -- False omits parentheses whenever possible
@@ -122,11 +145,11 @@ instance Pretty Def where
   pretty def = case def of
     FunDef i ps e -> prettyId i . showString sep . prettyPrecSepList 0 " " ps .
       showString " " . showPretty T_equals . showString " " $ pretty e where
-        sep = if ps == [] then "" else " "
+        sep = if null ps then "" else " "
     FunDefTyped i ps t e -> prettyId i . showString sep . prettyPrecSepList 0 " " ps .
       showString " " . showPretty T_colon . showString " " . showPretty t .
       showString " " . showPretty T_equals . showString " " $ pretty e where
-        sep = if ps == [] then "" else " "
+        sep = if null ps then "" else " "
     VarDef i -> showPretty T_mutable . showString " " $ prettyId i ""
     VarDefTyped i t -> showPretty T_mutable . showString " " . prettyId i .
       showString " " . showPretty T_colon . showString " " $ showPretty t ""
@@ -178,11 +201,11 @@ instance Pretty Expr where
       FunAppExpr i ps -> showParen (always || (d > app_prec && ps /= [])) $
         prettyId i . showString sep .
         prettyPrecSepList (app_prec + 1) " " ps where
-          sep = if ps == [] then "" else " "
+          sep = if null ps then "" else " "
       ConstrAppExpr i ps -> showParen (always || (d > app_prec && ps /= [])) $
         prettyConstrId i . showString sep .
         prettyPrecSepList (app_prec + 1) " " ps where
-          sep = if ps == [] then "" else " "
+          sep = if null ps then "" else " "
       UnOpExpr BangOp u -> showParen (always || d > bang_prec) $
         showPretty T_bang . prettyPrec (bang_prec + 1) u
       UnOpExpr NotOp u -> showParen (always || d > un_op_prec) $
@@ -226,7 +249,7 @@ instance Pretty Expr where
         showPretty w . showString " " . showPretty T_done
       MatchExpr u cs -> showPretty T_match . showString " " .
         showPretty u . showString " " . showPretty T_with . showString "\n" .
-        prettyPrecSepList 0 ("\n" ++ (pretty T_bar) ++ " ") cs . showString "\n" .
+        prettyPrecSepList 0 ("\n" ++ pretty T_bar ++ " ") cs . showString "\n" .
         showPretty T_end
 
 data Assoc = L | R | Non
@@ -305,5 +328,5 @@ instance Pretty Pattern where
     IdPattern i -> prettyId i
     ConstrPattern i ps -> showParen (always || (d > prec && ps /= [])) $
       prettyConstrId i . showString sep . prettyPrecSepList (prec + 1) " " ps where
-        sep = if ps == [] then "" else " "
+        sep = if null ps then "" else " "
         prec = 1

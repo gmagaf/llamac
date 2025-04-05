@@ -7,6 +7,7 @@ import Common.Token (Identifier,
                      CharConstant,
                      StringConstant)
 
+-- Definitions of all the ASTs of Llama
 
 type Program = [Either LetDef TypeDef]
 

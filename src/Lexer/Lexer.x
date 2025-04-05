@@ -1,10 +1,10 @@
 {
-module Lexer.Lexer (Alex, runAlex, alexError,
-                    alexGetInput, getColumnOfPosn, getLineOfPosn,
-                    lexer, lexerLine, scanFile, lexerWrap,
-                    removeFromHead, removeFromTail) where
+module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
+                    alexStartPos, alexInitUserState, alexMonadScan,
+                    getColumnOfPosn, getLineOfPosn,
+                    lexer, lexerLine, scanFile) where
 
-import Common.Token
+import Common.Token (Token(..))
 import Text.Read (readMaybe)
 import Control.Monad (when)
 -- import Debug.Trace (trace)
@@ -105,7 +105,7 @@ rules :-
 
 {
 
-
+-- User state to hold comment depth
 data AlexUserState = AlexUserState {commentDepth :: Int}
 
 alexInitUserState :: AlexUserState
@@ -119,32 +119,35 @@ setCommentDepth d = do
   state <- alexGetUserState
   alexSetUserState $ state{commentDepth = d}
 
+-- Utils for position
 getLineOfPosn :: AlexPosn -> Int
 getLineOfPosn (AlexPn _ line _) = line
 
 getColumnOfPosn :: AlexPosn -> Int
 getColumnOfPosn (AlexPn _ _ col) = col
 
+-- Error handling utils
 lexicalError :: AlexPosn -> String -> Alex a
 lexicalError posn message = alexError $ position ++ message where
-  position = "Lexical error at line: " ++ (show $ getLineOfPosn posn) ++
-    " and column: " ++ (show $ getColumnOfPosn posn) ++ ". "
+  position = "Error at line: " ++ show (getLineOfPosn posn) ++
+    " and column: " ++ show (getColumnOfPosn posn) ++ ". "
 
 unknownCharacter :: AlexAction Token
 unknownCharacter (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in lexicalError posn ("Unknown character: " ++ lexeme)
 
+-- Handle end of file
 alexEOF :: Alex Token
 alexEOF = do
   code <- alexGetStartCode
   if code == comment
-    then alexError "Lexical error: Reached end of file without closing all comments"
+    then alexError "Reached end of file without closing all comments"
     else case code of
       0 -> return T_eof
-      c -> alexError $ "Lexical error: Reached end of file in unsupported start code: " ++ (show c)
+      c -> alexError $ "Reached end of file in unsupported start code: " ++ show c
 
-
+-- Utils for handling tokens
 keyword :: Token -> AlexAction Token
 keyword tokenConstr _ _ = return tokenConstr
 
@@ -165,7 +168,6 @@ floatAction (posn, _, _, current_string) len =
   in case readMaybe lexeme :: Maybe Float of
     Just v  -> return (T_const_float v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a float")
-
 
 removeFromHead :: (Eq a) => a -> [a] -> Maybe [a]
 removeFromHead _ [] = Nothing
@@ -194,6 +196,7 @@ charAction (posn, _, _, current_string) len =
     Just ch -> return (T_const_char ch)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char")
 
+-- Comments utils
 beginComment :: AlexAction Token
 beginComment input len = do
   alexSetStartCode comment
@@ -210,7 +213,9 @@ endComment input@(posn, _, _, _) len = do
     else lexicalError posn "A comment closed without being opened"
   skip input len
 
--- scan a string until EOF is encountered
+
+-- Utils for running lexer
+-- Scan a string until EOF is encountered
 lexer :: String -> Either String [Token]
 lexer s = runAlex s gather where
   gather :: Alex [Token]
@@ -220,22 +225,18 @@ lexer s = runAlex s gather where
        T_eof -> return [t]
        _     -> (t:) <$> gather
 
--- scan a file
+-- Scan a file
 scanFile :: FilePath -> IO (Either String [Token])
 scanFile f = do
   inp <- readFile f
   return $ lexer inp
 
+-- Scan a line
 lexerLine :: IO ()
 lexerLine = do
   line <- getLine
   let res = lexer line
   case res of
-    Left err -> putStrLn err
-    Right tokens -> mapM_ (\t -> putStrLn $ "Token: " ++ (show t)) tokens
-
-lexerWrap :: (Token -> Alex a) -> Alex a
-lexerWrap cont = do
-  a <- alexMonadScan
-  cont a
+    Left err     -> putStrLn err
+    Right tokens -> mapM_ (\t -> putStrLn $ "Token: " ++ show t) tokens
 }

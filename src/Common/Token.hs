@@ -14,6 +14,7 @@ type FloatConstant = Float
 type CharConstant = String
 type StringConstant = String
 
+-- Definition of all the Llama tokens
 data Token
   -- Keywords
   = T_and

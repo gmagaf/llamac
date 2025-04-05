@@ -8,12 +8,14 @@ import Control.Monad.Trans.State (State, evalState, state)
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
       alexStartPos, alexMonadScan, alexInitUserState )
 import Common.Token (Token)
+import Common.SymbolTable (SymbolTable, emptySymbolTable)
 
 -- This module defines the Parser monad
 
 -- The state of the parser
 data ParserState = ParserState
-  { alex_state   :: AlexState  -- the lexer's state
+  { alex_state   :: AlexState   -- the lexer's state
+  , symbols      :: SymbolTable -- the compiler's symbol table
   }
 
 initParserState :: String -> ParserState
@@ -25,7 +27,9 @@ initParserState input =
                         alex_ust = alexInitUserState,
                         alex_scd = 0}
     in ParserState
-       { alex_state = initAlexState }
+       { alex_state = initAlexState
+       , symbols    = emptySymbolTable
+       }
 
 -- The compiler's errors
 data Error = Error String
@@ -53,11 +57,22 @@ getAlexState = alex_state <$> get
 getAlexPos :: Parser AlexPosn
 getAlexPos = alex_pos <$> getAlexState
 
+put :: ParserState -> Parser ()
+put s = ExceptT $ state $ const (Right (), s)
+
+putAlexState :: AlexState -> Parser ()
+putAlexState s = do
+  ps <- get
+  put ps{alex_state = s}
+
 runParser :: ParserState -> Parser a -> Either Error a
 runParser s p = evalState (runExceptT p) s
 
 throwError :: String -> Parser a
 throwError = throwE . Error
+
+throwLexicalError :: String -> Parser a
+throwLexicalError = throwE . LexicalError
 
 throwParsingError :: String -> Parser a
 throwParsingError = throwE . ParsingError
@@ -67,11 +82,13 @@ throwSemanticsError = throwE . SemanticsError
 
 -- Utils to facilitate the communication with the lexer
 changeMonad :: Alex a -> Parser a
-changeMonad (Alex f) = ExceptT (state g) where
-    g pState = let aState = alex_state pState in
-        case f aState of
-            Right (aState', b) -> (Right b, ParserState {alex_state = aState'})
-            Left err           -> (Left $ LexicalError err, pState)
+changeMonad (Alex f) = do
+  aState <- getAlexState
+  case f aState of
+    Right (aState', a) -> do
+      putAlexState aState'
+      return a
+    Left lexErr        -> throwLexicalError lexErr
 
 parserMonadScan :: Parser Token
 parserMonadScan = changeMonad alexMonadScan

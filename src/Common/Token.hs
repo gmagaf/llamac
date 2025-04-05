@@ -134,8 +134,8 @@ instance Show Token where
     T_id v              -> "id:" ++ v
     T_id_constr v       -> "constrId:" ++ v
     -- Constants
-    T_const_int v       -> "intC:" ++ (show v)
-    T_const_float v     -> "floatC:" ++ (show v)
+    T_const_int v       -> "intC:" ++ show v
+    T_const_float v     -> "floatC:" ++ show v
     T_const_char v      -> "charC:" ++ v
     T_const_string v    -> "stringC:" ++ v
     -- Symbols

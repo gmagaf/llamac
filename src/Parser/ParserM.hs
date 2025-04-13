@@ -5,17 +5,17 @@ module Parser.ParserM (Parser, runParser, ParserState, initParserState,
 
 import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, runExceptT)
 import Control.Monad.Trans.State (State, evalState, state)
-import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
-      alexStartPos, alexMonadScan, alexInitUserState )
+import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn(..),
+      alexStartPos, alexMonadScan, alexInitUserState)
 import Common.Token (Token)
-import Common.SymbolTable (SymbolTable, emptySymbolTable)
+-- import Common.SymbolTable (SymbolTable, emptySymbolTable)
 
 -- This module defines the Parser monad
 
 -- The state of the parser
 data ParserState = ParserState
   { alex_state   :: AlexState   -- the lexer's state
-  , symbols      :: SymbolTable -- the compiler's symbol table
+  -- , symbols      :: SymbolTable -- the compiler's symbol table
   }
 
 initParserState :: String -> ParserState
@@ -28,7 +28,7 @@ initParserState input =
                         alex_scd = 0}
     in ParserState
        { alex_state = initAlexState
-       , symbols    = emptySymbolTable
+      --  , symbols    = emptySymbolTable
        }
 
 -- The compiler's errors
@@ -90,10 +90,11 @@ changeMonad (Alex f) = do
       return a
     Left lexErr        -> throwLexicalError lexErr
 
-parserMonadScan :: Parser Token
+parserMonadScan :: Parser (Token, AlexPosn)
 parserMonadScan = changeMonad alexMonadScan
 
-lexerWrap :: (Token -> Parser a) -> Parser a
+
+lexerWrap :: ((Token, AlexPosn) -> Parser a) -> Parser a
 lexerWrap cont = do
   a <- parserMonadScan
   cont a

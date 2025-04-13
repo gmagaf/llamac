@@ -29,8 +29,8 @@ library
                       Parser.ParserM
                       Common.Token
                       Common.AST
-                      Common.PrintAST
-                      Common.SymbolTable
+                      -- Common.PrintAST
+                      -- Common.SymbolTable
   build-depends:      base >= 4.7 && < 5,
                       array >= 0.4 && < 0.6,
                       transformers >= 0.5,

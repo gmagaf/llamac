@@ -12,7 +12,7 @@ import Control.Monad (when)
 
 %wrapper "monadUserState"
 %encoding "utf-8"
-%token "Token"
+%token "(Token, AlexPosn)"
 
 $lls      = a-z                   -- little letters
 $uls      = A-Z                   -- upercase letters
@@ -132,41 +132,43 @@ lexicalError posn message = alexError $ position ++ message where
   position = "Error at line: " ++ show (getLineOfPosn posn) ++
     " and column: " ++ show (getColumnOfPosn posn) ++ ". "
 
-unknownCharacter :: AlexAction Token
+unknownCharacter :: AlexAction (Token, AlexPosn)
 unknownCharacter (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in lexicalError posn ("Unknown character: " ++ lexeme)
 
 -- Handle end of file
-alexEOF :: Alex Token
+alexEOF :: Alex (Token, AlexPosn)
 alexEOF = do
   code <- alexGetStartCode
   if code == comment
     then alexError "Reached end of file without closing all comments"
     else case code of
-      0 -> return T_eof
+      0 -> do
+        (posn, _, _, _) <- alexGetInput
+        return (T_eof, posn)
       c -> alexError $ "Reached end of file in unsupported start code: " ++ show c
 
 -- Utils for handling tokens
-keyword :: Token -> AlexAction Token
-keyword tokenConstr _ _ = return tokenConstr
+keyword :: Token -> AlexAction (Token, AlexPosn)
+keyword tokenConstr (posn, _, _, _) _ = return (tokenConstr, posn)
 
-identifiersAction :: (String -> Token) -> AlexAction Token
-identifiersAction tokenConstr (_, _, _, current_string) len =
-  return $ tokenConstr (take len current_string)
+identifiersAction :: (String -> Token) -> AlexAction (Token, AlexPosn)
+identifiersAction tokenConstr (posn, _, _, current_string) len = 
+  return $ (tokenConstr (take len current_string), posn)
 
-intAction :: AlexAction Token
+intAction :: AlexAction (Token, AlexPosn)
 intAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in case readMaybe lexeme :: Maybe Int of
-    Just v  -> return (T_const_int v)
+    Just v  -> return (T_const_int v, posn)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into an int")
 
-floatAction :: AlexAction Token
+floatAction :: AlexAction (Token, AlexPosn)
 floatAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in case readMaybe lexeme :: Maybe Float of
-    Just v  -> return (T_const_float v)
+    Just v  -> return (T_const_float v, posn)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a float")
 
 removeFromHead :: (Eq a) => a -> [a] -> Maybe [a]
@@ -180,31 +182,31 @@ removeFromTail a (x:[]) | a == x    = Just []
                         | otherwise = Nothing
 removeFromTail a (x:xs) = (x:) <$> removeFromTail a xs
 
-stringAction :: AlexAction Token
+stringAction :: AlexAction (Token, AlexPosn)
 stringAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
       noQuotes = removeFromHead '"' lexeme >>= removeFromTail '"'
   in case noQuotes of
-    Just str -> return (T_const_string str)
+    Just str -> return (T_const_string str, posn)
     Nothing  -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a string")
 
-charAction :: AlexAction Token
+charAction :: AlexAction (Token, AlexPosn)
 charAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
       noQuotes = removeFromHead '\'' lexeme >>= removeFromTail '\''
   in case noQuotes of
-    Just ch -> return (T_const_char ch)
+    Just ch -> return (T_const_char ch, posn)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char")
 
 -- Comments utils
-beginComment :: AlexAction Token
+beginComment :: AlexAction (Token, AlexPosn)
 beginComment input len = do
   alexSetStartCode comment
   d <- getCommentDepth
   setCommentDepth (d + 1)
   skip input len
 
-endComment :: AlexAction Token
+endComment :: AlexAction (Token, AlexPosn)
 endComment input@(posn, _, _, _) len = do
   d <- getCommentDepth
   when (d == 1) (alexSetStartCode 0)
@@ -216,17 +218,17 @@ endComment input@(posn, _, _, _) len = do
 
 -- Utils for running lexer
 -- Scan a string until EOF is encountered
-lexer :: String -> Either String [Token]
+lexer :: String -> Either String [(Token, AlexPosn)]
 lexer s = runAlex s gather where
-  gather :: Alex [Token]
+  gather :: Alex [(Token, AlexPosn)]
   gather = do
-     t <- alexMonadScan
+     (t, posn) <- alexMonadScan
      case t of
-       T_eof -> return [t]
-       _     -> (t:) <$> gather
+       T_eof -> return [(t, posn)]
+       _     -> ((t, posn):) <$> gather
 
 -- Scan a file
-scanFile :: FilePath -> IO (Either String [Token])
+scanFile :: FilePath -> IO (Either String [(Token, AlexPosn)])
 scanFile f = do
   inp <- readFile f
   return $ lexer inp

@@ -1,5 +1,5 @@
 {
-module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
+module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn), AlexUserState(..),
                     alexStartPos, alexInitUserState, alexMonadScan,
                     getColumnOfPosn, getLineOfPosn,
                     lexer, lexerLine, scanFile) where
@@ -105,11 +105,11 @@ rules :-
 
 {
 
--- User state to hold comment depth
-data AlexUserState = AlexUserState {commentDepth :: Int}
+-- User state to hold comment depth and the position of the read token
+data AlexUserState = AlexUserState {commentDepth :: Int, tokenPosn :: AlexPosn}
 
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState {commentDepth = 0}
+alexInitUserState = AlexUserState {commentDepth = 0, tokenPosn = AlexPn 0 0 0}
 
 getCommentDepth :: Alex Int
 getCommentDepth = commentDepth <$> alexGetUserState
@@ -118,6 +118,11 @@ setCommentDepth :: Int -> Alex ()
 setCommentDepth d = do
   state <- alexGetUserState
   alexSetUserState $ state{commentDepth = d}
+
+setTokenPosn :: AlexPosn -> Alex ()
+setTokenPosn p = do
+  state <- alexGetUserState
+  alexSetUserState $ state{tokenPosn = p}
 
 -- Utils for position
 getLineOfPosn :: AlexPosn -> Int
@@ -149,24 +154,31 @@ alexEOF = do
 
 -- Utils for handling tokens
 keyword :: Token -> AlexAction Token
-keyword tokenConstr _ _ = return tokenConstr
+keyword tokenConstr (posn, _, _, _) _ = do
+  setTokenPosn posn
+  return tokenConstr
 
 identifiersAction :: (String -> Token) -> AlexAction Token
-identifiersAction tokenConstr (_, _, _, current_string) len =
+identifiersAction tokenConstr (posn, _, _, current_string) len = do
+  setTokenPosn posn
   return $ tokenConstr (take len current_string)
 
 intAction :: AlexAction Token
 intAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in case readMaybe lexeme :: Maybe Int of
-    Just v  -> return (T_const_int v)
+    Just v  -> do
+      setTokenPosn posn
+      return (T_const_int v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into an int")
 
 floatAction :: AlexAction Token
 floatAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
   in case readMaybe lexeme :: Maybe Float of
-    Just v  -> return (T_const_float v)
+    Just v  -> do
+      setTokenPosn posn
+      return (T_const_float v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a float")
 
 removeFromHead :: (Eq a) => a -> [a] -> Maybe [a]
@@ -185,7 +197,9 @@ stringAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
       noQuotes = removeFromHead '"' lexeme >>= removeFromTail '"'
   in case noQuotes of
-    Just str -> return (T_const_string str)
+    Just str -> do
+      setTokenPosn posn
+      return (T_const_string str)
     Nothing  -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a string")
 
 charAction :: AlexAction Token
@@ -193,7 +207,9 @@ charAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
       noQuotes = removeFromHead '\'' lexeme >>= removeFromTail '\''
   in case noQuotes of
-    Just ch -> return (T_const_char ch)
+    Just ch -> do
+      setTokenPosn posn
+      return (T_const_char ch)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char")
 
 -- Comments utils

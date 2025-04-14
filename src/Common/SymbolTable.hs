@@ -45,9 +45,9 @@ emptySymbolTable :: SymbolTable
 emptySymbolTable = emptyContext
 
 data TableEntry
-    = VarEntry Type                              -- Type of the variable
-    | ArrayEntry Type Int                        -- Type of the entries, num of dimensions
-    | FunEntry Type [(Identifier, Type)] Type    -- Type of the function, params, output type
-    | TypeEntry [(ConstrIdentifier, [Type])]     -- Constructors and arguements
-    | ConstrEntry Type [Type] Type               -- Type of constructor, params, output type
+    = VarEntry (Type ())                                    -- Type of the variable
+    | ArrayEntry (Type ()) Int                              -- Type of the entries, num of dimensions
+    | FunEntry (Type ()) [(Identifier, Type ())] (Type ())  -- Type of the function, params, output type
+    | TypeEntry [(ConstrIdentifier, [Type ()])]             -- Constructors and arguements
+    | ConstrEntry (Type ()) [Type ()] (Type ())             -- Type of constructor, params, output type
         deriving Show

@@ -1,7 +1,7 @@
 module Main (main) where
 
-import Property.Property
-import Unit.Unit
+import Property.Property (checkForSizes, checkParsedPrettyAST)
+import Unit.Unit (testParserGuidedSuite, testParserSuite)
 
 main :: IO ()
 main = do

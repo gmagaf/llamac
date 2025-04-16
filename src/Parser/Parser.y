@@ -108,13 +108,13 @@ AST :: { AST AlexPosn }
   : AST_                            { reverse $1 }
 -- reversing the lists so that all definitions are in the correct order
 
-P :: { AlexPosn }
-  : {- empty -}                     {% getTokenPosn }
-
 AST_ :: { [Either (LetDef AlexPosn) (TypeDef AlexPosn)] }
   : {- emtpy -}                     { [] }
   | AST_ LetDef                     { (Left $2) : $1 }
   | AST_ TypeDef                    { (Right $2) : $1 }
+
+P :: { AlexPosn }
+  : {- empty -}                     {% getTokenPosn }
 
 LetDef :: { LetDef AlexPosn }
   : P let Defs                      { Let (reverse $3) $1 }

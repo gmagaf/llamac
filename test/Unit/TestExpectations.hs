@@ -1,7 +1,7 @@
 module Unit.TestExpectations (module Unit.TestExpectations) where
 
 import Common.AST
-import Lexer.Lexer
+import Lexer.Lexer (AlexPosn(..))
 
 helloWorldAST :: AST AlexPosn
 helloWorldAST =

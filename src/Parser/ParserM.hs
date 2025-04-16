@@ -5,8 +5,8 @@ module Parser.ParserM (Parser, runParser, ParserState, initParserState,
 
 import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, runExceptT)
 import Control.Monad.Trans.State (State, evalState, state)
-import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn, AlexUserState(..),
-      alexStartPos, alexMonadScan, alexInitUserState )
+import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
+      alexMonadScan, alexInitUserState, tokenPosnOfAlexState, alexStartPos)
 import Common.Token (Token)
 import Common.SymbolTable (SymbolTable, emptySymbolTable)
 
@@ -58,7 +58,7 @@ getAlexPos :: Parser AlexPosn
 getAlexPos = alex_pos <$> getAlexState
 
 getTokenPosn :: Parser AlexPosn
-getTokenPosn = tokenPosn . alex_ust <$> getAlexState
+getTokenPosn = tokenPosnOfAlexState <$> getAlexState
 
 put :: ParserState -> Parser ()
 put s = ExceptT $ state $ const (Right (), s)

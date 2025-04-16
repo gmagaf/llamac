@@ -201,11 +201,11 @@ instance Pretty (Expr b) where
         prettyId i . showPretty T_lbracket .
         prettyPrecSepList 0 ", " es .
         showPretty T_rbracket
-      FunAppExpr i ps -> showParen (always || (d > app_prec && null ps)) $
+      FunAppExpr i ps -> showParen (always || (d > app_prec && not (null ps))) $
         prettyId i . showString sep .
         prettyPrecSepList (app_prec + 1) " " ps where
           sep = if null ps then "" else " "
-      ConstrAppExpr i ps -> showParen (always || (d > app_prec && null ps)) $
+      ConstrAppExpr i ps -> showParen (always || (d > app_prec && not (null ps))) $
         prettyConstrId i . showString sep .
         prettyPrecSepList (app_prec + 1) " " ps where
           sep = if null ps then "" else " "
@@ -329,7 +329,7 @@ instance Pretty (Pattern b) where
     TruePattern -> showPretty T_true
     FalsePattern -> showPretty T_false
     IdPattern i -> prettyId i
-    ConstrPattern i ps -> showParen (always || (d > prec && null ps)) $
+    ConstrPattern i ps -> showParen (always || (d > prec && not (null ps))) $
       prettyConstrId i . showString sep . prettyPrecSepList (prec + 1) " " ps where
         sep = if null ps then "" else " "
         prec = 1

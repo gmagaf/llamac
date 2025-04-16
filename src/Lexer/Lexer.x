@@ -1,7 +1,7 @@
 {
-module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn), AlexUserState(..),
+module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
                     alexStartPos, alexInitUserState, alexMonadScan,
-                    getColumnOfPosn, getLineOfPosn,
+                    getColumnOfPosn, getLineOfPosn, tokenPosnOfAlexState,
                     lexer, lexerLine, scanFile) where
 
 import Common.Token (Token(..))
@@ -118,6 +118,9 @@ setCommentDepth :: Int -> Alex ()
 setCommentDepth d = do
   state <- alexGetUserState
   alexSetUserState $ state{commentDepth = d}
+
+tokenPosnOfAlexState :: AlexState -> AlexPosn
+tokenPosnOfAlexState = tokenPosn . alex_ust
 
 setTokenPosn :: AlexPosn -> Alex ()
 setTokenPosn p = do

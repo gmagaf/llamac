@@ -1,12 +1,12 @@
 module Unit.Unit (testParserSuite,
                   testParserGuidedSuite) where
 
-import Test.Hspec
-import Test.QuickCheck
+import Test.Hspec (Spec, hspec, describe, it, shouldBe)
+import Test.QuickCheck (Gen, generate, vectorOf, elements)
 import Unit.TestExpectations
-import Lexer.Lexer
-import Parser.Parser
-import Common.AST
+import Lexer.Lexer (AlexPosn)
+import Parser.Parser (parse)
+import Common.AST (AST)
 
 testGuidedParser :: (String, AST AlexPosn, FilePath) -> IO ()
 testGuidedParser (descr, p, f) = do

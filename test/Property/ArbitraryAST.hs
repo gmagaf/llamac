@@ -122,8 +122,7 @@ arbClause :: Arbitrary b => Gen (Clause b)
 arbClause = sized $ \n -> do
   p <- arbPattern
   e <- resize n arbExpr
-  b <- arbitrary
-  return (Match p e b)
+  Match p e <$> arbitrary
 
 arbPattern :: Arbitrary b => Gen (Pattern b)
 arbPattern = sized g where

@@ -4,10 +4,17 @@ module Property.Property (parsedPrettyASTisAST,
                           checkParsedPrettyAST) where
 
 import Test.QuickCheck
-import Parser.Parser
-import Common.AST
-import Common.PrintAST
-import Property.ArbitraryAST
+    ( Gen,
+      resize,
+      forAll,
+      isSuccess,
+      quickCheckResult,
+      Property,
+      Result )
+import Parser.Parser (parse)
+import Common.AST (mapAST, AST)
+import Common.PrintAST (prettyAST)
+import Property.ArbitraryAST (arbitraryAST)
 
 removeASTtags :: AST b -> AST ()
 removeASTtags = mapAST (const ())

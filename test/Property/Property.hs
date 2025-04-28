@@ -11,7 +11,7 @@ import Test.QuickCheck
       quickCheckResult,
       Property,
       Result )
-import Parser.Parser (parse)
+import Parser.Utils (parse)
 import Common.AST (mapAST, AST)
 import Common.PrintAST (prettyAST)
 import Property.ArbitraryAST (arbitraryAST)

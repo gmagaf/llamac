@@ -5,7 +5,7 @@ import Test.Hspec (Spec, hspec, describe, it, shouldBe)
 import Test.QuickCheck (Gen, generate, vectorOf, elements)
 import Unit.TestExpectations
 import Lexer.Lexer (AlexPosn)
-import Parser.Parser (parse)
+import Parser.Utils (parse)
 import Common.AST (AST)
 
 testGuidedParser :: (String, AST AlexPosn, FilePath) -> IO ()

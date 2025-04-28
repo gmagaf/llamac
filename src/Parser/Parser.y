@@ -1,12 +1,10 @@
 {
-module Parser.Parser (calc, parse, parseFile) where
+module Parser.Parser (calc) where
 
-import Lexer.Lexer (AlexPosn, getLineOfPosn, getColumnOfPosn)
+import Lexer.Lexer (AlexPosn, printPosn)
 import Common.Token (Token(..))
 import Common.AST
-import Parser.ParserM (Parser, lexerWrap, runParser, getAlexPos, getTokenPosn,
-                       ParserState, initParserState,
-                       Error, throwParsingError)
+import Parser.ParserM (Parser, lexerWrap, getAlexPos, getTokenPosn, throwParsingError)
 }
 
 %name calc
@@ -332,24 +330,8 @@ PatArg :: { Pattern AlexPosn }
 -- Handle errors
 parseError :: Token -> Parser a
 parseError t =
-  let position p = "Error at line: " ++ show (getLineOfPosn p) ++
-                   " and column: " ++ show (getColumnOfPosn p) ++ ". "
+  let position p = "Error at " ++ printPosn p ++ ". "
   in do
     posn <- getAlexPos
     throwParsingError $ (position posn) ++ "Unable to process token " ++ show t
-
--- The parsing function
-parse :: String -> Either Error (AST AlexPosn)
-parse s = runParser initState calc where
-  initState :: ParserState
-  initState = initParserState s
-
--- Parsing utils for files
-parseFile :: FilePath -> IO ()
-parseFile f = do
-  s <- readFile f
-  let res = parse s
-  case res of
-    Left err -> putStrLn (show err)
-    Right p  -> putStrLn (show p)
 }

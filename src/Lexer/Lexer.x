@@ -1,7 +1,7 @@
 {
 module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
                     alexStartPos, alexInitUserState, alexMonadScan,
-                    getColumnOfPosn, getLineOfPosn, tokenPosnOfAlexState,
+                    printPosn, tokenPosnOfAlexState,
                     lexer, lexerLine, scanFile) where
 
 import Common.Token (Token(..))
@@ -134,11 +134,14 @@ getLineOfPosn (AlexPn _ line _) = line
 getColumnOfPosn :: AlexPosn -> Int
 getColumnOfPosn (AlexPn _ _ col) = col
 
+printPosn :: AlexPosn -> String
+printPosn posn = "line: " ++ show (getLineOfPosn posn) ++
+            " and column: " ++ show (getColumnOfPosn posn)
+
 -- Error handling utils
 lexicalError :: AlexPosn -> String -> Alex a
 lexicalError posn message = alexError $ position ++ message where
-  position = "Error at line: " ++ show (getLineOfPosn posn) ++
-    " and column: " ++ show (getColumnOfPosn posn) ++ ". "
+  position = "Error at " ++ printPosn posn ++ ". "
 
 unknownCharacter :: AlexAction Token
 unknownCharacter (posn, _, _, current_string) len =

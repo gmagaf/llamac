@@ -4,31 +4,14 @@ module Common.PrintAST (Pretty,
                         prettyAST) where
 
 import Common.AST
-    ( Type(..),
-      TypeF(..),
-      Expr(..),
-      ExprF(..),
-      UnOp(..),
-      BinOp(..),
-      Clause(..),
-      Constr(..),
-      Def(..),
-      LetDef(..),
-      Param(..),
-      Pattern(..),
-      PatternF(..),
-      PatternSign(Minus, NoSign, Plus),
-      AST,
-      TDef(..),
-      TypeDef(..) )
 import Common.Token
-    ( FloatConstant,
+     (FloatConstant,
       Identifier,
       ConstrIdentifier,
       CharConstant,
       IntConstant,
       StringConstant,
-      Token(..) )
+      Token(..))
 
 -- Pretty printing utils
 
@@ -104,7 +87,10 @@ instance Pretty (Constr b) where
     showPretty T_of . showString " " $ prettySepList " " ts
 
 instance Pretty (Type b) where
-  prettyPrec d (Type t _) =
+  prettyPrec d (Type t _) = prettyPrec d t
+
+instance Pretty t => Pretty (TypeF t) where
+  prettyPrec d tf =
     let
       ref_prec = 3
       array_prec = 2
@@ -112,7 +98,7 @@ instance Pretty (Type b) where
       showsStars 1 = showPretty T_times
       showsStars s = showsStars (s - 1) .
         showPretty T_comma . showString " " . showPretty T_times
-    in case t of
+    in case tf of
       UnitType -> showPretty T_unit
       IntType -> showPretty T_int
       CharType -> showPretty T_char
@@ -288,6 +274,9 @@ opToTok PlusFloatUnOp = T_plus_float
 opToTok MinusFloatUnOp = T_minus_float
 opToTok BangOp = T_bang
 opToTok NotOp = T_not
+
+instance Pretty UnOp where
+  pretty = pretty . opToTok
 
 binOpPrec :: BinOp -> (Assoc, Int, Token)
 binOpPrec ExpOp = (R, 10, T_exp)

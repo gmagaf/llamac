@@ -91,7 +91,7 @@ data Token
   | T_comma
   | T_colon
   | T_eof
-  deriving (Eq)
+  deriving Eq
 
 instance Show Token where
   show t = case t of

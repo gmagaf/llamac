@@ -1,10 +1,11 @@
-module Parser.ParserM (Parser, runParser, ParserState, initParserState,
-                       getAlexPos, getTokenPosn,
-                       Error, throwError, throwParsingError, throwSemanticsError,
-                       lexerWrap) where
+module Parser.ParserM (Parser, runParser, parseString,
+                       ParserState(..), initParserState,
+                       getAlexPos, getTokenPosn, getSymbols, putSymbols,
+                       Error, throwError, throwParsingError, throwSemanticError,
+                       lexerWrap, evalParser) where
 
 import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, runExceptT)
-import Control.Monad.Trans.State (State, evalState, state)
+import Control.Monad.Trans.State (State, evalState, runState, state)
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
       alexMonadScan, alexInitUserState, tokenPosnOfAlexState, alexStartPos)
 import Common.Token (Token)
@@ -14,8 +15,8 @@ import Common.SymbolTable (SymbolTable, emptySymbolTable)
 
 -- The state of the parser
 data ParserState = ParserState
-  { alex_state   :: AlexState   -- the lexer's state
-  , symbols      :: SymbolTable -- the compiler's symbol table
+  { alex_state   :: AlexState   -- lexer's state
+  , symbols      :: SymbolTable -- compiler's symbol table
   }
 
 initParserState :: String -> ParserState
@@ -35,14 +36,14 @@ initParserState input =
 data Error = Error String
            | LexicalError String
            | ParsingError String
-           | SemanticsError String
+           | SemanticError String
     deriving Eq
 
 instance Show Error where
   show (Error s)          = s
   show (LexicalError s)   = "Lexical Error: " ++ s
   show (ParsingError s)   = "Parser Error: " ++ s
-  show (SemanticsError s) = "Semantics Error: " ++ s
+  show (SemanticError s)  = "Semantic Error: " ++ s
 
 -- The monad definition
 type Parser a = ExceptT Error (State ParserState) a
@@ -60,6 +61,9 @@ getAlexPos = alex_pos <$> getAlexState
 getTokenPosn :: Parser AlexPosn
 getTokenPosn = tokenPosnOfAlexState <$> getAlexState
 
+getSymbols :: Parser SymbolTable
+getSymbols = symbols <$> get
+
 put :: ParserState -> Parser ()
 put s = ExceptT $ state $ const (Right (), s)
 
@@ -68,8 +72,22 @@ putAlexState s = do
   ps <- get
   put ps{alex_state = s}
 
-runParser :: ParserState -> Parser a -> Either Error a
-runParser s p = evalState (runExceptT p) s
+putSymbols :: SymbolTable -> Parser ()
+putSymbols s = do
+  ps <- get
+  put ps{symbols = s}
+
+evalParser :: ParserState -> Parser a -> Either Error a
+evalParser s p = evalState (runExceptT p) s
+
+runParser :: ParserState -> Parser a -> (Either Error a, ParserState)
+runParser s p = runState (runExceptT p) s
+
+-- Util that initilizes a parser state and runs a parser monad
+parseString :: Parser a -> String -> (Either Error a, ParserState)
+parseString m s = runParser initState m where
+  initState :: ParserState
+  initState = initParserState s
 
 throwError :: String -> Parser a
 throwError = throwE . Error
@@ -80,8 +98,8 @@ throwLexicalError = throwE . LexicalError
 throwParsingError :: String -> Parser a
 throwParsingError = throwE . ParsingError
 
-throwSemanticsError :: String -> Parser a
-throwSemanticsError = throwE . SemanticsError
+throwSemanticError :: String -> Parser a
+throwSemanticError = throwE . SemanticError
 
 -- Utils to facilitate the communication with the lexer
 changeMonad :: Alex a -> Parser a

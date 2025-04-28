@@ -13,6 +13,7 @@ import qualified Data.Map as M
 import Common.AST (TypeF, Type (..))
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (Pretty (pretty))
+import Data.List (intercalate)
 
 -- This module contains the defintion of the Symbol table for the compiler
 
@@ -75,3 +76,43 @@ data TableEntry
     | ConstrEntry SymbolType [SymbolType] SymbolType            -- Type of constructor, params, output type
     | VarTypeEntry SymbolType                                   -- Index of type var, type constraint
         deriving Show
+
+instance Pretty TableEntry where
+    pretty (VarEntry t)       = "Var of type: " ++ pretty t
+    pretty (ArrayEntry t dim) = "Array of type: " ++ pretty t ++ " and " ++ show dim ++ " dims"
+    pretty (FunEntry funType params outputType) =
+        "Fun of type: " ++ pretty funType ++ " " ++ ps ++ " and output " ++ pretty outputType where
+            ps = if null params then "with no params"
+                 else "with params: " ++ intercalate ", " (map (\(p, t) -> p ++ ": " ++ pretty t) params)
+    pretty (TypeEntry constrs) = "Type with constrs: " ++ cs where
+        f (c, ps) = if null ps then c
+                    else c ++ " of " ++ unwords (map pretty ps)
+        cs = intercalate ", " (map f constrs)
+    pretty (ConstrEntry constrType types outputType) = "Constr of " ++ pretty outputType ++
+        " with type: " ++ pretty constrType ++ ps where
+            ps = if null types then ""
+                 else " with params: (" ++ intercalate ", " (map pretty types) ++ ")"
+    pretty (VarTypeEntry t) = "Type Var with contraint: " ++ pretty t
+
+instance (Show k, Pretty e) => Pretty (Context k e) where
+    pretty (Context scopes) =
+        let addPadding v l = v ++ pad where
+                pad = replicate (max 0 (l - length v)) ' '
+            toString (k, e) = (show k, pretty e)
+            toLengths (k, e) = (length k, length e)
+            toPaddings (ak, ek) (k, e) = (max ak k, max ek e)
+            scopeToString sc = map toString $ M.assocs sc
+            stringsToLengths = map toLengths
+            lengthsToPaddings = foldl toPaddings (0, 0)
+            strings = map scopeToString scopes
+            lengths = map stringsToLengths strings
+            paddings = map lengthsToPaddings lengths
+            (lk', le') = lengthsToPaddings paddings
+            (lk, le) = (max lk' $ length "Keys", max le' $ length "Entries")
+            totalLength = 1 + 1 + lk + 1 + 1 + 1 + le + 1 + 1
+            line = replicate totalLength '-' ++ "\n"
+            printLine acc (k, e) = acc ++ "| " ++ addPadding k lk ++ " | " ++ addPadding e le ++ " |\n"
+            printScope pdStrs = line ++ foldl printLine "" pdStrs
+            scopesTables = map printScope strings
+            scps = concat scopesTables
+        in printLine line ("Keys", "Entries") ++ scps ++ line

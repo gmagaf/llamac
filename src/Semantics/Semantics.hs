@@ -2,6 +2,9 @@ module Semantics.Semantics (SemanticTag(..), Analyzable, sem, semTag,
                             TypeAble, infer, typeCheck,
                             analyzeAST, semConstr) where
 
+import qualified Data.Set as Set
+import Control.Monad (when)
+
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST
 import Common.SymbolTable (SymbolType(..), TableEntry (..),
@@ -66,6 +69,10 @@ analyzeAST []                 = return []
 analyzeAST (Left def : ast)   = (:) . Left <$> sem def <*> analyzeAST ast
 analyzeAST (Right tDef : ast) = (:) . Right <$> sem tDef <*> analyzeAST ast
 
+hasDuplicates :: (Ord a) => [a] -> Bool
+hasDuplicates list = length list /= length set
+  where set = Set.fromList list
+
 instance Analyzable TypeDef where
     sem (TypeDef tDefs p) = do
         openScopeInTable
@@ -76,13 +83,17 @@ instance Analyzable TypeDef where
 
 instance Analyzable TDef where
     sem (TDef tName cs p) =
-        let csParams :: [Constr AlexPosn] -> Parser [(ConstrIdentifier, [SymbolType])]
+        let checkDuplicateConstrs :: Parser ()
+            checkDuplicateConstrs = when (hasDuplicates (map (\(Constr c _ _) -> c) cs)) $
+                throwSemanticError $ "Type " ++ tName ++ " cannot have duplicate constructors at " ++ printPosn p
+            csParams :: [Constr AlexPosn] -> Parser [(ConstrIdentifier, [SymbolType])]
             csParams [] = return []
             csParams (Constr c _ cp:constrs) = queryAndRun cp c run where
                 run (ConstrEntry _ params _) = ((c, params) :) <$> csParams constrs
                 run _ = throwSemanticError $
                     "The constructor " ++ c ++ " at " ++ printPosn cp ++ " is not in scope"
         in do
+            checkDuplicateConstrs
             semCs <- mapM (semConstr tName) cs
             constrs <- csParams cs
             updateSymbolType p tName (TypeEntry constrs)

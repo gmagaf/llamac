@@ -12,7 +12,7 @@ module Common.SymbolTable (SymbolTable,
 import qualified Data.Map as M
 import Common.AST (TypeF, Type (..))
 import Common.Token (Identifier, ConstrIdentifier)
-import Common.PrintAST (Pretty (pretty))
+import Common.PrintAST (Pretty (pretty, prettyPrec))
 import Data.List (intercalate)
 
 -- This module contains the defintion of the Symbol table for the compiler
@@ -65,8 +65,8 @@ data SymbolType = VarType Int | SymType (TypeF SymbolType)
     deriving (Show, Eq)
 
 instance Pretty SymbolType where
-    pretty (VarType i) = "@" ++ show i
-    pretty (SymType t) = pretty t
+    prettyPrec _ (VarType i) = showString $ "@" ++ show i
+    prettyPrec d (SymType t) = prettyPrec d t
 
 typeToSymbolType :: Type b -> SymbolType
 typeToSymbolType (Type tf _) = SymType (fmap typeToSymbolType tf)
@@ -84,18 +84,21 @@ data TableEntry
 instance Pretty TableEntry where
     pretty (VarEntry t)       = "Var of type: " ++ pretty t
     pretty (ArrayEntry t dim) = "Array of type: " ++ pretty t ++ " and " ++ show dim ++ " dims"
+    pretty (FunEntry funType [] outputType) =
+        "Fun of type: " ++ pretty funType ++ " with no params and output " ++ pretty outputType
     pretty (FunEntry funType params outputType) =
-        "Fun of type: " ++ pretty funType ++ " " ++ ps ++ " and output " ++ pretty outputType where
-            ps = if null params then "with no params"
-                 else "with params: " ++ intercalate ", " (map (\(p, t) -> p ++ ": " ++ pretty t) params)
+        "Fun of type: " ++ pretty funType ++ " with params: " ++
+        intercalate ", " (map (\(p, t) -> p ++ ": " ++ pretty t) params) ++
+        " and output " ++ pretty outputType
     pretty (TypeEntry constrs) = "Type with constrs: " ++ cs where
-        f (c, ps) = if null ps then c
-                    else c ++ " of " ++ unwords (map pretty ps)
+        f (c, []) = c
+        f (c, ps) = c ++ " of " ++ unwords (map pretty ps)
         cs = intercalate ", " (map f constrs)
-    pretty (ConstrEntry constrType types outputType) = "Constr of " ++ pretty outputType ++
-        " with type: " ++ pretty constrType ++ ps where
-            ps = if null types then ""
-                 else " with params: (" ++ intercalate ", " (map pretty types) ++ ")"
+    pretty (ConstrEntry constrType [] outputType) =
+        "Constr of " ++ pretty outputType ++ " with type: " ++ pretty constrType
+    pretty (ConstrEntry constrType types outputType) =
+        "Constr of " ++ pretty outputType ++ " with type: " ++ pretty constrType ++
+        " with params: (" ++ intercalate ", " (map pretty types) ++ ")"
     pretty (VarTypeEntry t) = "Type Var with contraint: " ++ pretty t
 
 instance (Show k, Pretty e) => Pretty (Context k e) where

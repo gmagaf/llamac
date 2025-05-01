@@ -8,12 +8,13 @@ import Common.Token (Identifier,
                      CharConstant,
                      StringConstant)
 
--- Definitions of all the ASTs of Llama
-
-type AST t = [Either (LetDef t) (TypeDef t)]
 -- Utils for nodes
 class Node f where
   tag :: f b -> b
+
+-- Definitions of all the ASTs of Llama
+
+type AST t = [Either (LetDef t) (TypeDef t)]
 
 -- Definitions
 data LetDef b = Let [Def b] b

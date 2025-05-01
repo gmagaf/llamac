@@ -1,5 +1,6 @@
 module Common.PrintAST (Pretty,
                         pretty,
+                        prettyPrec,
                         showPretty,
                         prettyAST) where
 

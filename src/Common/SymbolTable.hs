@@ -53,11 +53,14 @@ closeScope :: Context k e -> Context k e
 closeScope (Context scopes) = Context s where
     s = if null scopes then [] else tail scopes
 
+
+-- Definitions for symbol table and table entries
 type SymbolTable = Context String TableEntry
 
 emptySymbolTable :: SymbolTable
 emptySymbolTable = emptyContext
 
+-- A representation for semantic types
 data SymbolType = VarType Int | SymType (TypeF SymbolType)
     deriving (Show, Eq)
 
@@ -77,6 +80,7 @@ data TableEntry
     | VarTypeEntry SymbolType                                   -- Index of type var, type constraint
         deriving Show
 
+-- Pretty printing of symbol table
 instance Pretty TableEntry where
     pretty (VarEntry t)       = "Var of type: " ++ pretty t
     pretty (ArrayEntry t dim) = "Array of type: " ++ pretty t ++ " and " ++ show dim ++ " dims"

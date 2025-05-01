@@ -6,18 +6,22 @@ import qualified Data.Set as Set
 import Control.Monad (when)
 
 import Common.Token (Identifier, ConstrIdentifier)
+import Common.PrintAST (pretty)
 import Common.AST
 import Common.SymbolTable (SymbolType(..), TableEntry (..),
     query, update, insert, openScope, closeScope, typeToSymbolType)
 import Lexer.Lexer (AlexPosn, printPosn)
-import Parser.ParserM (Parser, throwSemanticError, getSymbols, putSymbols)
+import Parser.ParserM (Parser, throwSemanticError, getSymbols, putSymbols, getAndIncrVarTypeC)
 
+-- This module contains the semantic analysis of the nodes
+-- and decorates them with the semantic tag
 data SemanticTag = SemTag {
                     posn :: AlexPosn,
                     exprType :: Maybe SymbolType
                     }
     deriving Show
 
+-- Organize the semantic analyzable nodes in a class
 class Node f => Analyzable f where
     sem :: f AlexPosn -> Parser (f SemanticTag)
     semTag :: f AlexPosn -> Parser SemanticTag
@@ -33,6 +37,7 @@ class Analyzable f => TypeAble f where
     typeCheck :: f AlexPosn -> SymbolType -> Parser Bool
     typeCheck f t = (t ==) <$> infer f
 
+-- Parser symbol table utiles
 insertSymbols :: String -> TableEntry -> Parser ()
 insertSymbols k entry = do
     symbols <- getSymbols
@@ -64,14 +69,15 @@ closeScopeInTable = do
     symbols <- getSymbols
     putSymbols $ closeScope symbols
 
+hasDuplicates :: (Ord a) => [a] -> Bool
+hasDuplicates list = length list /= length set
+  where set = Set.fromList list
+
+-- Functions for analyzing nodes
 analyzeAST :: AST AlexPosn -> Parser (AST SemanticTag)
 analyzeAST []                 = return []
 analyzeAST (Left def : ast)   = (:) . Left <$> sem def <*> analyzeAST ast
 analyzeAST (Right tDef : ast) = (:) . Right <$> sem tDef <*> analyzeAST ast
-
-hasDuplicates :: (Ord a) => [a] -> Bool
-hasDuplicates list = length list /= length set
-  where set = Set.fromList list
 
 instance Analyzable TypeDef where
     sem (TypeDef tDefs p) = do

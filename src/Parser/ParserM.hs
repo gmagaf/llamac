@@ -1,6 +1,7 @@
 module Parser.ParserM (Parser, runParser, parseString,
                        ParserState(..), initParserState,
                        getAlexPos, getTokenPosn, getSymbols, putSymbols,
+                       getAndIncrVarTypeC,
                        Error, throwError, throwParsingError, throwSemanticError,
                        lexerWrap, evalParser) where
 
@@ -17,6 +18,7 @@ import Common.SymbolTable (SymbolTable, emptySymbolTable)
 data ParserState = ParserState
   { alex_state   :: AlexState   -- lexer's state
   , symbols      :: SymbolTable -- compiler's symbol table
+  , varTypeC     :: Int         -- a counter to the var types used
   }
 
 initParserState :: String -> ParserState
@@ -30,6 +32,7 @@ initParserState input =
     in ParserState
        { alex_state = initAlexState
        , symbols    = emptySymbolTable
+       , varTypeC   = 0
        }
 
 -- The compiler's errors
@@ -76,6 +79,13 @@ putSymbols :: SymbolTable -> Parser ()
 putSymbols s = do
   ps <- get
   put ps{symbols = s}
+
+getAndIncrVarTypeC :: Parser Int
+getAndIncrVarTypeC = do
+  ps <- get
+  let c = varTypeC ps
+  put ps{varTypeC = c + 1}
+  return c
 
 evalParser :: ParserState -> Parser a -> Either Error a
 evalParser s p = evalState (runExceptT p) s

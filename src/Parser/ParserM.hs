@@ -1,39 +1,21 @@
-module Parser.ParserM (Parser, runParser, parseString,
-                       ParserState(..), initParserState,
-                       getAlexPos, getTokenPosn, getSymbols, putSymbols,
-                       getAndIncrVarTypeC,
-                       Error, throwError, throwParsingError, throwSemanticError, throwSemAtPosn,
-                       lexerWrap, evalParser) where
+module Parser.ParserM (Parser,
+                       getAlexPos, getTokenPosn,
+                       getSymbols, putSymbols,
+                       getSemState, putSemState,
+                       Error, throwError, throwParsingError, throwSemanticError,
+                       runParser, parseString, evalParser,
+                       lexerWrap) where
 
 import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, runExceptT)
 import Control.Monad.Trans.State (State, evalState, runState, state)
+
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
-      alexMonadScan, alexInitUserState, tokenPosnOfAlexState, alexStartPos, printPosn)
+      alexMonadScan, tokenPosnOfAlexState)
 import Common.Token (Token)
-import Common.SymbolTable (SymbolTable, emptySymbolTable)
+import Common.SymbolTable (SymbolTable)
+import Parser.ParserState (ParserState(..), SemanticState, initParserState)
 
 -- This module defines the Parser monad
-
--- The state of the parser
-data ParserState = ParserState
-  { alex_state   :: AlexState   -- lexer's state
-  , symbols      :: SymbolTable -- compiler's symbol table
-  , varTypeC     :: Int         -- a counter to the var types used
-  }
-
-initParserState :: String -> ParserState
-initParserState input =
-    let initAlexState = AlexState {alex_pos = alexStartPos,
-                        alex_inp = input,
-                        alex_chr = '\n',
-                        alex_bytes = [],
-                        alex_ust = alexInitUserState,
-                        alex_scd = 0}
-    in ParserState
-       { alex_state = initAlexState
-       , symbols    = emptySymbolTable
-       , varTypeC   = 0
-       }
 
 -- The compiler's errors
 data Error = Error String
@@ -67,6 +49,9 @@ getTokenPosn = tokenPosnOfAlexState <$> getAlexState
 getSymbols :: Parser SymbolTable
 getSymbols = symbols <$> get
 
+getSemState :: Parser SemanticState
+getSemState = sem_state <$> get
+
 put :: ParserState -> Parser ()
 put s = ExceptT $ state $ const (Right (), s)
 
@@ -80,13 +65,12 @@ putSymbols s = do
   ps <- get
   put ps{symbols = s}
 
-getAndIncrVarTypeC :: Parser Int
-getAndIncrVarTypeC = do
+putSemState :: SemanticState -> Parser ()
+putSemState s = do
   ps <- get
-  let c = varTypeC ps
-  put ps{varTypeC = c + 1}
-  return c
+  put ps{sem_state = s}
 
+-- Utils for running a Parser
 evalParser :: ParserState -> Parser a -> Either Error a
 evalParser s p = evalState (runExceptT p) s
 
@@ -99,6 +83,7 @@ parseString m s = runParser initState m where
   initState :: ParserState
   initState = initParserState s
 
+-- Utils for error handling
 throwError :: String -> Parser a
 throwError = throwE . Error
 
@@ -110,9 +95,6 @@ throwParsingError = throwE . ParsingError
 
 throwSemanticError :: String -> Parser a
 throwSemanticError = throwE . SemanticError
-
-throwSemAtPosn :: String -> AlexPosn -> Parser a
-throwSemAtPosn s p = throwSemanticError $ s ++ " at " ++ printPosn p
 
 -- Utils to facilitate the communication with the lexer
 changeMonad :: Alex a -> Parser a

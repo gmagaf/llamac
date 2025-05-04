@@ -4,7 +4,8 @@ import Common.AST (AST)
 import Common.PrintAST (pretty)
 import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calc)
-import Parser.ParserM (Error, ParserState (symbols), parseString)
+import Parser.ParserM (Error, parseString)
+import Parser.ParserState (ParserState(..))
 import Semantics.Semantics (SemanticTag, analyzeAST)
 
 -- The parsing function

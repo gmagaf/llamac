@@ -1,16 +1,18 @@
-module Semantics.Semantics (SemanticTag(..), Analyzable, sem, semTag,
+module Semantics.Semantics (SemanticState(..), SemanticTag(..),
+                            Analyzable, sem, semTag,
                             TypeAble, infer, typeCheck,
-                            analyzeAST, semConstr) where
+                            analyzeAST) where
 
 import qualified Data.Set as Set
 import Control.Monad (when)
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST
-import Common.SymbolTable (SymbolType(..), TableEntry (..),
-    query, insert, openScope, closeScope, typeToSymbolType)
+import Common.SymbolTable (SymbolType(..), TableEntry (..), typeToSymbolType)
 import Lexer.Lexer (AlexPosn)
-import Parser.ParserM (Parser, throwSemAtPosn, getSymbols, putSymbols)
+import Parser.ParserM (Parser)
+import Parser.ParserState (SemanticState(varTypeC, posnOfSem))
+import Semantics.Utils
 
 -- This module contains the semantic analysis of the nodes
 -- and decorates them with the semantic tag
@@ -36,50 +38,13 @@ class Analyzable f => TypeAble f where
     typeCheck :: f AlexPosn -> SymbolType -> Parser Bool
     typeCheck f t = (t ==) <$> infer f
 
--- Parser symbol table utiles
-insertSymbols :: String -> TableEntry -> Parser ()
-insertSymbols k entry = do
-    symbols <- getSymbols
-    putSymbols $ insert k entry symbols
-
-queryAndRun :: AlexPosn -> String -> (TableEntry -> Parser a) -> Parser a
-queryAndRun p k run = do
-    symbols <- getSymbols
-    case query k symbols of
-        Just entry -> run entry
-        _ -> throwSemAtPosn ("Symbol " ++ k ++ " is not in scope") p
-
-checkTypeInScope :: AlexPosn -> String -> Parser ()
-checkTypeInScope p k = do
-    symbols <- getSymbols
-    case query k symbols of
-        Just (TypeEntry _) -> return ()
-        _ -> throwSemAtPosn ("Symbol " ++ k ++ " is not in scope") p
-
-openScopeInTable :: Parser ()
-openScopeInTable = do
-    symbols <- getSymbols
-    putSymbols $ openScope symbols
-
-closeScopeInTable :: Parser ()
-closeScopeInTable = do
-    symbols <- getSymbols
-    putSymbols $ closeScope symbols
-
-hasDuplicates :: (Ord a) => [a] -> Bool
-hasDuplicates list = length list /= length set
-  where set = Set.fromList list
-
-paramsToFunType :: [SymbolType] -> SymbolType -> SymbolType
-paramsToFunType [] out = out
-paramsToFunType (t:ts) out = SymType (FunType t (paramsToFunType ts out))
-
 -- Functions for analyzing nodes
 analyzeAST :: AST AlexPosn -> Parser (AST SemanticTag)
 analyzeAST []                 = return []
 analyzeAST (Left def : ast)   = (:) . Left <$> sem def <*> analyzeAST ast
 analyzeAST (Right tDef : ast) = (:) . Right <$> sem tDef <*> analyzeAST ast
 
+-- Semantic analysis of type definitions
 instance Analyzable TypeDef where
     sem (TypeDef tDefs p) =
         let typeName (TDef name _ _) = name
@@ -153,5 +118,55 @@ instance Analyzable Type where
         checkTypeInScope p t
         return $ Type (UserDefinedType t) SemTag{posn = p, exprType = Nothing}
 
+-- Semantic analysis of definitions
 instance Analyzable LetDef where
+    -- TODO: Define
+    sem _ = undefined
+
+getExprType :: Expr SemanticTag -> Parser SymbolType
+getExprType e = case exprType (tag e) of
+    Nothing -> do
+        let p = posn $ tag e
+        throwSemAtPosn "Unable to compute type of expression" p
+    Just t  -> return t
+
+retE :: ExprF SemanticTag (Expr SemanticTag) -> SymbolType -> Parser (Expr SemanticTag)
+retE ef t = do
+    p <- getSemPosn
+    return $ Expr ef SemTag{posn = p, exprType = Just t}
+
+semE :: ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag)
+semE (IntCExpr c)    = retE (IntCExpr c) (SymType IntType)
+semE (FloatCExpr c)  = retE (FloatCExpr c) (SymType FloatType)
+semE (CharCExpr c)   = retE (CharCExpr c) (SymType CharType)
+semE (StringCExpr c) = retE (StringCExpr c) (SymType (ArrayType 1 (SymType CharType)))
+semE TrueCExpr       = retE TrueCExpr (SymType BoolType)
+semE FalseCExpr      = retE FalseCExpr (SymType BoolType)
+semE UnitCExpr       = retE UnitCExpr (SymType UnitType)
+semE ef@(LetIn _ e) = do
+    closeScopeInTable
+    t <- getExprType e
+    retE ef t
+-- TODO: Define
+semE _ = undefined
+
+semExprF :: (ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag))
+         -> Expr AlexPosn
+         -> Parser (Expr SemanticTag)
+semExprF g (Expr ef p) = do
+    semEf <- mapMExprF sem sem sem (semExprF g) ef
+    putSemPosn p
+    g semEf
+
+instance Analyzable Expr where
+    sem = semExprF semE
+
+instance TypeAble Expr where
+
+instance Analyzable Clause where
+    -- TODO: Define
+    sem _ = undefined
+
+instance Analyzable Pattern where
+    -- TODO: Define
     sem _ = undefined

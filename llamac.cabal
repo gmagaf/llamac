@@ -27,12 +27,14 @@ library
   exposed-modules:    Lexer.Lexer
                       Parser.Parser
                       Parser.ParserM
+                      Parser.ParserState
                       Parser.Utils
                       Common.Token
                       Common.AST
                       Common.PrintAST
                       Common.SymbolTable
                       Semantics.Semantics
+                      Semantics.Utils
   build-depends:      base >= 4.7 && < 5,
                       array >= 0.4 && < 0.6,
                       transformers >= 0.5,

@@ -117,6 +117,15 @@ instance Analyzable Type where
     sem (Type (UserDefinedType t) p) = do
         checkTypeInScope p t
         return $ Type (UserDefinedType t) SemTag{posn = p, exprType = Nothing}
+    sem (Type (VarType v) p) = do
+        checkVarType p v
+        return $ Type (VarType v) SemTag{posn = p, exprType = Nothing}
+    sem (Type (AbsType v t) p) = do
+        openScopeInTable
+        insertVarType v (VarTypeEntry (SymType $ VarType v))
+        semT <- sem t
+        closeScopeInTable
+        return $ Type (AbsType v semT) SemTag{posn = p, exprType = Nothing}
 
 -- Semantic analysis of definitions
 instance Analyzable LetDef where

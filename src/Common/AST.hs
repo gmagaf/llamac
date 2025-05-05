@@ -80,6 +80,8 @@ data TypeF t = UnitType | IntType | CharType | BoolType | FloatType
              | RefType t
              | ArrayType Int t
              | UserDefinedType Identifier
+             | VarType Int
+             | AbsType Int t
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 -- Expressions

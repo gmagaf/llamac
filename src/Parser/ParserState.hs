@@ -1,7 +1,7 @@
 module Parser.ParserState (ParserState(..), SemanticState(..), initParserState) where
 
 import Lexer.Lexer (AlexState(..), AlexPosn, alexStartPos, alexInitUserState)
-import Common.SymbolTable (SymbolTable, SymbolType, emptySymbolTable)
+import Common.SymbolTable (SymbolTable, emptySymbolTable)
 
 
 -- The state of the parser
@@ -12,17 +12,15 @@ data ParserState = ParserState
   }
 
 data SemanticState = SemanticState
-  { varTypeC     :: Int                     -- a counter to the var types used
-  , posnOfSem    :: AlexPosn                -- a posn to the current place of analysis, used for error messages
-  , unifier      :: Int -> Maybe SymbolType -- the most general type unifier
-  }
+  { varTypeC     :: Int      -- a counter to the var types used
+  , posnOfSem    :: AlexPosn -- a posn to the current place of analysis, used for error messages
+  } deriving Show
 
 initSemanticState :: SemanticState
 initSemanticState = SemanticState
                 {
                   varTypeC = 0
                 , posnOfSem = alexStartPos
-                , unifier = const Nothing
                 }
 
 initParserState :: String -> ParserState

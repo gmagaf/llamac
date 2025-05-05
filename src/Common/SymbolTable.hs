@@ -7,10 +7,11 @@ module Common.SymbolTable (SymbolTable,
                            insert,
                            update,
                            openScope,
-                           closeScope) where
+                           closeScope,
+                           varTypeKey) where
 
 import qualified Data.Map as M
-import Common.AST (TypeF, Type (..))
+import Common.AST (TypeF (VarType), Type (..))
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (Pretty (pretty, prettyPrec))
 import Data.List (intercalate)
@@ -61,15 +62,17 @@ emptySymbolTable :: SymbolTable
 emptySymbolTable = emptyContext
 
 -- A representation for semantic types
-data SymbolType = VarType Int | SymType (TypeF SymbolType)
+newtype SymbolType = SymType (TypeF SymbolType)
     deriving (Show, Eq)
 
 instance Pretty SymbolType where
-    prettyPrec _ (VarType i) = showString $ "@" ++ show i
     prettyPrec d (SymType t) = prettyPrec d t
 
 typeToSymbolType :: Type b -> SymbolType
 typeToSymbolType (Type tf _) = SymType (fmap typeToSymbolType tf)
+
+varTypeKey :: Int -> String
+varTypeKey v = pretty (SymType $ VarType v)
 
 data TableEntry
     = VarEntry SymbolType                                       -- Type of the variable
@@ -77,7 +80,7 @@ data TableEntry
     | FunEntry SymbolType [(Identifier, SymbolType)] SymbolType -- Type of the function, params, output type
     | TypeEntry [(ConstrIdentifier, [SymbolType])]              -- Constructors and arguements
     | ConstrEntry SymbolType [SymbolType] SymbolType            -- Type of constructor, params, output type
-    | VarTypeEntry SymbolType                                   -- Index of type var, type constraint
+    | VarTypeEntry SymbolType                                   -- Var type constraint
         deriving Show
 
 -- Pretty printing of symbol table

@@ -4,7 +4,7 @@ import qualified Data.Set as Set
 
 import Common.AST (TypeF(..))
 import Common.SymbolTable(TableEntry(..), SymbolType(..),
-    query, insert, update, openScope, closeScope)
+    query, insert, update, openScope, closeScope, varTypeKey)
 import Lexer.Lexer (AlexPosn, printPosn)
 import Parser.ParserM (Parser,
     getSymbols, getSemState, putSymbols, putSemState,
@@ -44,12 +44,25 @@ insertSymbols k entry = do
     symbols <- getSymbols
     putSymbols $ insert k entry symbols
 
+insertVarType :: Int -> TableEntry -> Parser ()
+insertVarType v entry = do
+    symbols <- getSymbols
+    putSymbols $ insert (varTypeKey v) entry symbols
+
 queryAndRun :: String -> (TableEntry -> Parser a) -> Parser a
 queryAndRun k run = do
     symbols <- getSymbols
     case query k symbols of
         Just entry -> run entry
         _ -> throwSem ("Symbol " ++ k ++ " is not in scope")
+
+queryVarTAndRun :: Int -> (SymbolType -> Parser a) -> Parser a
+queryVarTAndRun v run = do
+    symbols <- getSymbols
+    let k = varTypeKey v
+    case query k symbols of
+        Just (VarTypeEntry t) -> run t
+        _ -> throwSem ("Type var " ++ k ++ " is not in scope")
 
 updateSymbols :: String -> TableEntry -> Parser ()
 updateSymbols k entry = do
@@ -62,6 +75,14 @@ checkTypeInScope p k = do
     case query k symbols of
         Just (TypeEntry _) -> return ()
         _ -> throwSemAtPosn ("Type symbol " ++ k ++ " is not in scope") p
+
+checkVarType :: AlexPosn -> Int -> Parser ()
+checkVarType p v = do
+    let k = varTypeKey v
+    symbols <- getSymbols
+    case query k symbols of
+        Just (VarTypeEntry _) -> return ()
+        _ -> throwSemAtPosn ("Type var " ++ k ++ " is not in scope") p
 
 openScopeInTable :: Parser ()
 openScopeInTable = do

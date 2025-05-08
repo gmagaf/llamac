@@ -4,21 +4,23 @@ module Semantics.Semantics (SemanticState(..), SemanticTag(..),
                             analyzeAST) where
 
 import qualified Data.Set as Set
-import Control.Monad (when)
+import Control.Monad (when, (>=>))
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST
-import Common.SymbolTable (SymbolType(..), TableEntry (..), typeToSymbolType)
+import Common.SymbolTable (TableEntry (..))
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser)
 import Parser.ParserState (SemanticState(varTypeC, posnOfSem))
 import Semantics.Utils
+import Semantics.Unifier
+import Common.SymbolType
 
 -- This module contains the semantic analysis of the nodes
 -- and decorates them with the semantic tag
 data SemanticTag = SemTag {
-                    posn :: AlexPosn,
-                    exprType :: Maybe SymbolType
+                    posn    :: AlexPosn,
+                    symType :: Maybe SymbolType
                     }
     deriving Show
 
@@ -32,7 +34,7 @@ class Analyzable f => TypeAble f where
     infer :: f AlexPosn -> Parser SymbolType
     infer f = do
         tg <- semTag f
-        case exprType tg of
+        case symType tg of
             Nothing -> throwSemAtPosn "Could not infer type of expr" (posn tg)
             Just t  -> return t
     typeCheck :: f AlexPosn -> SymbolType -> Parser Bool
@@ -53,7 +55,7 @@ instance Analyzable TypeDef where
             openScopeInTable
             mapM_ (insertTypeDef typesInDef) tDefs
             semTDefs <- mapM semTDef tDefs
-            return $ TypeDef semTDefs SemTag{posn = p, exprType = Nothing}
+            return $ TypeDef semTDefs SemTag{posn = p, symType = Nothing}
 
 insertTypeDef :: [Identifier] -> TDef AlexPosn -> Parser ()
 insertTypeDef typesInDef (TDef tId cs p) =
@@ -64,16 +66,17 @@ insertTypeDef typesInDef (TDef tId cs p) =
         checkDuplicateConstrs :: Parser ()
         checkDuplicateConstrs = when (hasDuplicates constrNames) $
             throwSemAtPosn ("Type " ++ tId ++ " cannot have duplicate constructors")  p
-        checkTypesInCtx :: [Type AlexPosn] -> Parser [SymbolType]
+        checkTypesInCtx :: [Type AlexPosn] -> Parser [ConstType]
         checkTypesInCtx [] = return []
         checkTypesInCtx (t@(Type (UserDefinedType tName) tp):ts) =
             if Set.member tName typesInDefSet
-            then (typeToSymbolType t:) <$> checkTypesInCtx ts
+            then (typeToConstType t:) <$> checkTypesInCtx ts
             else do
-                checkTypeInScope tp tName
-                (typeToSymbolType t:) <$> checkTypesInCtx ts
-        checkTypesInCtx (t:ts) = (typeToSymbolType t:) <$> checkTypesInCtx ts
-        checkConstrParams :: Constr AlexPosn -> Parser (ConstrIdentifier, [SymbolType])
+                putSemPosn tp
+                checkTypeInScope tName
+                (typeToConstType t:) <$> checkTypesInCtx ts
+        checkTypesInCtx (t:ts) = (typeToConstType t:) <$> checkTypesInCtx ts
+        checkConstrParams :: Constr AlexPosn -> Parser (ConstrIdentifier, [ConstType])
         checkConstrParams (Constr c ts _) = do
             checkedTs <- checkTypesInCtx ts
             return (c, checkedTs)
@@ -85,64 +88,136 @@ insertTypeDef typesInDef (TDef tId cs p) =
 semTDef :: TDef AlexPosn -> Parser (TDef SemanticTag)
 semTDef (TDef tId cs p) = do
     semCs <- mapM (semConstr tId) cs
-    return $ TDef tId semCs SemTag{posn = p, exprType = Nothing}
+    return $ TDef tId semCs SemTag{posn = p, symType = Nothing}
 
 semConstr :: Identifier -> Constr AlexPosn -> Parser (Constr SemanticTag)
 semConstr tId (Constr cId params p) = do
     semParams <- mapM sem params
-    let paramTypes = map typeToSymbolType semParams
-    let typeOfConstr = paramsToFunType paramTypes outputType
+    let paramTypes = map typeToConstType semParams
+    let typeOfConstr = paramsToConstFunType paramTypes outputType
     insertSymbols cId (ConstrEntry typeOfConstr paramTypes outputType)
-    return $ Constr cId semParams SemTag{posn = p, exprType = Nothing} where
-        outputType = SymType $ UserDefinedType tId
+    return $ Constr cId semParams SemTag{posn = p, symType = Nothing} where
+        outputType = ConstType $ UserDefinedType tId
 
 instance Analyzable Type where
-    sem (Type UnitType p)  = return $ Type UnitType SemTag{posn = p, exprType = Nothing}
-    sem (Type IntType p)   = return $ Type IntType SemTag{posn = p, exprType = Nothing}
-    sem (Type CharType p)  = return $ Type CharType SemTag{posn = p, exprType = Nothing}
-    sem (Type BoolType p)  = return $ Type BoolType SemTag{posn = p, exprType = Nothing}
-    sem (Type FloatType p) = return $ Type FloatType SemTag{posn = p, exprType = Nothing}
+    sem (Type UnitType p)  = return $ Type UnitType SemTag{posn = p, symType = Nothing}
+    sem (Type IntType p)   = return $ Type IntType SemTag{posn = p, symType = Nothing}
+    sem (Type CharType p)  = return $ Type CharType SemTag{posn = p, symType = Nothing}
+    sem (Type BoolType p)  = return $ Type BoolType SemTag{posn = p, symType = Nothing}
+    sem (Type FloatType p) = return $ Type FloatType SemTag{posn = p, symType = Nothing}
     sem (Type (FunType s t) p) = do
         semS <- sem s
         semT <- sem t
-        return $ Type (FunType semS semT) SemTag{posn = p, exprType = Nothing}
+        return $ Type (FunType semS semT) SemTag{posn = p, symType = Nothing}
     sem (Type (RefType t) p) = do
         semT <- sem t
-        return $ Type (RefType semT) SemTag{posn = p, exprType = Nothing}
+        return $ Type (RefType semT) SemTag{posn = p, symType = Nothing}
     sem (Type (ArrayType dim t) p) = do
         if dim < 1 then throwSemAtPosn "Dimension of array type can't be less than 1" p
         else do
             semT <- sem t
-            return $ Type (ArrayType dim semT) SemTag{posn = p, exprType = Nothing}
+            return $ Type (ArrayType dim semT) SemTag{posn = p, symType = Nothing}
     sem (Type (UserDefinedType t) p) = do
-        checkTypeInScope p t
-        return $ Type (UserDefinedType t) SemTag{posn = p, exprType = Nothing}
-    sem (Type (VarType v) p) = do
-        checkVarType p v
-        return $ Type (VarType v) SemTag{posn = p, exprType = Nothing}
-    sem (Type (AbsType v t) p) = do
-        openScopeInTable
-        insertVarType v (VarTypeEntry (SymType $ VarType v))
-        semT <- sem t
-        closeScopeInTable
-        return $ Type (AbsType v semT) SemTag{posn = p, exprType = Nothing}
+        putSemPosn p
+        checkTypeInScope t
+        return $ Type (UserDefinedType t) SemTag{posn = p, symType = Nothing}
 
 -- Semantic analysis of definitions
 instance Analyzable LetDef where
     -- TODO: Define
-    sem _ = undefined
+    sem (Let defs p) = do
+        preSems <- mapM preSemDef defs
+        let semDefs = map fst preSems
+        let defEntries = map snd preSems
+        putSemPosn p
+        mapM_ (uncurry insertSymbols) defEntries
+        return $ Let semDefs SemTag{posn = p, symType = Nothing}
+    sem (LetRec _ _) = undefined
 
-getExprType :: Expr SemanticTag -> Parser SymbolType
-getExprType e = case exprType (tag e) of
+preSemDef :: Def AlexPosn -> Parser (Def SemanticTag, (Identifier, TableEntry))
+preSemDef (VarDef x p) = do
+    putSemPosn p
+    tv <- freshTVar
+    let varType = SymType . RefType $ tv
+    let entry = (x, MutableEntry varType)
+    let semDef = VarDef x SemTag{posn = p, symType = Nothing}
+    return (semDef, entry)
+preSemDef (VarDefTyped x t p) = do
+    putSemPosn p
+    semT <- sem t
+    let varType = SymType . RefType $ typeToSymbolType semT
+    let entry = (x, MutableEntry varType)
+    let semDef = VarDefTyped x semT SemTag{posn = p, symType = Nothing}
+    return (semDef, entry)
+preSemDef (FunDefTyped i ps t e p) = do
+    putSemPosn p
+    semT <- sem t
+    openScopeInTable
+    semPs <- mapM (semParam i) ps
+    se <- sem e
+    outT <- getExprType se
+    paramTypes <- mapM getExprType semPs
+    let fT = paramsToFunType paramTypes outT
+    putSemPosn p
+    unify (typeToSymbolType semT, fT)
+    closeScopeInTable
+    let paramNames = map paramName ps
+    let entry = (i, FunEntry (MonoType $ typeToSymbolType t) paramNames)
+    let semDef = FunDefTyped i semPs semT se SemTag{posn = p, symType = Nothing}
+    return (semDef, entry)
+preSemDef (FunDef i ps e p) = do
+    putSemPosn p
+    openScopeInTable
+    semPs <- mapM (semParam i) ps
+    semExpr <- sem e
+    outType <- (getExprType >=> resolveType) semExpr -- Is this needed??
+    paramTypes <- mapM (getExprType >=> resolveType) semPs
+    let fType = paramsToFunType paramTypes outType
+    rft <- resolveType fType
+    closeScopeInTable
+    scheme <- gen rft
+    let paramNames = map paramName ps
+    let entry = (i, FunEntry scheme paramNames)
+    let semDef = FunDef i semPs semExpr SemTag{posn = p, symType = Nothing}
+    return (semDef, entry)
+preSemDef _ = undefined
+
+semParam :: Identifier -> Param AlexPosn ->Parser (Param SemanticTag)
+semParam fun (TypedParam param t p) = do
+    putSemPosn p
+    semT <- sem t
+    let st = typeToSymbolType t
+    insertSymbols param (ParamEntry st fun)
+    return $ TypedParam param semT SemTag{posn = p, symType = Just st}
+semParam fun (Param param p) = do
+    putSemPosn p
+    vt <- freshTVar
+    insertSymbols param (ParamEntry vt fun)
+    return $ Param param SemTag{posn = p, symType = Just vt}
+
+getExprType :: Node n => n SemanticTag -> Parser SymbolType
+getExprType e = case symType (tag e) of
     Nothing -> do
         let p = posn $ tag e
         throwSemAtPosn "Unable to compute type of expression" p
     Just t  -> return t
 
+resolveTagType :: Node n => n SemanticTag -> Parser SymbolType
+resolveTagType e = case symType (tag e) of
+    Nothing -> do
+        let p = posn $ tag e
+        throwSemAtPosn "Unable to compute type of expression" p
+    Just t  -> resolveType t
+
+resolveExpr :: Expr SemanticTag -> Parser (Expr SemanticTag)
+resolveExpr e@(Expr ef tg) = do
+    rt <- resolveTagType e
+    return $ Expr ef tg{symType = Just rt}
+
 retE :: ExprF SemanticTag (Expr SemanticTag) -> SymbolType -> Parser (Expr SemanticTag)
 retE ef t = do
     p <- getSemPosn
-    return $ Expr ef SemTag{posn = p, exprType = Just t}
+    return $ Expr ef SemTag{posn = p, symType = Just t}
 
 semE :: ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag)
 semE (IntCExpr c)    = retE (IntCExpr c) (SymType IntType)
@@ -152,6 +227,45 @@ semE (StringCExpr c) = retE (StringCExpr c) (SymType (ArrayType 1 (SymType CharT
 semE TrueCExpr       = retE TrueCExpr (SymType BoolType)
 semE FalseCExpr      = retE FalseCExpr (SymType BoolType)
 semE UnitCExpr       = retE UnitCExpr (SymType UnitType)
+semE fa@(FunAppExpr i es) = do
+    entry <- findSymbols i
+    case entry of
+        MutableEntry t
+            | null es -> retE fa t
+            | otherwise -> throwSem $ "Cannot apply arguments to the mutable variable " ++ i
+        FunEntry ft ps ->
+            -- need to make sure that if there are no args then the type of the function is returned
+            case compare (length es) (length ps) of
+                LT -> throwSem $ "Function " ++ i ++ " is applied to too few arguments"
+                GT -> throwSem $ "Function " ++ i ++ " is applied to too many arguments"
+                EQ -> do
+                    ts <- mapM getExprType es
+                    v <- freshTVar
+                    openScopeInTable
+                    t <- inst ft
+                    let inf = paramsToFunType ts v
+                    unify (t, inf)
+                    res <- mapM resolveExpr es
+                    rv <- resolveType v
+                    closeScopeInTable
+                    retE (FunAppExpr i res) rv
+        ParamEntry t _ -> do
+            ts <- mapM getExprType es
+            v <- freshTVar
+            unify (t, paramsToFunType ts v) -- Need to make sure that if the param is function is applied to all args
+            res <- mapM resolveExpr es
+            rv <- resolveType v
+            retE (FunAppExpr i res) rv
+        TypeEntry _       -> throwSem $ "Cannot apply arguments to type " ++ i
+        ConstrEntry {}    -> throwSem $ "Cannot apply function arguments to constr " ++ i
+        TVarEntry _       -> throwSem $ "Cannot apply arguments to type variable " ++ i
+        ArrayEntry _ _    -> throwSem $ "Cannot apply arguments to array " ++ i
+semE e@(ArrayDim i dim) = findSymbols i >>= run where
+    run (ArrayEntry _ dims)
+      | dim < 1 = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of array " ++ i
+      | dims < dim = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of " ++ show dims ++ "-dim array " ++ i
+      | otherwise = retE e (SymType IntType)
+    run _ = throwSem $ "No array " ++ i ++ " in scope"
 semE ef@(LetIn _ e) = do
     closeScopeInTable
     t <- getExprType e

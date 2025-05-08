@@ -32,9 +32,11 @@ library
                       Common.Token
                       Common.AST
                       Common.PrintAST
+                      Common.SymbolType
                       Common.SymbolTable
                       Semantics.Semantics
                       Semantics.Utils
+                      Semantics.Unifier
   build-depends:      base >= 4.7 && < 5,
                       array >= 0.4 && < 0.6,
                       transformers >= 0.5,

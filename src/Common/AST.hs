@@ -54,6 +54,10 @@ instance Node Param where
   tag (Param _ b)        = b
   tag (TypedParam _ _ b) = b
 
+paramName :: Param b -> Identifier
+paramName (Param i _)        = i
+paramName (TypedParam i _ _) = i
+
 -- Types
 data TypeDef b = TypeDef [TDef b] b
   deriving (Eq, Show, Functor)
@@ -80,8 +84,6 @@ data TypeF t = UnitType | IntType | CharType | BoolType | FloatType
              | RefType t
              | ArrayType Int t
              | UserDefinedType Identifier
-             | VarType Int
-             | AbsType Int t
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 -- Expressions

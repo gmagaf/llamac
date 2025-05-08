@@ -3,24 +3,19 @@ module Semantics.Utils (module Semantics.Utils) where
 import qualified Data.Set as Set
 
 import Common.AST (TypeF(..))
-import Common.SymbolTable(TableEntry(..), SymbolType(..),
-    query, insert, update, openScope, closeScope, varTypeKey)
+import Common.SymbolTable(TableEntry(..), query, insert, update, openScope, closeScope, varTypeKey,)
 import Lexer.Lexer (AlexPosn, printPosn)
 import Parser.ParserM (Parser,
     getSymbols, getSemState, putSymbols, putSemState,
     throwSemanticError)
-import Parser.ParserState (SemanticState(..)) 
+import Parser.ParserState (SemanticState(..))
+import Common.SymbolType
+import Common.Token (Identifier, ConstrIdentifier)
+import Control.Monad ((>=>))
 
 -- This module contains semantic analysis tools
 
 -- Functions for dealing with the Semantic state of the parser
-getAndIncrVarTypeC :: Parser Int
-getAndIncrVarTypeC = do
-  sState <- getSemState
-  let c = varTypeC sState
-  putSemState sState{varTypeC = c + 1}
-  return c
-
 getSemPosn :: Parser AlexPosn
 getSemPosn = posnOfSem <$> getSemState
 
@@ -44,45 +39,54 @@ insertSymbols k entry = do
     symbols <- getSymbols
     putSymbols $ insert k entry symbols
 
-insertVarType :: Int -> TableEntry -> Parser ()
-insertVarType v entry = do
+freshTVar :: Parser SymbolType
+freshTVar = do
+    sState <- getSemState
+    let c = varTypeC sState
+    let v = TVar c
+    putSemState sState{varTypeC = c + 1}
     symbols <- getSymbols
-    putSymbols $ insert (varTypeKey v) entry symbols
-
-queryAndRun :: String -> (TableEntry -> Parser a) -> Parser a
-queryAndRun k run = do
-    symbols <- getSymbols
-    case query k symbols of
-        Just entry -> run entry
-        _ -> throwSem ("Symbol " ++ k ++ " is not in scope")
-
-queryVarTAndRun :: Int -> (SymbolType -> Parser a) -> Parser a
-queryVarTAndRun v run = do
-    symbols <- getSymbols
-    let k = varTypeKey v
-    case query k symbols of
-        Just (VarTypeEntry t) -> run t
-        _ -> throwSem ("Type var " ++ k ++ " is not in scope")
+    putSymbols $ insert (varTypeKey c) (TVarEntry v) symbols
+    return v
 
 updateSymbols :: String -> TableEntry -> Parser ()
 updateSymbols k entry = do
     symbols <- getSymbols
     putSymbols $ update k entry symbols
 
-checkTypeInScope :: AlexPosn -> String -> Parser ()
-checkTypeInScope p k = do
-    symbols <- getSymbols
-    case query k symbols of
-        Just (TypeEntry _) -> return ()
-        _ -> throwSemAtPosn ("Type symbol " ++ k ++ " is not in scope") p
+updateTVar :: Int -> TableEntry -> Parser ()
+updateTVar v = updateSymbols (varTypeKey v)
 
-checkVarType :: AlexPosn -> Int -> Parser ()
-checkVarType p v = do
-    let k = varTypeKey v
+querySymbols :: String -> Parser (Maybe TableEntry)
+querySymbols k = query k <$> getSymbols
+
+findSymbols :: String -> Parser TableEntry
+findSymbols k = do
     symbols <- getSymbols
     case query k symbols of
-        Just (VarTypeEntry _) -> return ()
-        _ -> throwSemAtPosn ("Type var " ++ k ++ " is not in scope") p
+        Just entry -> return entry
+        _ -> throwSem ("Symbol " ++ k ++ " is not in scope")
+
+findTVar :: Int -> Parser SymbolType
+findTVar v = do
+    symbols <- getSymbols
+    let k = varTypeKey v
+    case query k symbols of
+        Just (TVarEntry t) -> return t
+        _ -> throwSem ("Type var " ++ k ++ " is not in scope")
+
+findType :: Identifier -> Parser [(ConstrIdentifier, [ConstType])]
+findType i = do
+    symbols <- getSymbols
+    case query i symbols of
+        Just (TypeEntry constrs) -> return constrs
+        _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
+
+checkTypeInScope :: Identifier -> Parser ()
+checkTypeInScope = findType >=> const (return ())
+
+checkVarType :: Int -> Parser ()
+checkVarType = findTVar >=> const (return ())
 
 openScopeInTable :: Parser ()
 openScopeInTable = do
@@ -102,3 +106,7 @@ hasDuplicates list = length list /= length set
 paramsToFunType :: [SymbolType] -> SymbolType -> SymbolType
 paramsToFunType [] out = out
 paramsToFunType (t:ts) out = SymType (FunType t (paramsToFunType ts out))
+
+paramsToConstFunType :: [ConstType] -> ConstType -> ConstType
+paramsToConstFunType [] out = out
+paramsToConstFunType (t:ts) out = ConstType (FunType t (paramsToConstFunType ts out))

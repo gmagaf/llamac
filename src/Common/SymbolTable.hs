@@ -1,6 +1,5 @@
 module Common.SymbolTable (SymbolTable,
                            TableEntry(..),
-                           SymbolType(..),
                            typeToSymbolType,
                            emptySymbolTable,
                            query,
@@ -11,9 +10,10 @@ module Common.SymbolTable (SymbolTable,
                            varTypeKey) where
 
 import qualified Data.Map as M
-import Common.AST (TypeF (VarType), Type (..))
 import Common.Token (Identifier, ConstrIdentifier)
-import Common.PrintAST (Pretty (pretty, prettyPrec))
+import Common.PrintAST (Pretty (pretty))
+import Common.SymbolType (SymbolType(TVar), TypeScheme, ConstType,
+    typeToSymbolType)
 import Data.List (intercalate)
 
 -- This module contains the defintion of the Symbol table for the compiler
@@ -61,53 +61,49 @@ type SymbolTable = Context String TableEntry
 emptySymbolTable :: SymbolTable
 emptySymbolTable = emptyContext
 
--- A representation for semantic types
-newtype SymbolType = SymType (TypeF SymbolType)
-    deriving (Show, Eq)
-
-instance Pretty SymbolType where
-    prettyPrec d (SymType t) = prettyPrec d t
-
-typeToSymbolType :: Type b -> SymbolType
-typeToSymbolType (Type tf _) = SymType (fmap typeToSymbolType tf)
-
 varTypeKey :: Int -> String
-varTypeKey v = pretty (SymType $ VarType v)
+varTypeKey v = pretty (TVar v)
 
 data TableEntry
-    = VarEntry SymbolType                                       -- Type of the variable
-    | ArrayEntry SymbolType Int                                 -- Type of the entries, num of dimensions
-    | FunEntry SymbolType [(Identifier, SymbolType)] SymbolType -- Type of the function, params, output type
-    | TypeEntry [(ConstrIdentifier, [SymbolType])]              -- Constructors and arguements
-    | ConstrEntry SymbolType [SymbolType] SymbolType            -- Type of constructor, params, output type
-    | VarTypeEntry SymbolType                                   -- Var type constraint
+    = MutableEntry SymbolType                     -- Type of the mutable variable
+    | ArrayEntry SymbolType Int                   -- Type of the entries, num of dimensions
+    | FunEntry TypeScheme [Identifier]            -- TypeScheme of the function, params
+    | ParamEntry SymbolType Identifier            -- Type of the param, function of the param
+    | TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
+    | ConstrEntry ConstType [ConstType] ConstType -- Type of constructor, params, output type
+    | TVarEntry SymbolType                        -- This is the principal type of the most general unifier
         deriving Show
 
 -- Pretty printing of symbol table
 instance Pretty TableEntry where
-    pretty (VarEntry t)       = "Var of type: " ++ pretty t
-    pretty (ArrayEntry t dim) = "Array of type: " ++ pretty t ++ " and " ++ show dim ++ " dims"
-    pretty (FunEntry funType [] outputType) =
-        "Fun of type: " ++ pretty funType ++ " with no params and output " ++ pretty outputType
-    pretty (FunEntry funType params outputType) =
-        "Fun of type: " ++ pretty funType ++ " with params: " ++
-        intercalate ", " (map (\(p, t) -> p ++ ": " ++ pretty t) params) ++
-        " and output " ++ pretty outputType
-    pretty (TypeEntry constrs) = "Type with constrs: " ++ cs where
-        f (c, []) = c
-        f (c, ps) = c ++ " of " ++ unwords (map pretty ps)
-        cs = intercalate ", " (map f constrs)
-    pretty (ConstrEntry constrType [] outputType) =
-        "Constr of " ++ pretty outputType ++ " with type: " ++ pretty constrType
-    pretty (ConstrEntry constrType types outputType) =
-        "Constr of " ++ pretty outputType ++ " with type: " ++ pretty constrType ++
-        " with params: (" ++ intercalate ", " (map pretty types) ++ ")"
-    pretty (VarTypeEntry t) = "Type Var with contraint: " ++ pretty t
+    pretty entry = case entry of
+        MutableEntry t ->
+            "Mutable var of type: " ++ pretty t
+        ArrayEntry t dim ->
+            show dim ++ "-dimensional array of type: " ++ pretty t
+        FunEntry funType [] ->
+            "Const of type: " ++ pretty funType
+        FunEntry funType params ->
+            "Fun of type: " ++ pretty funType ++ " with params: " ++ intercalate ", " params
+        ParamEntry t f ->
+            "Param of type: " ++ pretty t ++ " of function " ++ f
+        TypeEntry constrs ->
+            "Type with constrs: " ++ cs where
+                f (c, []) = c
+                f (c, ps) = c ++ " of " ++ unwords (map pretty ps)
+                cs = intercalate ", " (map f constrs)
+        ConstrEntry constrType [] outputType ->
+            "Constr of " ++ pretty outputType ++
+            " with type: " ++ pretty constrType
+        ConstrEntry constrType types outputType ->
+            "Constr of " ++ pretty outputType ++
+            " with type: " ++ pretty constrType ++
+            " with params: (" ++ intercalate ", " (map pretty types) ++ ")"
+        TVarEntry t -> "Type Var unified to: " ++ pretty t
 
 instance (Show k, Pretty e) => Pretty (Context k e) where
     pretty (Context scopes) =
-        let addPadding v l = v ++ pad where
-                pad = replicate (max 0 (l - length v)) ' '
+        let addPadding v l = v ++ replicate (max 0 (l - length v)) ' '
             toString (k, e) = (show k, pretty e)
             toLengths (k, e) = (length k, length e)
             toPaddings (ak, ek) (k, e) = (max ak k, max ek e)

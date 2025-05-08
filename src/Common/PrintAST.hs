@@ -93,7 +93,6 @@ instance Pretty (Type b) where
 instance Pretty t => Pretty (TypeF t) where
   prettyPrec d tf =
     let
-      abs_prec = 4
       ref_prec = 3
       array_prec = 2
       fun_prec = 1
@@ -124,10 +123,6 @@ instance Pretty t => Pretty (TypeF t) where
             prettyPrec (fun_prec + 1) u .
             showString " " . showPretty T_arrow . showString " " .
             prettyPrec fun_prec v
-      VarType i -> showString $ "@" ++ show i
-      AbsType v u -> showParen (always || d > abs_prec) $
-            showString ("forall @" ++ show v ++ ". ") .
-            prettyPrec (abs_prec + 1) u
 
 instance Pretty (LetDef b) where
   pretty (Let defs _) = showPretty T_let . showString " " $

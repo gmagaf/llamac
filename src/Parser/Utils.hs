@@ -6,7 +6,8 @@ import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calc)
 import Parser.ParserM (Error, parseString)
 import Parser.ParserState (ParserState(..))
-import Semantics.Semantics (SemanticTag, analyzeAST)
+import Semantics.Semantics (analyzeAST)
+import Semantics.Utils (SemanticTag)
 
 -- The parsing function
 parse :: String -> Either Error (AST AlexPosn)

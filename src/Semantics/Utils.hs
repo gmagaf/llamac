@@ -1,10 +1,13 @@
 module Semantics.Utils (module Semantics.Utils) where
 
 import qualified Data.Set as Set
+import Control.Monad ((>=>))
 
+import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST (TypeF(..))
+import Common.SymbolType (SymbolType(..), ConstType(..))
 import Common.SymbolTable
-    (closeScope,
+     (closeScope,
       insert,
       openScope,
       query,
@@ -20,11 +23,13 @@ import Parser.ParserM (Parser,
     getSymbols, getSemState, putSymbols, putSemState,
     throwSemanticError)
 import Parser.ParserState (SemanticState(..))
-import Common.SymbolType
-import Common.Token (Identifier, ConstrIdentifier)
-import Control.Monad ((>=>))
 
 -- This module contains semantic analysis tools
+data SemanticTag = SemTag {
+                    posn    :: AlexPosn,
+                    symType :: Maybe SymbolType
+                    }
+    deriving Show
 
 -- Functions for dealing with the Semantic state of the parser
 getNames :: Parser NameSpace

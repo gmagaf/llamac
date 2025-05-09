@@ -3,7 +3,6 @@ module Common.SymbolTable (SymbolTable(..),
                            TypeSpace,
                            TableEntry(..),
                            TypeTableEntry(..),
-                           typeToSymbolType,
                            emptySymbolTable,
                            query,
                            insert,
@@ -13,11 +12,11 @@ module Common.SymbolTable (SymbolTable(..),
                            varTypeKey) where
 
 import qualified Data.Map as M
+import Data.List (intercalate)
+
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (Pretty (pretty))
-import Common.SymbolType (SymbolType(TVar), TypeScheme, ConstType,
-    typeToSymbolType)
-import Data.List (intercalate)
+import Common.SymbolType (SymbolType(TVar), TypeScheme, ConstType)
 
 -- This module contains the defintion of the Symbol table for the compiler
 

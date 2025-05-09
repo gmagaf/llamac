@@ -1,7 +1,7 @@
 module Parser.ParserState (ParserState(..), SemanticState(..), initParserState) where
 
-import Lexer.Lexer (AlexState(..), AlexPosn, alexStartPos, alexInitUserState)
 import Common.SymbolTable (SymbolTable, emptySymbolTable)
+import Lexer.Lexer (AlexState(..), AlexPosn, alexStartPos, alexInitUserState)
 
 
 -- The state of the parser

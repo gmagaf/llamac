@@ -2,12 +2,12 @@ module Semantics.Unifier (inst, gen, resolveType, unify) where
 
 import qualified Data.Set as Set
 
-import Common.AST
-import Common.SymbolTable
-import Parser.ParserM
-import Semantics.Utils
+import Common.AST (TypeF(..))
+import Common.SymbolTable (TypeTableEntry(TVarEntry), varTypeKey)
 import Common.PrintAST (pretty)
-import Common.SymbolType
+import Common.SymbolType (TypeScheme(..), SymbolType(..))
+import Parser.ParserM (Parser)
+import Semantics.Utils (throwSem, freshTVar, updateTVar, queryType, findTVar)
 
 
 -- Recursion Utils

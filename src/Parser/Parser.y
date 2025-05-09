@@ -331,8 +331,8 @@ BaseExpr_ :: { AlexPosn -> Expr AlexPosn }
   | true                            { Expr TrueCExpr }
   | false                           { Expr FalseCExpr }
   | '('')'                          { Expr UnitCExpr }
-  | id                              { Expr (FunAppExpr $1 []) }
-  | id_constr                       { Expr (ConstrAppExpr $1 []) }
+  | id                              { Expr (ConstExpr $1) }
+  | id_constr                       { Expr (ConstConstrExpr $1) }
   | '(' Expr ')'                    { const $2 }
   | begin Expr end                  { Expr (BeginExpr $2) }
   | while Expr do Expr done         { Expr (WhileExpr $2 $4) }

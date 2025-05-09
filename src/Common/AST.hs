@@ -70,6 +70,8 @@ data ExprF b e = IntCExpr IntConstant
           | TrueCExpr
           | FalseCExpr
           | UnitCExpr
+          | ConstExpr Identifier
+          | ConstConstrExpr ConstrIdentifier
           | UnOpExpr UnOp e
           | BinOpExpr BinOp e e
           | FunAppExpr Identifier [e]
@@ -141,6 +143,8 @@ fmapExprF lf tf cf f ef = case ef of
   TrueCExpr            -> TrueCExpr
   FalseCExpr           -> FalseCExpr
   UnitCExpr            -> UnitCExpr
+  ConstExpr i          -> ConstExpr i
+  ConstConstrExpr i    -> ConstConstrExpr i
   UnOpExpr op e        -> UnOpExpr op (f e)
   BinOpExpr op u v     -> BinOpExpr op (f u) (f v)
   FunAppExpr i es      -> FunAppExpr i (fmap f es)
@@ -172,6 +176,8 @@ foldMapExprF lf tf cf f ef = case ef of
   TrueCExpr            -> mempty
   FalseCExpr           -> mempty
   UnitCExpr            -> mempty
+  ConstExpr _          -> mempty
+  ConstConstrExpr _    -> mempty
   UnOpExpr _ e         -> f e
   BinOpExpr _ u v      -> mappend (f u) (f v)
   FunAppExpr _ es      -> mconcat (fmap f es)
@@ -203,6 +209,8 @@ traverseExprF lf tf cf f ef = case ef of
   TrueCExpr            -> pure TrueCExpr
   FalseCExpr           -> pure FalseCExpr
   UnitCExpr            -> pure UnitCExpr
+  ConstExpr i          -> pure $ ConstExpr i
+  ConstConstrExpr i    -> pure $ ConstConstrExpr i
   UnOpExpr op e        -> UnOpExpr op <$> f e
   BinOpExpr op u v     -> BinOpExpr op <$> f u <*> f v
   FunAppExpr i es      -> FunAppExpr i <$> traverse f es

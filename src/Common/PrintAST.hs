@@ -158,7 +158,10 @@ instance Pretty (Param b) where
             showString " " . showPretty t
 
 instance Pretty (Expr b) where
-  prettyPrec d (Expr e _) =
+  prettyPrec d (Expr e _) = prettyPrec d e
+
+instance Pretty e => Pretty (ExprF b e) where
+  prettyPrec d e =
     let new_prec = 15
         array_access_prec = 14
         bang_prec = 13
@@ -176,6 +179,8 @@ instance Pretty (Expr b) where
       TrueCExpr -> showPretty T_true
       FalseCExpr -> showPretty T_false
       UnitCExpr -> showPretty T_lparen . showPretty T_rparen
+      ConstExpr i -> prettyId i
+      ConstConstrExpr i -> prettyConstrId i
       ArrayDim i 1 -> showParen (always || d > un_op_prec) $
         showPretty T_dim . showString " " . prettyId i
       ArrayDim i n -> showParen (always || d > un_op_prec) $
@@ -245,24 +250,24 @@ instance Pretty (Expr b) where
 data Assoc = L | R | Non
   deriving Eq
 
-prettyBinOpExp :: Assoc -> Int -> Token -> Int -> Expr b -> Expr b -> ShowS
+prettyBinOpExp :: Pretty e => Assoc -> Int -> Token -> Int -> e -> e -> ShowS
 prettyBinOpExp L = prettyBinOpExpL
 prettyBinOpExp R = prettyBinOpExpR
 prettyBinOpExp Non = prettyBinOpExpNon
 
-prettyBinOpExpL :: Int -> Token -> Int -> Expr b -> Expr b -> ShowS
+prettyBinOpExpL :: Pretty e => Int -> Token -> Int -> e -> e -> ShowS
 prettyBinOpExpL prec tok d u w = showParen (always || d > prec) $
   prettyPrec prec u . showString " " .
   showPretty tok . showString " " .
   prettyPrec (prec + 1) w
 
-prettyBinOpExpR :: Int -> Token -> Int -> Expr b -> Expr b -> ShowS
+prettyBinOpExpR :: Pretty e => Int -> Token -> Int -> e -> e -> ShowS
 prettyBinOpExpR prec tok d u w = showParen (always || d > prec) $
   prettyPrec (prec + 1) u . showString " " .
   showPretty tok . showString " " .
   prettyPrec prec w
 
-prettyBinOpExpNon :: Int -> Token -> Int -> Expr b -> Expr b -> ShowS
+prettyBinOpExpNon :: Pretty e => Int -> Token -> Int -> e -> e -> ShowS
 prettyBinOpExpNon prec tok d u w = showParen (always || d > prec) $
   prettyPrec (prec + 1) u . showString " " .
   showPretty tok . showString " " .

@@ -3,7 +3,8 @@ module Common.SymbolType (
                         SymbolType(..),
                         TypeScheme(..),
                         typeToConstType,
-                        typeToSymbolType) where
+                        typeToSymbolType,
+                        constTypeToSymbolType) where
 
 import Common.AST (Type(..), TypeF(..))
 import Common.PrintAST (Pretty(prettyPrec))
@@ -28,6 +29,9 @@ data SymbolType = SymType (TypeF SymbolType)
 instance Pretty SymbolType where
     prettyPrec d (SymType t) = prettyPrec d t
     prettyPrec _ (TVar i)    = showString $ "@" ++ show i
+
+constTypeToSymbolType :: ConstType -> SymbolType
+constTypeToSymbolType (ConstType tf) = SymType $ fmap constTypeToSymbolType tf
 
 typeToSymbolType :: Type b -> SymbolType
 typeToSymbolType (Type tf _) = SymType (fmap typeToSymbolType tf)

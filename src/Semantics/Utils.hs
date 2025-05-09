@@ -3,7 +3,18 @@ module Semantics.Utils (module Semantics.Utils) where
 import qualified Data.Set as Set
 
 import Common.AST (TypeF(..))
-import Common.SymbolTable(TableEntry(..), query, insert, update, openScope, closeScope, varTypeKey,)
+import Common.SymbolTable
+    (closeScope,
+      insert,
+      openScope,
+      query,
+      update,
+      varTypeKey,
+      SymbolTable(types, names),
+      TableEntry(..),
+      TypeTableEntry(..),
+      NameSpace,
+      TypeSpace)
 import Lexer.Lexer (AlexPosn, printPosn)
 import Parser.ParserM (Parser,
     getSymbols, getSemState, putSymbols, putSemState,
@@ -16,6 +27,22 @@ import Control.Monad ((>=>))
 -- This module contains semantic analysis tools
 
 -- Functions for dealing with the Semantic state of the parser
+getNames :: Parser NameSpace
+getNames = names <$> getSymbols
+
+getTypes :: Parser TypeSpace
+getTypes = types <$> getSymbols
+
+putNames :: NameSpace -> Parser ()
+putNames ns = do
+    s <- getSymbols
+    putSymbols s{names = ns}
+
+putTypes :: TypeSpace -> Parser ()
+putTypes ts = do
+    s <- getSymbols
+    putSymbols s{types = ts}
+
 getSemPosn :: Parser AlexPosn
 getSemPosn = posnOfSem <$> getSemState
 
@@ -34,42 +61,61 @@ throwSem s = do
     throwSemanticError $ s ++ " at " ++ printPosn p
 
 -- Parser symbol table utiles
-insertSymbols :: String -> TableEntry -> Parser ()
-insertSymbols k entry = do
-    symbols <- getSymbols
-    putSymbols $ insert k entry symbols
+insertName :: String -> TableEntry -> Parser ()
+insertName k entry = do
+    symbols <- getNames
+    putNames $ insert k entry symbols
 
+insertType :: String -> TypeTableEntry -> Parser ()
+insertType k entry = do
+    symbols <- getTypes
+    putTypes $ insert k entry symbols
+
+-- The only way to create a new tvar
 freshTVar :: Parser SymbolType
 freshTVar = do
     sState <- getSemState
     let c = varTypeC sState
     let v = TVar c
     putSemState sState{varTypeC = c + 1}
-    symbols <- getSymbols
-    putSymbols $ insert (varTypeKey c) (TVarEntry v) symbols
+    symbols <- getTypes
+    putTypes $ insert (varTypeKey c) (TVarEntry v) symbols
     return v
 
-updateSymbols :: String -> TableEntry -> Parser ()
-updateSymbols k entry = do
-    symbols <- getSymbols
-    putSymbols $ update k entry symbols
+-- Update symbol if exists else throw error
+updateName :: String -> TableEntry -> Parser ()
+updateName key entry = do
+    symbols <- getNames
+    case query key symbols of
+        Just _ -> putNames $ update key entry symbols
+        _ -> throwSem ("Cannot update symbol " ++ key ++ " as it is not in scope")
 
-updateTVar :: Int -> TableEntry -> Parser ()
-updateTVar v = updateSymbols (varTypeKey v)
+updateTVar :: Int -> SymbolType -> Parser ()
+updateTVar v t = do
+    let key = varTypeKey v
+    symbols <- getTypes
+    case query key symbols of
+        Just (TVarEntry _) -> putTypes $ update key (TVarEntry t) symbols
+        _ -> throwSem ("Type var " ++ key ++ " is not in scope")
 
-querySymbols :: String -> Parser (Maybe TableEntry)
-querySymbols k = query k <$> getSymbols
+-- Query for a symbol that may or may not be in scope
+queryName :: String -> Parser (Maybe TableEntry)
+queryName k = query k <$> getNames
 
-findSymbols :: String -> Parser TableEntry
-findSymbols k = do
-    symbols <- getSymbols
+queryType :: String -> Parser (Maybe TypeTableEntry)
+queryType k = query k <$> getTypes
+
+-- Find symbol if exists else throw error
+findName :: String -> Parser TableEntry
+findName k = do
+    symbols <- getNames
     case query k symbols of
         Just entry -> return entry
         _ -> throwSem ("Symbol " ++ k ++ " is not in scope")
 
 findTVar :: Int -> Parser SymbolType
 findTVar v = do
-    symbols <- getSymbols
+    symbols <- getTypes
     let k = varTypeKey v
     case query k symbols of
         Just (TVarEntry t) -> return t
@@ -77,26 +123,47 @@ findTVar v = do
 
 findType :: Identifier -> Parser [(ConstrIdentifier, [ConstType])]
 findType i = do
-    symbols <- getSymbols
+    symbols <- getTypes
     case query i symbols of
         Just (TypeEntry constrs) -> return constrs
         _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
 
+-- Check that type is in scope else throw error
 checkTypeInScope :: Identifier -> Parser ()
 checkTypeInScope = findType >=> const (return ())
 
 checkVarType :: Int -> Parser ()
 checkVarType = findTVar >=> const (return ())
 
+-- Handle scopes
+openScopeInTypes :: Parser ()
+openScopeInTypes = do
+    symbols <- getTypes
+    putTypes $ openScope symbols
+
+closeScopeInTypes :: Parser ()
+closeScopeInTypes = do
+    symbols <- getTypes
+    putTypes $ closeScope symbols
+
 openScopeInTable :: Parser ()
 openScopeInTable = do
-    symbols <- getSymbols
-    putSymbols $ openScope symbols
+    openScopeInNames
+    openScopeInTypes where
+        openScopeInNames :: Parser ()
+        openScopeInNames = do
+            symbols <- getNames
+            putNames $ openScope symbols
+
 
 closeScopeInTable :: Parser ()
 closeScopeInTable = do
-    symbols <- getSymbols
-    putSymbols $ closeScope symbols
+    closeScopeInNames
+    closeScopeInTypes where
+        closeScopeInNames :: Parser ()
+        closeScopeInNames = do
+            symbols <- getNames
+            putNames $ closeScope symbols
 
 -- Other util functions
 hasDuplicates :: (Ord a) => [a] -> Bool
@@ -106,6 +173,20 @@ hasDuplicates list = length list /= length set
 paramsToFunType :: [SymbolType] -> SymbolType -> SymbolType
 paramsToFunType [] out = out
 paramsToFunType (t:ts) out = SymType (FunType t (paramsToFunType ts out))
+
+funTypeToTypes :: SymbolType -> [SymbolType]
+funTypeToTypes = reverse . aux [] where
+    aux :: [SymbolType] -> SymbolType -> [SymbolType]
+    aux acc (SymType (FunType t1 t2)) = aux (t1:acc) t2
+    aux acc s = s:acc
+
+funTypeToArgTypes :: SymbolType -> [SymbolType]
+funTypeToArgTypes s =
+    let ts = funTypeToTypes s
+        f [] = []
+        f [_] = []
+        f (x:xs) = x : f xs
+    in if ts == [] then [] else f ts
 
 paramsToConstFunType :: [ConstType] -> ConstType -> ConstType
 paramsToConstFunType [] out = out

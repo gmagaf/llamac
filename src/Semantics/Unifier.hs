@@ -37,7 +37,7 @@ subst v t = bottomUp f where
 
 substScheme :: Int -> SymbolType -> TypeScheme -> TypeScheme
 substScheme v r (MonoType t) = MonoType $ subst v r t
-substScheme v r (AbsType u t) | v == u = AbsType u t
+substScheme v r (AbsType u t) | v == u    = AbsType u t
                               | otherwise = AbsType u $ substScheme v r t
 
 tvarInType :: Int -> SymbolType -> Bool
@@ -65,7 +65,7 @@ gen :: SymbolType -> Parser TypeScheme
 gen t =
     let varNotInScope :: Int -> Parser [Int]
         varNotInScope v = do
-            entry <- querySymbols (varTypeKey v)
+            entry <- queryType (varTypeKey v)
             case entry of
                 Just (TVarEntry _) -> return []
                 _                  -> return [v]
@@ -85,56 +85,51 @@ resolveType st@(TVar v) = do
     if vt == st then return vt
     else do
         rt <- resolveType vt
-        updateTVar v (TVarEntry rt)
+        updateTVar v rt
         return rt
 resolveType (SymType tf) = SymType <$> mapM resolveType tf
 
-resolveTypeScheme :: TypeScheme -> Parser TypeScheme
-resolveTypeScheme s = do
-    openScopeInTable
-    t <- inst s
-    rt <- resolveType t
-    closeScopeInTable
-    gen rt
+-- resolveTypeScheme :: TypeScheme -> Parser TypeScheme
+-- resolveTypeScheme s = do
+--     openScopeInTable
+--     t <- inst s
+--     rt <- resolveType t
+--     closeScopeInTable
+--     gen rt
 
-queryResolveAndRun :: String -> (TableEntry -> Parser a) -> Parser a
-queryResolveAndRun k run = do
-    symbols <- getSymbols
-    case query k symbols of
-        Nothing -> throwSem ("Symbol " ++ k ++ " is not in scope")
-        Just entry -> case entry of
-            MutableEntry t -> do
-                rt <- resolveType t
-                let updated = MutableEntry rt
-                updateSymbols k updated
-                run updated
-            ArrayEntry t dim -> do
-                rt <- resolveType t
-                let updated = ArrayEntry rt dim
-                updateSymbols k updated
-                run updated
-            FunEntry scheme ps -> do
-                rScheme <- resolveTypeScheme scheme
-                let updated = FunEntry rScheme ps
-                updateSymbols k updated
-                run updated
-            ParamEntry t i -> do
-                rt <- resolveType t
-                let updated = ParamEntry rt i
-                updateSymbols k updated
-                run updated
-            TVarEntry t -> do
-                rt <- resolveType t
-                let updated = TVarEntry rt
-                updateSymbols k updated
-                run updated
-            -- constructors can not have var types (TypeEntry, ConstrEntry)
-            _ -> run entry
-
-updateUnifier :: Int -> SymbolType -> Parser ()
-updateUnifier v t = do
-    _ <- findTVar v 
-    updateTVar v (TVarEntry t)
+-- queryResolveAndRun :: String -> (TableEntry -> Parser a) -> Parser a
+-- queryResolveAndRun k run = do
+--     symbols <- getSymbols
+--     case query k symbols of
+--         Nothing -> throwSem ("Symbol " ++ k ++ " is not in scope")
+--         Just entry -> case entry of
+--             MutableEntry t -> do
+--                 rt <- resolveType t
+--                 let updated = MutableEntry rt
+--                 updateSymbols k updated
+--                 run updated
+--             ArrayEntry t dim -> do
+--                 rt <- resolveType t
+--                 let updated = ArrayEntry rt dim
+--                 updateSymbols k updated
+--                 run updated
+--             FunEntry scheme ps -> do
+--                 rScheme <- resolveTypeScheme scheme
+--                 let updated = FunEntry rScheme ps
+--                 updateSymbols k updated
+--                 run updated
+--             ParamEntry t i -> do
+--                 rt <- resolveType t
+--                 let updated = ParamEntry rt i
+--                 updateSymbols k updated
+--                 run updated
+--             TVarEntry t -> do
+--                 rt <- resolveType t
+--                 let updated = TVarEntry rt
+--                 updateSymbols k updated
+--                 run updated
+--             -- constructors can not have var types (TypeEntry, ConstrEntry)
+--             _ -> run entry
 
 -- This function is used to unify two types
 -- Given a type constraint it extends the unifier
@@ -149,8 +144,8 @@ unify (st1, st2) = do
     case (rt, rs) of
         (t, s) | t == s -> return ()
         (TVar v, TVar u) | v < u -> unify (rs, rt)
-        (TVar v, s) | notVarInType v s -> updateUnifier v s
-        (t, TVar v) | notVarInType v t -> updateUnifier v t
+        (TVar v, s) | notVarInType v s -> updateTVar v s
+        (t, TVar v) | notVarInType v t -> updateTVar v t
         (SymType (FunType t1 t2), SymType (FunType s1 s2)) -> do
             unify (t1, s1)
             unify (t2, s2)

@@ -276,5 +276,7 @@ instance NameDef Def where
 instance NameDef Param where
   ide (Param i _)        = i
   ide (TypedParam i _ _) = i
+instance NameDef TDef where
+  ide (TDef i _ _) = i
 instance NameDef Constr where
   ide (Constr i _ _) = i

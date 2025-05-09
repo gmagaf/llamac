@@ -1,5 +1,8 @@
-module Common.SymbolTable (SymbolTable,
+module Common.SymbolTable (SymbolTable(..),
+                           NameSpace,
+                           TypeSpace,
                            TableEntry(..),
+                           TypeTableEntry(..),
                            typeToSymbolType,
                            emptySymbolTable,
                            query,
@@ -56,10 +59,16 @@ closeScope (Context scopes) = Context s where
 
 
 -- Definitions for symbol table and table entries
-type SymbolTable = Context String TableEntry
+type NameSpace = Context String TableEntry
+type TypeSpace = Context String TypeTableEntry
+data SymbolTable = SymbolTable {
+    names :: NameSpace,
+    types :: TypeSpace
+    }
+    deriving Show
 
 emptySymbolTable :: SymbolTable
-emptySymbolTable = emptyContext
+emptySymbolTable = SymbolTable {names = emptyContext, types = emptyContext}
 
 varTypeKey :: Int -> String
 varTypeKey v = pretty (TVar v)
@@ -69,8 +78,11 @@ data TableEntry
     | ArrayEntry SymbolType Int                   -- Type of the entries, num of dimensions
     | FunEntry TypeScheme [Identifier]            -- TypeScheme of the function, params
     | ParamEntry SymbolType Identifier            -- Type of the param, function of the param
-    | TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
     | ConstrEntry ConstType [ConstType] ConstType -- Type of constructor, params, output type
+        deriving Show
+
+data TypeTableEntry
+    = TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
     | TVarEntry SymbolType                        -- This is the principal type of the most general unifier
         deriving Show
 
@@ -87,18 +99,21 @@ instance Pretty TableEntry where
             "Fun of type: " ++ pretty funType ++ " with params: " ++ intercalate ", " params
         ParamEntry t f ->
             "Param of type: " ++ pretty t ++ " of function " ++ f
+        ConstrEntry constrType [] outputType ->
+            "Constr of " ++ pretty outputType ++
+            " with type: " ++ pretty constrType
+        ConstrEntry constrType ts outputType ->
+            "Constr of " ++ pretty outputType ++
+            " with type: " ++ pretty constrType ++
+            " with params: (" ++ intercalate ", " (map pretty ts) ++ ")"
+
+instance Pretty TypeTableEntry where
+    pretty entry = case entry of
         TypeEntry constrs ->
             "Type with constrs: " ++ cs where
                 f (c, []) = c
                 f (c, ps) = c ++ " of " ++ unwords (map pretty ps)
                 cs = intercalate ", " (map f constrs)
-        ConstrEntry constrType [] outputType ->
-            "Constr of " ++ pretty outputType ++
-            " with type: " ++ pretty constrType
-        ConstrEntry constrType types outputType ->
-            "Constr of " ++ pretty outputType ++
-            " with type: " ++ pretty constrType ++
-            " with params: (" ++ intercalate ", " (map pretty types) ++ ")"
         TVarEntry t -> "Type Var unified to: " ++ pretty t
 
 instance (Show k, Pretty e) => Pretty (Context k e) where
@@ -122,3 +137,10 @@ instance (Show k, Pretty e) => Pretty (Context k e) where
             scopesTables = map printScope strings
             scps = concat scopesTables
         in printLine line ("Keys", "Entries") ++ scps ++ line
+
+instance Pretty SymbolTable where
+    pretty (SymbolTable {names = n, types = t}) =
+        "Types Namespace\n" ++
+        pretty t ++
+        "Names Namespace\n" ++
+        pretty n

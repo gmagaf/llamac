@@ -8,13 +8,14 @@ import Control.Monad (when, (>=>))
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST
-import Common.SymbolTable (TableEntry (..))
+import Common.SymbolTable
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser)
 import Parser.ParserState (SemanticState(varTypeC, posnOfSem))
 import Semantics.Utils
 import Semantics.Unifier
 import Common.SymbolType
+import Common.PrintAST
 
 -- This module contains the semantic analysis of the nodes
 -- and decorates them with the semantic tag
@@ -49,8 +50,7 @@ analyzeAST (Right tDef : ast) = (:) . Right <$> sem tDef <*> analyzeAST ast
 -- Semantic analysis of type definitions
 instance Analyzable TypeDef where
     sem (TypeDef tDefs p) =
-        let typeName (TDef name _ _) = name
-            typesInDef = foldl (\acc tDef -> typeName tDef : acc) [] tDefs
+        let typesInDef = foldl (\acc tDef -> ide tDef : acc) [] tDefs
         in do
             openScopeInTable
             mapM_ (insertTypeDef typesInDef) tDefs
@@ -62,7 +62,7 @@ insertTypeDef typesInDef (TDef tId cs p) =
     let typesInDefSet :: Set.Set Identifier
         typesInDefSet = Set.fromList typesInDef
         constrNames :: [ConstrIdentifier]
-        constrNames = map (\(Constr c _ _) -> c) cs
+        constrNames = map ide cs
         checkDuplicateConstrs :: Parser ()
         checkDuplicateConstrs = when (hasDuplicates constrNames) $
             throwSemAtPosn ("Type " ++ tId ++ " cannot have duplicate constructors")  p
@@ -83,7 +83,7 @@ insertTypeDef typesInDef (TDef tId cs p) =
     in do
         checkDuplicateConstrs
         constrs <- mapM checkConstrParams cs
-        insertSymbols tId (TypeEntry constrs)
+        insertType tId (TypeEntry constrs)
 
 semTDef :: TDef AlexPosn -> Parser (TDef SemanticTag)
 semTDef (TDef tId cs p) = do
@@ -95,7 +95,7 @@ semConstr tId (Constr cId params p) = do
     semParams <- mapM sem params
     let paramTypes = map typeToConstType semParams
     let typeOfConstr = paramsToConstFunType paramTypes outputType
-    insertSymbols cId (ConstrEntry typeOfConstr paramTypes outputType)
+    insertName cId (ConstrEntry typeOfConstr paramTypes outputType)
     return $ Constr cId semParams SemTag{posn = p, symType = Nothing} where
         outputType = ConstType $ UserDefinedType tId
 
@@ -130,7 +130,7 @@ instance Analyzable LetDef where
         let semDefs = map fst preSems
         let defEntries = map snd preSems
         putSemPosn p
-        mapM_ (uncurry insertSymbols) defEntries
+        mapM_ (uncurry insertName) defEntries
         return $ Let semDefs SemTag{posn = p, symType = Nothing}
     sem (LetRec _ _) = undefined
 
@@ -169,16 +169,16 @@ preSemDef (FunDef i ps e p) = do
     putSemPosn p
     openScopeInTable
     semPs <- mapM (semParam i) ps
-    semExpr <- sem e
-    outType <- (getExprType >=> resolveType) semExpr -- Is this needed??
+    se <- sem e
+    outT <- (getExprType >=> resolveType) se -- Is this needed??
     paramTypes <- mapM (getExprType >=> resolveType) semPs
-    let fType = paramsToFunType paramTypes outType
+    let fType = paramsToFunType paramTypes outT
     rft <- resolveType fType
     closeScopeInTable
     scheme <- gen rft
     let paramNames = map ide ps
     let entry = (i, FunEntry scheme paramNames)
-    let semDef = FunDef i semPs semExpr SemTag{posn = p, symType = Nothing}
+    let semDef = FunDef i semPs se SemTag{posn = p, symType = Nothing}
     return (semDef, entry)
 preSemDef _ = undefined
 
@@ -187,12 +187,12 @@ semParam fun (TypedParam param t p) = do
     putSemPosn p
     semT <- sem t
     let st = typeToSymbolType t
-    insertSymbols param (ParamEntry st fun)
+    insertName param (ParamEntry st fun)
     return $ TypedParam param semT SemTag{posn = p, symType = Just st}
 semParam fun (Param param p) = do
     putSemPosn p
     vt <- freshTVar
-    insertSymbols param (ParamEntry vt fun)
+    insertName param (ParamEntry vt fun)
     return $ Param param SemTag{posn = p, symType = Just vt}
 
 getExprType :: Node n => n SemanticTag -> Parser SymbolType
@@ -227,12 +227,33 @@ semE (StringCExpr c) = retE (StringCExpr c) (SymType (ArrayType 1 (SymType CharT
 semE TrueCExpr       = retE TrueCExpr (SymType BoolType)
 semE FalseCExpr      = retE FalseCExpr (SymType BoolType)
 semE UnitCExpr       = retE UnitCExpr (SymType UnitType)
-semE fa@(FunAppExpr i es) = do
-    entry <- findSymbols i
+semE (ConstExpr i) = do
+    entry <- findName i
     case entry of
-        MutableEntry t
-            | null es -> retE fa t
-            | otherwise -> throwSem $ "Cannot apply arguments to the mutable variable " ++ i
+        FunEntry ft _ -> do
+            t <- inst ft
+            retE (ConstExpr i) t
+        ParamEntry t _ -> do
+            rt <- resolveType t
+            retE (ConstExpr i) rt
+        MutableEntry t -> do
+            rt <- resolveType t
+            retE (ConstExpr i) rt
+        ArrayEntry t _ -> do
+            rt <- resolveType t
+            retE (ConstExpr i) rt
+        ConstrEntry {} -> undefined
+semE (ConstConstrExpr i) = do
+    entry <- findName i
+    case entry of
+        FunEntry _ _ -> undefined
+        ParamEntry _ _ -> undefined
+        MutableEntry _ -> undefined
+        ArrayEntry _ _ -> undefined
+        ConstrEntry t _ _ -> retE (ConstExpr i) (constTypeToSymbolType t)
+semE (FunAppExpr i es) = do
+    entry <- findName i
+    case entry of
         FunEntry ft ps ->
             -- need to make sure that if there are no args then the type of the function is returned
             case compare (length es) (length ps) of
@@ -255,12 +276,16 @@ semE fa@(FunAppExpr i es) = do
             unify (t, paramsToFunType ts v) -- Need to make sure that if the param is function is applied to all args
             res <- mapM resolveExpr es
             rv <- resolveType v
-            retE (FunAppExpr i res) rv
-        TypeEntry _       -> throwSem $ "Cannot apply arguments to type " ++ i
-        ConstrEntry {}    -> throwSem $ "Cannot apply function arguments to constr " ++ i
-        TVarEntry _       -> throwSem $ "Cannot apply arguments to type variable " ++ i
+            rt <- resolveType t
+            let argTypes = funTypeToArgTypes rt
+            case compare (length es) (length argTypes) of
+                LT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty t ++ " is applied to too few arguments"
+                GT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty t ++ " is applied to too many arguments"
+                EQ -> retE (FunAppExpr i res) rv
+        MutableEntry _    -> throwSem $ "Cannot apply arguments to the mutable variable " ++ i
         ArrayEntry _ _    -> throwSem $ "Cannot apply arguments to array " ++ i
-semE e@(ArrayDim i dim) = findSymbols i >>= run where
+        ConstrEntry {}    -> throwSem $ "Cannot apply function arguments to constr " ++ i
+semE e@(ArrayDim i dim) = findName i >>= run where
     run (ArrayEntry _ dims)
       | dim < 1 = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of array " ++ i
       | dims < dim = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of " ++ show dims ++ "-dim array " ++ i

@@ -78,13 +78,13 @@ instance Pretty (TypeDef b) where
     prettySepList ("\n" ++ pretty T_and ++ "  ") tDefs
 
 instance Pretty (TDef b) where
-  pretty (TDef ide constrs _) = prettyId ide . showString " " .
+  pretty (TDef i constrs _) = prettyId i . showString " " .
     showPretty T_equals . showString " " $
     prettySepList (" " ++ pretty T_bar ++ " ") constrs
 
 instance Pretty (Constr b) where
-  pretty (Constr ide [] _) = prettyConstrId ide ""
-  pretty (Constr ide ts _) = prettyConstrId ide . showString " " .
+  pretty (Constr i [] _) = prettyConstrId i ""
+  pretty (Constr i ts _) = prettyConstrId i . showString " " .
     showPretty T_of . showString " " $ prettySepList " " ts
 
 instance Pretty (Type b) where
@@ -105,7 +105,7 @@ instance Pretty t => Pretty (TypeF t) where
       CharType -> showPretty T_char
       BoolType -> showPretty T_bool
       FloatType -> showPretty T_float
-      UserDefinedType ide -> prettyId ide
+      UserDefinedType i -> prettyId i
       RefType u -> showParen (always || d > ref_prec) $
             prettyPrec (ref_prec + 1) u .
             showString " " .

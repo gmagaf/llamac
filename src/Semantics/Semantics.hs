@@ -161,7 +161,7 @@ preSemDef (FunDefTyped i ps t e p) = do
     putSemPosn p
     unify (typeToSymbolType semT, fT)
     closeScopeInTable
-    let paramNames = map paramName ps
+    let paramNames = map ide ps
     let entry = (i, FunEntry (MonoType $ typeToSymbolType t) paramNames)
     let semDef = FunDefTyped i semPs semT se SemTag{posn = p, symType = Nothing}
     return (semDef, entry)
@@ -176,7 +176,7 @@ preSemDef (FunDef i ps e p) = do
     rft <- resolveType fType
     closeScopeInTable
     scheme <- gen rft
-    let paramNames = map paramName ps
+    let paramNames = map ide ps
     let entry = (i, FunEntry scheme paramNames)
     let semDef = FunDef i semPs semExpr SemTag{posn = p, symType = Nothing}
     return (semDef, entry)

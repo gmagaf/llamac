@@ -9,8 +9,11 @@ import Common.Token (Identifier,
                      StringConstant)
 
 -- Utils for nodes
-class Node f where
-  tag :: f b -> b
+class Node n where
+  tag :: n b -> b
+
+class Node n => NameDef n where
+  ide :: n b -> String
 
 -- Definitions of all the ASTs of Llama
 
@@ -20,9 +23,6 @@ type AST t = [Either (LetDef t) (TypeDef t)]
 data LetDef b = Let [Def b] b
               | LetRec [Def b] b
   deriving (Eq, Show, Functor)
-instance Node LetDef where
-  tag (Let _ b)    = b
-  tag (LetRec _ b) = b
 
 data Def b = FunDef Identifier [Param b] (Expr b) b
            | FunDefTyped Identifier [Param b] (Type b) (Expr b) b
@@ -31,53 +31,23 @@ data Def b = FunDef Identifier [Param b] (Expr b) b
            | ArrayDef Identifier [Expr b] b
            | ArrayDefTyped Identifier [Expr b] (Type b) b
   deriving (Eq, Show, Functor)
-instance Node Def where
-  tag (FunDef _ _ _ b)        = b
-  tag (FunDefTyped _ _ _ _ b) = b
-  tag (VarDef _ b)            = b
-  tag (VarDefTyped _ _ b)     = b
-  tag (ArrayDef _ _ b)        = b
-  tag (ArrayDefTyped _ _ _ b) = b
-
-identifier :: Def b -> Identifier
-identifier (FunDef i _ _ _)        = i
-identifier (FunDefTyped i _ _ _ _) = i
-identifier (VarDef i _)            = i
-identifier (VarDefTyped i _ _)     = i
-identifier (ArrayDef i _ _)        = i
-identifier (ArrayDefTyped i _ _ _) = i
 
 data Param b = Param Identifier b
              | TypedParam Identifier (Type b) b
   deriving (Eq, Show, Functor)
-instance Node Param where
-  tag (Param _ b)        = b
-  tag (TypedParam _ _ b) = b
-
-paramName :: Param b -> Identifier
-paramName (Param i _)        = i
-paramName (TypedParam i _ _) = i
 
 -- Types
 data TypeDef b = TypeDef [TDef b] b
   deriving (Eq, Show, Functor)
-instance Node TypeDef where
-  tag (TypeDef _ b) = b
 
 data TDef b = TDef Identifier [Constr b] b
   deriving (Eq, Show, Functor)
-instance Node TDef where
-  tag (TDef _ _ b) = b
 
 data Constr b = Constr ConstrIdentifier [Type b] b
   deriving (Eq, Show, Functor)
-instance Node Constr where
-  tag (Constr _ _ b) = b
 
 data Type b = Type (TypeF (Type b)) b
   deriving (Eq, Show, Functor)
-instance Node Type where
-  tag (Type _ b) = b
 
 data TypeF t = UnitType | IntType | CharType | BoolType | FloatType
              | FunType t t
@@ -89,8 +59,6 @@ data TypeF t = UnitType | IntType | CharType | BoolType | FloatType
 -- Expressions
 data Expr b = Expr (ExprF b (Expr b)) b
   deriving (Eq, Show)
-instance Node Expr where
-  tag (Expr _ b) = b
 
 instance Functor Expr where
   fmap f (Expr ef b) = Expr (fmapExprF (fmap f) (fmap f) (fmap f) (fmap f) ef) (f b)
@@ -137,16 +105,12 @@ data BinOp = PlusOp | MinusOp | TimesOp | DivOp
 
 data Clause b = Match (Pattern b) (Expr b) b
   deriving (Eq, Show, Functor)
-instance Node Clause where
-  tag (Match _ _ b) = b
 
 data PatternSign = NoSign | Plus | Minus
   deriving (Eq, Show)
 
 data Pattern b = Pattern (PatternF (Pattern b)) b
   deriving (Eq, Show, Functor)
-instance Node Pattern where
-  tag (Pattern _ b) = b
 
 data PatternF p = IntConstPattern PatternSign IntConstant
              | FloatConstPattern PatternSign FloatConstant
@@ -263,3 +227,46 @@ mapMExprF :: Monad m =>
          -> (e -> m e')
          -> ExprF b e -> m (ExprF a e')
 mapMExprF = traverseExprF
+
+
+-- Instantiations of the node classes
+instance Node LetDef where
+  tag (Let _ b)    = b
+  tag (LetRec _ b) = b
+instance Node Def where
+  tag (FunDef _ _ _ b)        = b
+  tag (FunDefTyped _ _ _ _ b) = b
+  tag (VarDef _ b)            = b
+  tag (VarDefTyped _ _ b)     = b
+  tag (ArrayDef _ _ b)        = b
+  tag (ArrayDefTyped _ _ _ b) = b
+instance Node Param where
+  tag (Param _ b)        = b
+  tag (TypedParam _ _ b) = b
+instance Node TypeDef where
+  tag (TypeDef _ b) = b
+instance Node TDef where
+  tag (TDef _ _ b) = b
+instance Node Constr where
+  tag (Constr _ _ b) = b
+instance Node Type where
+  tag (Type _ b) = b
+instance Node Expr where
+  tag (Expr _ b) = b
+instance Node Clause where
+  tag (Match _ _ b) = b
+instance Node Pattern where
+  tag (Pattern _ b) = b
+
+instance NameDef Def where
+  ide (FunDef i _ _ _)        = i
+  ide (FunDefTyped i _ _ _ _) = i
+  ide (VarDef i _)            = i
+  ide (VarDefTyped i _ _)     = i
+  ide (ArrayDef i _ _)        = i
+  ide (ArrayDefTyped i _ _ _) = i
+instance NameDef Param where
+  ide (Param i _)        = i
+  ide (TypedParam i _ _) = i
+instance NameDef Constr where
+  ide (Constr i _ _) = i

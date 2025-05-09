@@ -115,21 +115,27 @@ P :: { AlexPosn }
   : {- empty -}                     {% getTokenPosn }
 
 LetDef :: { LetDef AlexPosn }
-  : P let Defs                      { Let (reverse $3) $1 }
-  | P let rec Defs                  { LetRec (reverse $4) $1 }
+  : P LetDef_                       { $2 $1 }
+
+LetDef_ :: { AlexPosn -> LetDef AlexPosn }
+  : let Defs                        { Let (reverse $2) }
+  | let rec Defs                    { LetRec (reverse $3) }
 
 Defs :: { [Def AlexPosn] }
   : Def                             { $1 : [] }
   | Defs and Def                    { $3 : $1 }
 
 Def :: { Def AlexPosn }
-  : P id Params '=' Expr            { FunDef $2 (reverse $3) $5 $1 }
-  | P id Params ':' Type '=' Expr   { FunDefTyped $2 (reverse $3) $5 $7 $1 }
-  | P mutable id                    { VarDef $3 $1 }
-  | P mutable id ':' Type           { VarDefTyped $3 $5 $1 }
-  | P mutable id '[' ExprsComma ']' { ArrayDef $3 (reverse $5) $1 }
-  | P mutable id '[' ExprsComma ']' ':' Type
-                                    { ArrayDefTyped $3 (reverse $5) $8 $1 }
+  : P Def_                          { $2 $1 }
+
+Def_ :: { AlexPosn -> Def AlexPosn }
+  : id Params '=' Expr              { FunDef $1 (reverse $2) $4 }
+  | id Params ':' Type '=' Expr     { FunDefTyped $1 (reverse $2) $4 $6 }
+  | mutable id                      { VarDef $2 }
+  | mutable id ':' Type             { VarDefTyped $2 $4 }
+  | mutable id '[' ExprsComma ']'   { ArrayDef $2 (reverse $4) }
+  | mutable id '[' ExprsComma ']' ':' Type
+                                    { ArrayDefTyped $2 (reverse $4) $7 }
 
 Params :: { [Param AlexPosn] }
   : {- empty -}                     { [] }
@@ -140,38 +146,53 @@ ExprsComma :: { [Expr AlexPosn] }
   | ExprsComma ',' Expr             { $3 : $1 }
 
 TypeDef :: { TypeDef AlexPosn }
-  : P type TDefs                    { TypeDef (reverse $3) $1 }
+  : P TypeDef_                      { $2 $1 }
+
+TypeDef_ :: { AlexPosn -> TypeDef AlexPosn }
+  : type TDefs                      { TypeDef (reverse $2) }
 
 TDefs :: { [TDef AlexPosn] }
   : TDef                            { $1 : [] }
   | TDefs and TDef                  { $3 : $1 }
 
 TDef :: { TDef AlexPosn }
-  : P id '=' Constrs                { TDef $2 (reverse $4) $1 }
+  : P TDef_                         { $2 $1 }
+
+TDef_ :: { AlexPosn -> TDef AlexPosn }
+  : id '=' Constrs                  { TDef $1 (reverse $3) }
 
 Constrs :: { [Constr AlexPosn] }
   : Constr                          { $1 : [] }
   | Constrs '|' Constr              { $3 : $1 }
 
 Constr :: { Constr AlexPosn }
-  : P id_constr                     { Constr $2 [] $1 }
-  | P id_constr of Types            { Constr $2 (reverse $4) $1 }
+  : P Constr_                       { $2 $1 }
+
+Constr_ :: { AlexPosn -> Constr AlexPosn }
+  : id_constr                       { Constr $1 [] }
+  | id_constr of Types              { Constr $1 (reverse $3) }
 
 Types :: { [Type AlexPosn] }
   : Type                            { $1 : [] }
   | Types Type                      { $2 : $1 }
 
 Param :: { Param AlexPosn }
-  : P id                            { Param $2 $1 }
-  | P '(' id ':' Type ')'           { TypedParam $3 $5 $1 }
+  : P Param_                        { $2 $1 }
+
+Param_ :: { AlexPosn -> Param AlexPosn }
+  : id                              { Param $1 }
+  | '(' id ':' Type ')'             { TypedParam $2 $4 }
 
 Type :: { Type AlexPosn }
   : ArrayType '->' Type             { Type (FunType $1 $3) (tag $1) }
   | ArrayType                       { $1 }
 
 ArrayType :: { Type AlexPosn }
-  : P array Dims of ArrayType       { Type (ArrayType $3 $5) $1 }
+  : P ArrayType_                    { $2 $1 }
   | RefType                         { $1 }
+
+ArrayType_ :: { AlexPosn -> Type AlexPosn }
+  : array Dims of ArrayType         { Type (ArrayType $2 $4) }
 
 Dims :: { Int }
   : {- empty -}                     { 1 }
@@ -186,13 +207,16 @@ RefType :: { Type AlexPosn }
   | BaseType                        { $1 }
 
 BaseType :: { Type AlexPosn }
-  : P unit                          { Type UnitType $1 }
-  | P int                           { Type IntType $1 }
-  | P char                          { Type CharType $1 }
-  | P bool                          { Type BoolType $1 }
-  | P float                         { Type FloatType $1 }
-  | P id                            { Type (UserDefinedType $2) $1 }
-  | '(' Type ')'                    { $2 }
+  : P BaseType_                     { $2 $1 }
+
+BaseType_ :: { AlexPosn -> Type AlexPosn }
+  : unit                            { Type UnitType }
+  | int                             { Type IntType }
+  | char                            { Type CharType }
+  | bool                            { Type BoolType }
+  | float                           { Type FloatType }
+  | id                              { Type (UserDefinedType $1) }
+  | '(' Type ')'                    { const $2 }
 
 Expr :: { Expr AlexPosn }
   : LetExpr                         { $1 }
@@ -214,10 +238,13 @@ LetIfExpr :: { Expr AlexPosn }
   | IfExpr                          { $1 }
 
 IfExpr :: { Expr AlexPosn } -- Cannot have semicolon in last Expr
-  : P if Expr then LetIfExpr        { Expr (IfThenExpr $3 $5) $1 }
-  | P if Expr then LetIfExpr else LetIfExpr
-                                    { Expr (IfThenElseExpr $3 $5 $7) $1 }
+  : P IfExpr_                       { $2 $1 }
   | LogicalExpr                     { $1 }
+
+IfExpr_ :: { AlexPosn -> Expr AlexPosn }
+  : if Expr then LetIfExpr          { Expr (IfThenExpr $2 $4) }
+  | if Expr then LetIfExpr else LetIfExpr
+                                    { Expr (IfThenElseExpr $2 $4 $6) }
 
 LogicalExpr :: { Expr AlexPosn }
   : LogicalExpr ':=' LogicalExpr    { Expr (BinOpExpr AssignMutableOp $1 $3) (tag $1) }
@@ -247,55 +274,73 @@ ArithmExpr :: { Expr AlexPosn }
   | UnOpExpr                        { $1 }
 
 UnOpExpr :: { Expr AlexPosn }
-  : P '+' UnOpExpr                  { Expr (UnOpExpr PlusUnOp $3) $1 }
-  | P '-' UnOpExpr                  { Expr (UnOpExpr MinusUnOp $3) $1 }
-  | P '+.' UnOpExpr                 { Expr (UnOpExpr PlusFloatUnOp $3) $1 }
-  | P '-.' UnOpExpr                 { Expr (UnOpExpr MinusFloatUnOp $3) $1 }
-  | P not UnOpExpr                  { Expr (UnOpExpr NotOp $3) $1 }
-  | P delete UnOpExpr               { Expr (DeleteExpr $3) $1 }
-  | P dim id                        { Expr (ArrayDim $3 1) $1 }
-  | P dim const_int id              { Expr (ArrayDim $4 $3) $1 }
+  : P UnOpExpr_                     { $2 $1 }
   | FunAppExpr                      { $1 }
 
+UnOpExpr_ :: { AlexPosn -> Expr AlexPosn }
+  : '+' UnOpExpr                    { Expr (UnOpExpr PlusUnOp $2) }
+  | '-' UnOpExpr                    { Expr (UnOpExpr MinusUnOp $2) }
+  | '+.' UnOpExpr                   { Expr (UnOpExpr PlusFloatUnOp $2) }
+  | '-.' UnOpExpr                   { Expr (UnOpExpr MinusFloatUnOp $2) }
+  | not UnOpExpr                    { Expr (UnOpExpr NotOp $2) }
+  | delete UnOpExpr                 { Expr (DeleteExpr $2) }
+  | dim id                          { Expr (ArrayDim $2 1) }
+  | dim const_int id                { Expr (ArrayDim $3 $2) }
+
 FunAppExpr :: { Expr AlexPosn }
-  : P id Args                       { Expr (FunAppExpr $2 (reverse $3)) $1 }
-  | P id_constr Args                { Expr (ConstrAppExpr $2 (reverse $3)) $1 }
+  : P FunAppExpr_                   { $2 $1 }
   | DerefExp                        { $1 }
+
+FunAppExpr_ :: { AlexPosn -> Expr AlexPosn }
+  : id Args                         { Expr (FunAppExpr $1 (reverse $2)) }
+  | id_constr Args                  { Expr (ConstrAppExpr $1 (reverse $2)) }
 
 Args :: { [Expr AlexPosn] }
   : DerefExp                        { $1 : [] }
   | Args DerefExp                   { $2 : $1 }
 
 DerefExp :: { Expr AlexPosn }
-  : P '!' DerefExp                  { Expr (UnOpExpr BangOp $3) $1 }
+  : P DerefExp_                     { $2 $1 }
   | ArrayExpr                       { $1 }
 
+DerefExp_ :: { AlexPosn -> Expr AlexPosn }
+  : '!' DerefExp                    { Expr (UnOpExpr BangOp $2) }
+
 ArrayExpr :: { Expr AlexPosn }
-  : P id '[' ExprsComma ']'         { Expr (ArrayAccess $2 (reverse $4)) $1 }
+  : P ArrayExpr_                    { $2 $1 }
   | NewTExpr                        { $1 }
 
+ArrayExpr_ :: { AlexPosn -> Expr AlexPosn }
+  : id '[' ExprsComma ']'           { Expr (ArrayAccess $1 (reverse $3)) }
+
 NewTExpr :: { Expr AlexPosn }
-  : P new Type                      { Expr (NewType $3) $1 }
+  : P NewTExpr_                     { $2 $1 }
   | BaseExpr                        { $1 }
 
+NewTExpr_ :: { AlexPosn -> Expr AlexPosn }
+  : new Type                        { Expr (NewType $2) }
+
 BaseExpr :: { Expr AlexPosn }
-  : P const_int                     { Expr (IntCExpr $2) $1 }
-  | P const_float                   { Expr (FloatCExpr $2) $1 }
-  | P const_char                    { Expr (CharCExpr $2) $1 }
-  | P const_string                  { Expr (StringCExpr $2) $1 }
-  | P true                          { Expr TrueCExpr $1 }
-  | P false                         { Expr FalseCExpr $1 }
-  | P '('')'                        { Expr UnitCExpr $1 }
-  | P id                            { Expr (FunAppExpr $2 []) $1 }
-  | P id_constr                     { Expr (ConstrAppExpr $2 []) $1 }
-  | P '(' Expr ')'                  { $3 }
-  | P begin Expr end                { Expr (BeginExpr $3) $1 }
-  | P while Expr do Expr done       { Expr (WhileExpr $3 $5) $1 }
-  | P for id '=' Expr to Expr do Expr done
-                                    { Expr (ForExpr $3 $5 $7 $9) $1 }
-  | P for id '=' Expr downto Expr do Expr done
-                                    { Expr (ForDownExpr $3 $5 $7 $9) $1 }
-  | P match Expr with Clauses end   { Expr (MatchExpr $3 (reverse $5)) $1 }
+  : P BaseExpr_                     { $2 $1 }
+
+BaseExpr_ :: { AlexPosn -> Expr AlexPosn }
+  : const_int                       { Expr (IntCExpr $1) }
+  | const_float                     { Expr (FloatCExpr $1) }
+  | const_char                      { Expr (CharCExpr $1) }
+  | const_string                    { Expr (StringCExpr $1) }
+  | true                            { Expr TrueCExpr }
+  | false                           { Expr FalseCExpr }
+  | '('')'                          { Expr UnitCExpr }
+  | id                              { Expr (FunAppExpr $1 []) }
+  | id_constr                       { Expr (ConstrAppExpr $1 []) }
+  | '(' Expr ')'                    { const $2 }
+  | begin Expr end                  { Expr (BeginExpr $2) }
+  | while Expr do Expr done         { Expr (WhileExpr $2 $4) }
+  | for id '=' Expr to Expr do Expr done
+                                    { Expr (ForExpr $2 $4 $6 $8) }
+  | for id '=' Expr downto Expr do Expr done
+                                    { Expr (ForDownExpr $2 $4 $6 $8) }
+  | match Expr with Clauses end     { Expr (MatchExpr $2 (reverse $4)) }
 
 Clauses :: { [Clause AlexPosn] }
   : Clause                          { $1 : [] }
@@ -305,26 +350,32 @@ Clause :: { Clause AlexPosn }
   : Pattern '->' Expr               { Match $1 $3 (tag $1) }
 
 Pattern :: { Pattern AlexPosn }
-  : P id_constr PatArgs             { Pattern (ConstrPattern $2 (reverse $3)) $1 }
+  : P Pattern_                      { $2 $1 }
   | PatArg                          { $1 }
+
+Pattern_ :: { AlexPosn -> Pattern AlexPosn }
+  : id_constr PatArgs               { Pattern (ConstrPattern $1 (reverse $2)) }
 
 PatArgs :: { [Pattern AlexPosn] }
   : PatArg                          { $1 : [] }
   | PatArgs PatArg                  { $2 : $1 }
 
 PatArg :: { Pattern AlexPosn }
-  : P const_int                     { Pattern (IntConstPattern NoSign $2) $1 }
-  | P '+' const_int                 { Pattern (IntConstPattern Plus $3) $1 }
-  | P '-' const_int                 { Pattern (IntConstPattern Minus $3) $1 }
-  | P const_float                   { Pattern (FloatConstPattern NoSign $2) $1 }
-  | P '+.' const_float              { Pattern (FloatConstPattern Plus $3) $1 }
-  | P '-.' const_float              { Pattern (FloatConstPattern Minus $3) $1 }
-  | P const_char                    { Pattern (CharConstPattern $2) $1 }
-  | P true                          { Pattern TruePattern $1 }
-  | P false                         { Pattern FalsePattern $1 }
-  | P id                            { Pattern (IdPattern $2) $1 }
-  | P id_constr                     { Pattern (ConstrPattern $2 []) $1 }
-  | '(' Pattern ')'                 { $2 }
+  : P PatArg_                       { $2 $1 }
+
+PatArg_ :: { AlexPosn -> Pattern AlexPosn }
+  : const_int                       { Pattern (IntConstPattern NoSign $1) }
+  | '+' const_int                   { Pattern (IntConstPattern Plus $2) }
+  | '-' const_int                   { Pattern (IntConstPattern Minus $2) }
+  | const_float                     { Pattern (FloatConstPattern NoSign $1) }
+  | '+.' const_float                { Pattern (FloatConstPattern Plus $2) }
+  | '-.' const_float                { Pattern (FloatConstPattern Minus $2) }
+  | const_char                      { Pattern (CharConstPattern $1) }
+  | true                            { Pattern TruePattern }
+  | false                           { Pattern FalsePattern }
+  | id                              { Pattern (IdPattern $1) }
+  | id_constr                       { Pattern (ConstrPattern $1 []) }
+  | '(' Pattern ')'                 { const $2 }
 
 {
 -- Handle errors

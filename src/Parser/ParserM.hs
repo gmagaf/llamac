@@ -2,7 +2,8 @@ module Parser.ParserM (Parser,
                        getAlexPos, getTokenPosn,
                        getSymbols, putSymbols,
                        getSemState, putSemState,
-                       Error, throwError, throwParsingError, throwSemanticError,
+                       Error, throwError, throwInternalError,
+                       throwParsingError, throwSemanticError,
                        runParser, parseString, evalParser,
                        lexerWrap) where
 
@@ -19,6 +20,7 @@ import Parser.ParserState (ParserState(..), SemanticState, initParserState)
 
 -- The compiler's errors
 data Error = Error String
+           | InternalError String
            | LexicalError String
            | ParsingError String
            | SemanticError String
@@ -26,6 +28,8 @@ data Error = Error String
 
 instance Show Error where
   show (Error s)          = s
+  show (InternalError s)  = "Internal Compiler Error" ++ s ++
+    ". If you see this error please contact the maintainers"
   show (LexicalError s)   = "Lexical Error: " ++ s
   show (ParsingError s)   = "Parser Error: " ++ s
   show (SemanticError s)  = "Semantic Error: " ++ s
@@ -86,6 +90,9 @@ parseString m s = runParser initState m where
 -- Utils for error handling
 throwError :: String -> Parser a
 throwError = throwE . Error
+
+throwInternalError :: String -> Parser a
+throwInternalError = throwE . InternalError
 
 throwLexicalError :: String -> Parser a
 throwLexicalError = throwE . LexicalError

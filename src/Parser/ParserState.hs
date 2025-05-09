@@ -11,6 +11,13 @@ data ParserState = ParserState
   , symbols      :: SymbolTable   -- compiler's symbol table
   }
 
+instance Show ParserState where
+  show s = "ParserState {" ++
+    "alex_state = _"
+    ++ ", " ++ "sem_state = " ++ show (sem_state s)
+    ++ ", " ++ "symbols = " ++ show (symbols s)
+    ++ "}"
+
 data SemanticState = SemanticState
   { varTypeC     :: Int      -- a counter to the var types used
   , posnOfSem    :: AlexPosn -- a posn to the current place of analysis, used for error messages

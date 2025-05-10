@@ -31,6 +31,9 @@ data SemanticTag = SemTag {
                     }
     deriving Show
 
+cpPosn :: AlexPosn -> SemanticTag
+cpPosn p = SemTag {posn = p, symType = Nothing}
+
 -- Functions for dealing with the Semantic state of the parser
 getNames :: Parser NameSpace
 getNames = names <$> getSymbols

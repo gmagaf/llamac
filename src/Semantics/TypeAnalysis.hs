@@ -26,7 +26,7 @@ analyzeTypeDef (TypeDef tDefs p) =
         openScopeInTable
         mapM_ (insertTypeDef typeNames) tDefs
         semTDefs <- mapM analyzeTDef tDefs
-        return $ TypeDef semTDefs SemTag{posn = p, symType = Nothing}
+        return $ TypeDef semTDefs (cpPosn p)
 
 insertTypeDef :: Set.Set Identifier -> TDef AlexPosn -> Parser ()
 insertTypeDef typesInDef (TDef tId cs p) =
@@ -57,7 +57,7 @@ insertTypeDef typesInDef (TDef tId cs p) =
 analyzeTDef :: TDef AlexPosn -> Parser (TDef SemanticTag)
 analyzeTDef (TDef tId cs p) = do
     semCs <- mapM (analyzeConstr tId) cs
-    return $ TDef tId semCs SemTag{posn = p, symType = Nothing}
+    return $ TDef tId semCs (cpPosn p)
 
 analyzeConstr :: Identifier -> Constr AlexPosn -> Parser (Constr SemanticTag)
 analyzeConstr tId (Constr cId params p) = do
@@ -66,7 +66,7 @@ analyzeConstr tId (Constr cId params p) = do
     let outputType = ConstType $ UserDefinedType tId
     let typeOfConstr = paramsToConstFunType paramTypes outputType
     insertName cId (ConstrEntry typeOfConstr paramTypes outputType)
-    return $ Constr cId semParams SemTag{posn = p, symType = Nothing}
+    return $ Constr cId semParams (cpPosn p)
 
 recSemType :: (TypeF (Type SemanticTag) -> Parser (Type SemanticTag))
     -> Type AlexPosn
@@ -82,8 +82,5 @@ analyzeType = recSemType aType where
     aType (ArrayType dim _) | dim < 1 = throwSem "Dimension of array type can't be less than 1"
     aType (UserDefinedType t) = do
         checkTypeInScope t
-        p <- getSemPosn
-        return $ Type (UserDefinedType t) SemTag{posn = p, symType = Nothing}
-    aType tf = do
-        p <- getSemPosn
-        return $ Type tf SemTag{posn = p, symType = Nothing}
+        Type (UserDefinedType t) . cpPosn <$> getSemPosn
+    aType tf = Type tf . cpPosn <$> getSemPosn

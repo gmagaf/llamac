@@ -36,6 +36,7 @@ library
                       Common.SymbolTable
                       Semantics.Semantics
                       Semantics.TypeAnalysis
+                      Semantics.ExprAnalysis
                       Semantics.Utils
                       Semantics.Unifier
   build-depends:      base >= 4.7 && < 5,

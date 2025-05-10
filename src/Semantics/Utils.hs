@@ -151,24 +151,25 @@ closeScopeInTypes = do
     symbols <- getTypes
     putTypes $ closeScope symbols
 
+openScopeInNames :: Parser ()
+openScopeInNames = do
+    symbols <- getNames
+    putNames $ openScope symbols
+
 openScopeInTable :: Parser ()
 openScopeInTable = do
     openScopeInNames
-    openScopeInTypes where
-        openScopeInNames :: Parser ()
-        openScopeInNames = do
-            symbols <- getNames
-            putNames $ openScope symbols
+    openScopeInTypes
 
+closeScopeInNames :: Parser ()
+closeScopeInNames = do
+    symbols <- getNames
+    putNames $ closeScope symbols
 
 closeScopeInTable :: Parser ()
 closeScopeInTable = do
     closeScopeInNames
-    closeScopeInTypes where
-        closeScopeInNames :: Parser ()
-        closeScopeInNames = do
-            symbols <- getNames
-            putNames $ closeScope symbols
+    closeScopeInTypes
 
 -- Other util functions
 hasDuplicates :: (Ord a) => [a] -> Bool

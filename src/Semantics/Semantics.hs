@@ -13,7 +13,7 @@ import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser)
 import Semantics.Utils
 import Semantics.Unifier
-import Semantics.TypeAnalysis
+import Semantics.TypeAnalysis (analyzeTypeDef, analyzeType)
 
 -- This module contains the semantic analysis of the nodes
 -- and decorates them with the semantic tag

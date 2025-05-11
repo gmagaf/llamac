@@ -6,9 +6,9 @@ import Common.AST (Expr, Type, TypeDef, LetDef, AST, Node(..))
 import Common.SymbolType (SymbolType)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser)
-import Semantics.Utils (SemanticTag(symType, posn), throwSemAtPosn)
+import Semantics.Utils (SemanticTag(..), TypeInfo (..), throwSemAtPosn)
 import Semantics.TypeAnalysis (analyzeTypeDef, analyzeType)
-import Semantics.ExprAnalysis (analyzeDef, analyzeExpr)
+import Semantics.ExprAnalysis (analyzeLet, analyzeExpr)
 
 -- This module contains the semantic analysis of the nodes
 -- and decorates them with the semantic tag
@@ -23,9 +23,9 @@ class Analyzable f => TypeAble f where
     infer :: f AlexPosn -> Parser SymbolType
     infer f = do
         tg <- semTag f
-        case symType tg of
-            Nothing -> throwSemAtPosn "Could not infer type of expr" (posn tg)
-            Just t  -> return t
+        case typeInfo tg of
+            NodeType t -> return t
+            _          -> throwSemAtPosn "Could not infer type of expr" (posn tg)
     typeCheck :: f AlexPosn -> SymbolType -> Parser Bool
     typeCheck f t = (t ==) <$> infer f
 
@@ -40,7 +40,7 @@ instance Analyzable TypeDef where
 instance Analyzable Type where
     sem = analyzeType
 instance Analyzable LetDef where
-    sem = analyzeDef
+    sem = analyzeLet
 instance Analyzable Expr where
     sem = analyzeExpr
 

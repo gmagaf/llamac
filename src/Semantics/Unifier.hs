@@ -1,13 +1,18 @@
-module Semantics.Unifier (inst, gen, resolveType, unify) where
+module Semantics.Unifier (bottom, inst, gen,
+                          resolveType, resolveTypeScheme,
+                          resolveNodeType, findResolve,
+                          unify) where
 
 import qualified Data.Set as Set
 
-import Common.AST (TypeF(..))
-import Common.SymbolTable (TypeTableEntry(TVarEntry), varTypeKey)
+import Common.AST (Node(..), TypeF(..))
+import Common.SymbolTable (TypeTableEntry(TVarEntry), TableEntry(..), varTypeKey)
 import Common.PrintAST (pretty)
 import Common.SymbolType (TypeScheme(..), SymbolType(..))
 import Parser.ParserM (Parser)
-import Semantics.Utils (throwSem, freshTVar, updateTVar, queryType, findTVar)
+import Semantics.Utils (SemanticTag(..), TypeInfo(..),
+    throwSemAtPosn, throwSem, freshTVar, updateTVar, queryType, findTVar,
+    openScopeInTable, closeScopeInTable, findName, updateName, getAndIncrTVarC)
 
 
 -- Recursion Utils
@@ -28,6 +33,12 @@ cataM alg@(f, _) (SymType t) = mapM (cataM alg) t >>= f
 cataM (_, g) (TVar v) = g v
 
 -- Type theoretic utils
+bottom :: Parser TypeScheme
+bottom = do
+    c <- getAndIncrTVarC
+    let vt = TVar c
+    return $ AbsType c (MonoType vt)
+
 subst :: Int -> SymbolType -> SymbolType -> SymbolType
 subst v t = bottomUp f where
     f :: SymbolType -> SymbolType
@@ -89,47 +100,50 @@ resolveType st@(TVar v) = do
         return rt
 resolveType (SymType tf) = SymType <$> mapM resolveType tf
 
--- resolveTypeScheme :: TypeScheme -> Parser TypeScheme
--- resolveTypeScheme s = do
---     openScopeInTable
---     t <- inst s
---     rt <- resolveType t
---     closeScopeInTable
---     gen rt
+resolveNodeType :: Node n => n SemanticTag -> Parser (n SemanticTag)
+resolveNodeType n = case typeInfo (tag n) of
+    NodeType t -> do
+        rt <- resolveType t
+        let mn = mapTag (\tg -> tg{typeInfo = NodeType rt}) n
+        return mn
+    _          -> do
+        let p = posn $ tag n
+        throwSemAtPosn "Unable to compute type of node" p
 
--- queryResolveAndRun :: String -> (TableEntry -> Parser a) -> Parser a
--- queryResolveAndRun k run = do
---     symbols <- getSymbols
---     case query k symbols of
---         Nothing -> throwSem ("Symbol " ++ k ++ " is not in scope")
---         Just entry -> case entry of
---             MutableEntry t -> do
---                 rt <- resolveType t
---                 let updated = MutableEntry rt
---                 updateSymbols k updated
---                 run updated
---             ArrayEntry t dim -> do
---                 rt <- resolveType t
---                 let updated = ArrayEntry rt dim
---                 updateSymbols k updated
---                 run updated
---             FunEntry scheme ps -> do
---                 rScheme <- resolveTypeScheme scheme
---                 let updated = FunEntry rScheme ps
---                 updateSymbols k updated
---                 run updated
---             ParamEntry t i -> do
---                 rt <- resolveType t
---                 let updated = ParamEntry rt i
---                 updateSymbols k updated
---                 run updated
---             TVarEntry t -> do
---                 rt <- resolveType t
---                 let updated = TVarEntry rt
---                 updateSymbols k updated
---                 run updated
---             -- constructors can not have var types (TypeEntry, ConstrEntry)
---             _ -> run entry
+resolveTypeScheme :: TypeScheme -> Parser TypeScheme
+resolveTypeScheme s = do
+    openScopeInTable
+    t <- inst s
+    rt <- resolveType t
+    closeScopeInTable
+    gen rt
+
+findResolve :: String -> Parser TableEntry
+findResolve k = do
+    entry <- findName k
+    case entry of
+        MutableEntry t -> do
+            rt <- resolveType t
+            let updated = MutableEntry rt
+            updateName k updated
+            return updated
+        ArrayEntry t dim -> do
+            rt <- resolveType t
+            let updated = ArrayEntry rt dim
+            updateName k updated
+            return updated
+        FunEntry scheme ps -> do
+            rScheme <- resolveTypeScheme scheme
+            let updated = FunEntry rScheme ps
+            updateName k updated
+            return updated
+        ParamEntry t i -> do
+            rt <- resolveType t
+            let updated = ParamEntry rt i
+            updateName k updated
+            return updated
+        -- constructors can not have var types
+        ConstrEntry {} -> return entry
 
 -- This function is used to unify two types
 -- Given a type constraint it extends the unifier

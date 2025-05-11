@@ -1,6 +1,6 @@
-module Semantics.ExprAnalysis(analyzeDef, analyzeExpr) where
+module Semantics.ExprAnalysis(analyzeLet, analyzeExpr) where
 
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), when)
 
 import Common.Token (Identifier)
 import Common.AST
@@ -12,105 +12,154 @@ import Parser.ParserM (Parser)
 import Semantics.Utils
 import Semantics.Unifier
 import Semantics.TypeAnalysis (analyzeType)
+import Debug.Trace (trace)
 
 -- Semantic analysis of definitions
 
-analyzeDef :: LetDef AlexPosn -> Parser (LetDef SemanticTag)
-analyzeDef (Let defs p) = do
-    preSems <- mapM preSemDef defs
+analyzeLet :: LetDef AlexPosn -> Parser (LetDef SemanticTag)
+analyzeLet (Let defs p) = do
+    openScopeInTable
+    preSems <- mapM preAnalyzeDef defs
+    let keyEntryPairs = map snd preSems
+    mapM_ (uncurry insertName) keyEntryPairs
     let semDefs = map fst preSems
-    let defEntries = map snd preSems
-    putSemPosn p
-    mapM_ (uncurry insertName) defEntries
-    return $ Let semDefs SemTag{posn = p, symType = Nothing}
-analyzeDef (LetRec _ _) = undefined
+    return $ Let semDefs (cpPosn p)
+analyzeLet (LetRec _ _) = undefined
 
-preSemDef :: Def AlexPosn -> Parser (Def SemanticTag, (Identifier, TableEntry))
-preSemDef (VarDef x p) = do
+preAnalyzeDef :: Def AlexPosn -> Parser (Def SemanticTag, (Identifier, TableEntry))
+preAnalyzeDef (VarDef x p) = do
     putSemPosn p
     tv <- freshTVar
     let varType = SymType . RefType $ tv
     let entry = (x, MutableEntry varType)
-    let semDef = VarDef x SemTag{posn = p, symType = Nothing}
+    let tg = SemTag{posn = p, typeInfo = DefType $ MonoType varType}
+    let semDef = VarDef x tg
     return (semDef, entry)
-preSemDef (VarDefTyped x t p) = do
+preAnalyzeDef (VarDefTyped x t p) = do
     putSemPosn p
     semT <- analyzeType t
     let varType = SymType . RefType $ typeToSymbolType semT
     let entry = (x, MutableEntry varType)
-    let semDef = VarDefTyped x semT SemTag{posn = p, symType = Nothing}
+    let tg = SemTag{posn = p, typeInfo = DefType $ MonoType varType}
+    let semDef = VarDefTyped x semT tg
     return (semDef, entry)
-preSemDef (FunDefTyped i ps t e p) = do
+preAnalyzeDef (ArrayDef i es p) = do
+    semEs <- mapM analyzeExpr es
+    typesEs <- mapM getNodeType semEs
     putSemPosn p
+    mapM_ (unify . (,) (SymType IntType)) typesEs
+    rSemEs <- mapM resolveNodeType semEs
+    let dims = length es
+    tv <- freshTVar
+    let arrayType = SymType . ArrayType dims $ tv
+    let entry = (i, ArrayEntry arrayType dims)
+    let tg = SemTag{posn = p, typeInfo = DefType $ MonoType arrayType}
+    let semDef = ArrayDef i rSemEs tg
+    return (semDef, entry)
+preAnalyzeDef (ArrayDefTyped i es t p) = do
+    semEs <- mapM analyzeExpr es
+    typesEs <- mapM getNodeType semEs
+    putSemPosn p
+    mapM_ (unify . (,) (SymType IntType)) typesEs
+    rSemEs <- mapM resolveNodeType semEs
+    let dims = length es
+    semT <- analyzeType t
+    let arrayType = SymType . ArrayType dims $ typeToSymbolType semT
+    let entry = (i, ArrayEntry arrayType dims)
+    let tg = SemTag{posn = p, typeInfo = DefType $ MonoType arrayType}
+    let semDef = ArrayDef i rSemEs tg
+    return (semDef, entry)
+preAnalyzeDef (FunDefTyped i ps t e p) = do
     semT <- analyzeType t
     openScopeInTable
-    semPs <- mapM (semParam i) ps
-    se <- analyzeExpr e
-    outT <- getExprType se
-    paramTypes <- mapM getExprType semPs
-    let fT = paramsToFunType paramTypes outT
+    semPs <- mapM (analyzeParam i) ps
+    semE <- analyzeExpr e
+    outT <- getNodeType semE
+    paramTypes <- mapM getNodeType semPs
+    let fType = paramsToFunType paramTypes outT
     putSemPosn p
-    unify (typeToSymbolType semT, fT)
+    unify (typeToSymbolType semT, fType)
+    rSemPs <- mapM resolveNodeType semPs
+    rSemE <- resolveNodeType semE
     closeScopeInTable
     let paramNames = map ide ps
-    let entry = (i, FunEntry (MonoType $ typeToSymbolType t) paramNames)
-    let semDef = FunDefTyped i semPs semT se SemTag{posn = p, symType = Nothing}
+    let scheme = MonoType $ typeToSymbolType t
+    let entry = (i, FunEntry scheme paramNames)
+    let tg = SemTag{posn = p, typeInfo = DefType scheme}
+    let semDef = FunDefTyped i rSemPs semT rSemE tg
     return (semDef, entry)
-preSemDef (FunDef i ps e p) = do
-    putSemPosn p
+preAnalyzeDef (FunDef i ps e p) = do
     openScopeInTable
-    semPs <- mapM (semParam i) ps
-    se <- analyzeExpr e
-    outT <- (getExprType >=> resolveType) se -- Is this needed??
-    paramTypes <- mapM (getExprType >=> resolveType) semPs
+    semPs <- mapM (analyzeParam i) ps
+    semE <- analyzeExpr e
+    outT <- getNodeType semE
+    rSemPs <- mapM resolveNodeType semPs
+    paramTypes <- mapM getNodeType rSemPs
     let fType = paramsToFunType paramTypes outT
-    rft <- resolveType fType
     closeScopeInTable
-    scheme <- gen rft
+    scheme <- gen fType
     let paramNames = map ide ps
     let entry = (i, FunEntry scheme paramNames)
-    let semDef = FunDef i semPs se SemTag{posn = p, symType = Nothing}
+    let tg = SemTag{posn = p, typeInfo = DefType scheme}
+    let semDef = FunDef i rSemPs semE tg
     return (semDef, entry)
-preSemDef _ = undefined
 
-semParam :: Identifier -> Param AlexPosn ->Parser (Param SemanticTag)
-semParam fun (TypedParam param t p) = do
+analyzeParam :: Identifier -> Param AlexPosn ->Parser (Param SemanticTag)
+analyzeParam fun (TypedParam param t p) = do
     putSemPosn p
     semT <- analyzeType t
     let st = typeToSymbolType t
     insertName param (ParamEntry st fun)
-    return $ TypedParam param semT SemTag{posn = p, symType = Just st}
-semParam fun (Param param p) = do
+    return $ TypedParam param semT SemTag{posn = p, typeInfo = NodeType st}
+analyzeParam fun (Param param p) = do
     putSemPosn p
     vt <- freshTVar
     insertName param (ParamEntry vt fun)
-    return $ Param param SemTag{posn = p, symType = Just vt}
+    return $ Param param SemTag{posn = p, typeInfo = NodeType vt}
+
+insertNameDef :: Def AlexPosn -> Parser ()
+insertNameDef (VarDef x p) = do
+    putSemPosn p
+    tv <- freshTVar
+    let varType = SymType . RefType $ tv
+    insertName x (MutableEntry varType)
+insertNameDef (VarDefTyped x t p) = do
+    putSemPosn p
+    semT <- analyzeType t
+    let varType = SymType . RefType $ typeToSymbolType semT
+    insertName x (MutableEntry varType)
+insertNameDef (ArrayDef i es p) = do
+    putSemPosn p
+    when (null es) $ throwSem ("Definition of array " ++ i ++ " should contain at least one dimension")
+    tv <- freshTVar
+    let dims = length es
+    let arrayType = SymType . ArrayType dims $ tv
+    insertName i (ArrayEntry arrayType dims)
+insertNameDef (ArrayDefTyped i es t p) = do
+    putSemPosn p
+    when (null es) $ throwSem ("Definition of array " ++ i ++ " should contain at least one dimension")
+    semT <- analyzeType t
+    let dims = length es
+    let arrayType = SymType . ArrayType dims $ typeToSymbolType semT
+    insertName i (ArrayEntry arrayType dims)
+insertNameDef (FunDef i ps _ p) = do
+    putSemPosn p
+    bot <- bottom
+    let paramNames = map ide ps
+    insertName i (FunEntry bot paramNames)
+insertNameDef (FunDefTyped i ps t _ p) = do
+    putSemPosn p
+    semT <- analyzeType t
+    let paramNames = map ide ps
+    insertName i (FunEntry (MonoType $ typeToSymbolType semT) paramNames)
+
 
 -- Semantic analysis of expressions
-
-getExprType :: Node n => n SemanticTag -> Parser SymbolType
-getExprType e = case symType (tag e) of
-    Nothing -> do
-        let p = posn $ tag e
-        throwSemAtPosn "Unable to compute type of expression" p
-    Just t  -> return t
-
-resolveTagType :: Node n => n SemanticTag -> Parser SymbolType
-resolveTagType e = case symType (tag e) of
-    Nothing -> do
-        let p = posn $ tag e
-        throwSemAtPosn "Unable to compute type of expression" p
-    Just t  -> resolveType t
-
-resolveExpr :: Expr SemanticTag -> Parser (Expr SemanticTag)
-resolveExpr e@(Expr ef tg) = do
-    rt <- resolveTagType e
-    return $ Expr ef tg{symType = Just rt}
 
 retE :: ExprF SemanticTag (Expr SemanticTag) -> SymbolType -> Parser (Expr SemanticTag)
 retE ef t = do
     p <- getSemPosn
-    return $ Expr ef SemTag{posn = p, symType = Just t}
+    return $ Expr ef SemTag{posn = p, typeInfo = NodeType t}
 
 semE :: ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag)
 semE (IntCExpr c)    = retE (IntCExpr c) (SymType IntType)
@@ -153,21 +202,21 @@ semE (FunAppExpr i es) = do
                 LT -> throwSem $ "Function " ++ i ++ " is applied to too few arguments"
                 GT -> throwSem $ "Function " ++ i ++ " is applied to too many arguments"
                 EQ -> do
-                    ts <- mapM getExprType es
+                    ts <- mapM getNodeType es
                     v <- freshTVar
                     openScopeInTable
                     t <- inst ft
                     let inf = paramsToFunType ts v
                     unify (t, inf)
-                    res <- mapM resolveExpr es
+                    res <- mapM resolveNodeType es
                     rv <- resolveType v
                     closeScopeInTable
                     retE (FunAppExpr i res) rv
         ParamEntry t _ -> do
-            ts <- mapM getExprType es
+            ts <- mapM getNodeType es
             v <- freshTVar
             unify (t, paramsToFunType ts v) -- Need to make sure that if the param is function is applied to all args
-            res <- mapM resolveExpr es
+            res <- mapM resolveNodeType es
             rv <- resolveType v
             rt <- resolveType t
             let argTypes = funTypeToArgTypes rt
@@ -186,7 +235,7 @@ semE e@(ArrayDim i dim) = findName i >>= run where
     run _ = throwSem $ "No array " ++ i ++ " in scope"
 semE ef@(LetIn _ e) = do
     closeScopeInTable
-    t <- getExprType e
+    t <- getNodeType e
     retE ef t
 -- TODO: Define
 semE _ = undefined
@@ -195,7 +244,7 @@ semExprF :: (ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag))
          -> Expr AlexPosn
          -> Parser (Expr SemanticTag)
 semExprF g (Expr ef p) = do
-    semEf <- mapMExprF analyzeDef analyzeType analyzeClause (semExprF g) ef
+    semEf <- mapMExprF analyzeLet analyzeType analyzeClause (semExprF g) ef
     putSemPosn p
     g semEf
 

@@ -4,8 +4,8 @@ import qualified Data.Set as Set
 import Control.Monad ((>=>))
 
 import Common.Token (Identifier, ConstrIdentifier)
-import Common.AST (TypeF(..))
-import Common.SymbolType (SymbolType(..), ConstType(..))
+import Common.AST (TypeF(..), Node(..))
+import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..))
 import Common.SymbolTable
      (closeScope,
       insert,
@@ -25,14 +25,33 @@ import Parser.ParserM (Parser,
 import Parser.ParserState (SemanticState(..))
 
 -- This module contains semantic analysis tools
+data TypeInfo = NotTypable
+              | DefType TypeScheme
+              | NodeType SymbolType
+    deriving Show
+
 data SemanticTag = SemTag {
-                    posn    :: AlexPosn,
-                    symType :: Maybe SymbolType
+                    posn     :: AlexPosn,
+                    typeInfo :: TypeInfo
                     }
     deriving Show
 
 cpPosn :: AlexPosn -> SemanticTag
-cpPosn p = SemTag {posn = p, symType = Nothing}
+cpPosn p = SemTag {posn = p, typeInfo = NotTypable}
+
+getNodeType :: Node n => n SemanticTag -> Parser SymbolType
+getNodeType n = case typeInfo (tag n) of
+    NodeType t -> return t
+    _          -> do
+        let p = posn $ tag n
+        throwSemAtPosn "Unable to compute type of node" p
+
+getDefScheme :: Node n => n SemanticTag -> Parser TypeScheme
+getDefScheme n = case typeInfo (tag n) of
+    DefType t -> return t
+    _         -> do
+        let p = posn $ tag n
+        throwSemAtPosn "Unable to compute type scheme of node" p
 
 -- Functions for dealing with the Semantic state of the parser
 getNames :: Parser NameSpace
@@ -59,6 +78,13 @@ putSemPosn p = do
     s <- getSemState
     putSemState s{posnOfSem = p}
 
+getAndIncrTVarC :: Parser Int
+getAndIncrTVarC = do
+    sState <- getSemState
+    let c = varTypeC sState
+    putSemState sState{varTypeC = c + 1}
+    return c
+
 -- Error handling functions
 throwSemAtPosn :: String -> AlexPosn -> Parser a
 throwSemAtPosn s p = throwSemanticError $ s ++ " at " ++ printPosn p
@@ -82,10 +108,8 @@ insertType k entry = do
 -- The only way to create a new tvar
 freshTVar :: Parser SymbolType
 freshTVar = do
-    sState <- getSemState
-    let c = varTypeC sState
+    c <- getAndIncrTVarC
     let v = TVar c
-    putSemState sState{varTypeC = c + 1}
     symbols <- getTypes
     putTypes $ insert (varTypeKey c) (TVarEntry v) symbols
     return v

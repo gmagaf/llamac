@@ -80,11 +80,14 @@ test-suite test
  main-is:             Tests.hs
  build-depends:       base >= 4.7 && < 5,
                       array >= 0.4 && < 0.6,
+                      containers >= 0.4,
+                      pretty-simple >= 4.1,
                       generic-random >=1.5,
                       QuickCheck >= 2.5,
                       hspec >= 2.10,
                       llamac
  other-modules:       Property.ArbitraryAST
+                      Property.SemanticAST
                       Property.Property
                       Unit.TestExpectations
                       Unit.Unit

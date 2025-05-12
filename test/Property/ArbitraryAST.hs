@@ -1,4 +1,6 @@
-module Property.ArbitraryAST (arbitraryAST) where
+module Property.ArbitraryAST (arbitraryAST, boundedListOf,
+                              arbitraryIntConstant, arbitraryFloatConstant,
+                              arbitraryCharConstant, arbitraryStringConstant) where
 
 import Test.QuickCheck
 import Common.Token

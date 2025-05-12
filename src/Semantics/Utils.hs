@@ -4,7 +4,7 @@ import qualified Data.Set as Set
 import Control.Monad ((>=>))
 
 import Common.Token (Identifier, ConstrIdentifier)
-import Common.AST (TypeF(..), Node(..))
+import Common.AST (Node(..))
 import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..))
 import Common.SymbolTable
      (closeScope,
@@ -202,25 +202,3 @@ closeScopeInTable = do
 hasDuplicates :: (Ord a) => [a] -> Bool
 hasDuplicates list = length list /= length set
   where set = Set.fromList list
-
-paramsToFunType :: [SymbolType] -> SymbolType -> SymbolType
-paramsToFunType [] out = out
-paramsToFunType (t:ts) out = SymType (FunType t (paramsToFunType ts out))
-
-funTypeToTypes :: SymbolType -> [SymbolType]
-funTypeToTypes = reverse . aux [] where
-    aux :: [SymbolType] -> SymbolType -> [SymbolType]
-    aux acc (SymType (FunType t1 t2)) = aux (t1:acc) t2
-    aux acc s = s:acc
-
-funTypeToArgTypes :: SymbolType -> [SymbolType]
-funTypeToArgTypes s =
-    let ts = funTypeToTypes s
-        f [] = []
-        f [_] = []
-        f (x:xs) = x : f xs
-    in if ts == [] then [] else f ts
-
-paramsToConstFunType :: [ConstType] -> ConstType -> ConstType
-paramsToConstFunType [] out = out
-paramsToConstFunType (t:ts) out = ConstType (FunType t (paramsToConstFunType ts out))

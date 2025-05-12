@@ -12,7 +12,7 @@ import Common.AST
       TypeDef(..),
       NameDef(ide))
 import Common.SymbolTable (TypeTableEntry(..), TableEntry(..))
-import Common.SymbolType (ConstType(..), typeToConstType)
+import Common.SymbolType (ConstType(..), typeToConstType, paramsToConstFunType)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser)
 import Semantics.Utils

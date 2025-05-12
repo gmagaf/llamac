@@ -4,7 +4,11 @@ module Common.SymbolType (
                         TypeScheme(..),
                         typeToConstType,
                         typeToSymbolType,
-                        constTypeToSymbolType) where
+                        constTypeToSymbolType,
+                        paramsToFunType,
+                        funTypeToTypes,
+                        funTypeToArgTypes,
+                        paramsToConstFunType) where
 
 import Common.AST (Type(..), TypeF(..))
 import Common.PrintAST (Pretty(prettyPrec))
@@ -46,3 +50,25 @@ instance Pretty TypeScheme where
     prettyPrec d (AbsType v t) =
         showString ("forall @" ++ show v ++ ". ") .
         prettyPrec d t
+
+paramsToFunType :: [SymbolType] -> SymbolType -> SymbolType
+paramsToFunType [] out = out
+paramsToFunType (t:ts) out = SymType (FunType t (paramsToFunType ts out))
+
+funTypeToTypes :: SymbolType -> [SymbolType]
+funTypeToTypes = reverse . aux [] where
+    aux :: [SymbolType] -> SymbolType -> [SymbolType]
+    aux acc (SymType (FunType t1 t2)) = aux (t1:acc) t2
+    aux acc s = s:acc
+
+funTypeToArgTypes :: SymbolType -> [SymbolType]
+funTypeToArgTypes s =
+    let ts = funTypeToTypes s
+        f [] = []
+        f [_] = []
+        f (x:xs) = x : f xs
+    in if ts == [] then [] else f ts
+
+paramsToConstFunType :: [ConstType] -> ConstType -> ConstType
+paramsToConstFunType [] out = out
+paramsToConstFunType (t:ts) out = ConstType (FunType t (paramsToConstFunType ts out))

@@ -2,7 +2,13 @@ module Common.PrintAST (Pretty,
                         pretty,
                         prettyPrec,
                         showPretty,
-                        prettyAST) where
+                        prettyAST,
+                        debugPrint) where
+
+import Text.Pretty.Simple (CheckColorTty(CheckColorTty),
+                          OutputOptions(outputOptionsIndentAmount),
+                          defaultOutputOptionsDarkBg,
+                          pPrintOpt)
 
 import Common.AST
 import Common.Token
@@ -13,6 +19,12 @@ import Common.Token
       IntConstant,
       StringConstant,
       Token(..))
+
+-- Debug printing utils
+debugPrint :: Show a => a -> IO ()
+debugPrint = let smallIndent = defaultOutputOptionsDarkBg {outputOptionsIndentAmount = 2}
+             in pPrintOpt CheckColorTty smallIndent
+
 
 -- Pretty printing utils
 

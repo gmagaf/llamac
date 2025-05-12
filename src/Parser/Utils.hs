@@ -1,7 +1,7 @@
 module Parser.Utils (parse, parseAndAnalyze, parseFile, debug) where
 
 import Common.AST (AST)
-import Common.PrintAST (pretty)
+import Common.PrintAST (pretty, debugPrint)
 import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calc)
 import Parser.ParserM (Error, parseString)
@@ -23,8 +23,9 @@ debug s = do
   let (res, state) = parseAndAnalyze s
   putStrLn "Symbol Table"
   putStrLn $ pretty (symbols state)
-  putStrLn ""
-  print res
+  case res of
+    Left err  -> print err
+    Right ast -> debugPrint ast
 
 -- Parsing utils for files
 parseFile :: FilePath -> IO ()

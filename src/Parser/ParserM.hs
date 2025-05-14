@@ -2,16 +2,16 @@ module Parser.ParserM (Parser,
                        getAlexPos, getTokenPosn,
                        getSymbols, putSymbols,
                        getSemState, putSemState,
-                       Error, throwError, throwInternalError,
+                       Error, throwError, throwAtPosn, throwInternalError,
                        throwParsingError, throwSemanticError,
                        runParser, parseString, evalParser,
                        lexerWrap) where
 
-import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, runExceptT)
+import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, runExceptT, withExceptT)
 import Control.Monad.Trans.State (State, evalState, runState, state)
 
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
-      alexMonadScan, tokenPosnOfAlexState)
+      alexMonadScan, tokenPosnOfAlexState, printPosn)
 import Common.Token (Token)
 import Common.SymbolTable (SymbolTable)
 import Parser.ParserState (ParserState(..), SemanticState, initParserState)
@@ -19,11 +19,11 @@ import Parser.ParserState (ParserState(..), SemanticState, initParserState)
 -- This module defines the Parser monad
 
 -- The compiler's errors
-data Error = Error String
-           | InternalError String
-           | LexicalError String
-           | ParsingError String
-           | SemanticError String
+data Error = Error {msg :: String}
+           | InternalError {msg :: String}
+           | LexicalError {msg :: String}
+           | ParsingError {msg :: String}
+           | SemanticError {msg :: String}
     deriving Eq
 
 instance Show Error where
@@ -90,6 +90,9 @@ parseString m s = runParser initState m where
 -- Utils for error handling
 throwError :: String -> Parser a
 throwError = throwE . Error
+
+throwAtPosn :: AlexPosn -> Parser a -> Parser a
+throwAtPosn p = withExceptT (\e -> e{msg = msg e ++ " at " ++ printPosn p})
 
 throwInternalError :: String -> Parser a
 throwInternalError = throwE . InternalError

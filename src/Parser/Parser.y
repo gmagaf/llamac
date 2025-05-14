@@ -1,10 +1,10 @@
 {
 module Parser.Parser (calc) where
 
-import Lexer.Lexer (AlexPosn, printPosn)
+import Lexer.Lexer (AlexPosn)
 import Common.Token (Token(..))
 import Common.AST
-import Parser.ParserM (Parser, lexerWrap, getAlexPos, getTokenPosn, throwParsingError)
+import Parser.ParserM (Parser, lexerWrap, getAlexPos, getTokenPosn, throwAtPosn, throwParsingError)
 }
 
 %name calc
@@ -380,9 +380,7 @@ PatArg_ :: { AlexPosn -> Pattern AlexPosn }
 {
 -- Handle errors
 parseError :: Token -> Parser a
-parseError t =
-  let position p = "Error at " ++ printPosn p ++ ". "
-  in do
+parseError t = do
     posn <- getAlexPos
-    throwParsingError $ (position posn) ++ "Unable to process token " ++ show t
+    throwAtPosn posn $ throwParsingError $ "Unable to process token " ++ show t
 }

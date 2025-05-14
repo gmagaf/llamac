@@ -18,10 +18,10 @@ import Common.SymbolTable
       TypeTableEntry(..),
       NameSpace,
       TypeSpace)
-import Lexer.Lexer (AlexPosn, printPosn)
+import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
     getSymbols, getSemState, putSymbols, putSemState,
-    throwSemanticError)
+    throwSemanticError, throwAtPosn)
 import Parser.ParserState (SemanticState(..))
 
 -- This module contains semantic analysis tools
@@ -87,12 +87,12 @@ getAndIncrTVarC = do
 
 -- Error handling functions
 throwSemAtPosn :: String -> AlexPosn -> Parser a
-throwSemAtPosn s p = throwSemanticError $ s ++ " at " ++ printPosn p
+throwSemAtPosn s p = throwAtPosn p (throwSemanticError s)
 
 throwSem :: String -> Parser a
 throwSem s = do
     p <- getSemPosn
-    throwSemanticError $ s ++ " at " ++ printPosn p
+    throwAtPosn p (throwSemanticError s)
 
 -- Parser symbol table utiles
 insertName :: String -> TableEntry -> Parser ()

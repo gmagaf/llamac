@@ -82,7 +82,7 @@ data TableEntry
 
 data TypeTableEntry
     = TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
-    | TVarEntry SymbolType                        -- This is the principal type of the most general unifier
+    | TVarEntry                                   -- Denotes whether the type variable is in scope
         deriving Show
 
 -- Pretty printing of symbol table
@@ -113,7 +113,7 @@ instance Pretty TypeTableEntry where
                 f (c, []) = c
                 f (c, ps) = c ++ " of " ++ unwords (map pretty ps)
                 cs = intercalate ", " (map f constrs)
-        TVarEntry t -> "Type Var unified to: " ++ pretty t
+        TVarEntry -> "Type Var"
 
 instance (Show k, Pretty e) => Pretty (Context k e) where
     pretty (Context scopes) =

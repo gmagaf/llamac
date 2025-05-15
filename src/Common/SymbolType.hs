@@ -5,6 +5,11 @@ module Common.SymbolType (
                         typeToConstType,
                         typeToSymbolType,
                         constTypeToSymbolType,
+                        cataMSymbolType,
+                        subst,
+                        substScheme,
+                        tvarInType,
+                        notVarInType,
                         paramsToFunType,
                         funTypeToTypes,
                         funTypeToArgTypes,
@@ -51,6 +56,46 @@ instance Pretty TypeScheme where
         showString ("forall @" ++ show v ++ ". ") .
         prettyPrec d t
 
+-- Recursion Utils
+bottomUp :: (SymbolType -> SymbolType) -> SymbolType -> SymbolType
+bottomUp f (SymType t) = f (SymType $ fmap (bottomUp f) t)
+bottomUp f v@(TVar _)  = f v
+
+-- bottomUpM :: Monad m => (SymbolType -> m SymbolType) -> SymbolType -> m SymbolType
+-- bottomUpM f (SymType t) = mapM (bottomUpM f) t >>= f . SymType
+-- bottomUpM f v@(TVar _)  = f v
+
+-- cata :: (TypeF a -> a, Int -> a) -> SymbolType -> a
+-- cata alg@(f, _) (SymType t) = f $ fmap (cata alg) t
+-- cata (_, g) (TVar v) = g v
+
+cataMSymbolType :: Monad m => (TypeF a -> m a, Int -> m a) -> SymbolType -> m a
+cataMSymbolType alg@(f, _) (SymType t) = mapM (cataMSymbolType alg) t >>= f
+cataMSymbolType (_, g) (TVar v) = g v
+
+-- Type theoretic utils
+subst :: Int -> SymbolType -> SymbolType -> SymbolType
+subst v t = bottomUp f where
+    f :: SymbolType -> SymbolType
+    f s'@(TVar u) | v == u = t
+                  | otherwise = s'
+    f s' = s'
+
+substScheme :: Int -> SymbolType -> TypeScheme -> TypeScheme
+substScheme v r (MonoType t) = MonoType $ subst v r t
+substScheme v r (AbsType u t) | v == u    = AbsType u t
+                              | otherwise = AbsType u $ substScheme v r t
+
+tvarInType :: Int -> SymbolType -> Bool
+tvarInType v (TVar u)
+                | v == u = True
+                | otherwise = False
+tvarInType v (SymType t) = any (tvarInType v) t
+
+notVarInType :: Int -> SymbolType -> Bool
+notVarInType v = not . tvarInType v
+
+-- Fun Types Utils
 paramsToFunType :: [SymbolType] -> SymbolType -> SymbolType
 paramsToFunType [] out = out
 paramsToFunType (t:ts) out = SymType (FunType t (paramsToFunType ts out))
@@ -67,7 +112,7 @@ funTypeToArgTypes s =
         f [] = []
         f [_] = []
         f (x:xs) = x : f xs
-    in if ts == [] then [] else f ts
+    in if null ts then [] else f ts
 
 paramsToConstFunType :: [ConstType] -> ConstType -> ConstType
 paramsToConstFunType [] out = out

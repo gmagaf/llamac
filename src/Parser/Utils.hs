@@ -1,4 +1,4 @@
-module Parser.Utils (parse, parseAndAnalyze, parseFile, debug) where
+module Parser.Utils (parse, parseAndAnalyze, parseFile, debug, debugRepl) where
 
 import Common.AST (AST)
 import Common.PrintAST (pretty, debugPrint)
@@ -6,8 +6,8 @@ import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calc)
 import Parser.ParserM (Error, parseString)
 import Parser.ParserState (ParserState(..))
-import Semantics.Semantics (analyzeAST)
 import Semantics.Utils (SemanticTag)
+import Semantics.Semantics (analyzeAST)
 
 -- The parsing function
 parse :: String -> Either Error (AST AlexPosn)
@@ -21,11 +21,19 @@ parseAndAnalyze = parseString $ calc >>= analyzeAST
 debug :: String -> IO ()
 debug s = do
   let (res, state) = parseAndAnalyze s
+  putStrLn "Semantic State"
+  print (sem_state state)
   putStrLn "Symbol Table"
   putStrLn $ pretty (symbols state)
   case res of
     Left err  -> print err
     Right ast -> debugPrint ast
+
+debugRepl :: IO ()
+debugRepl = do
+  s <- getLine
+  debug s
+  debugRepl
 
 -- Parsing utils for files
 parseFile :: FilePath -> IO ()

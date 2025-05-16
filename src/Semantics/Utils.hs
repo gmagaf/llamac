@@ -112,10 +112,10 @@ putUnifier v t = do
         throwSem ("Variable " ++ pretty tv ++ " has been used before")
     when (isNothing (f t)) $
         throwSem ("Type " ++ pretty t ++ " contains variables never used before")
-    let g t'@(TVar v') = if v' == v then f t else f t'
+    let g t'@(TVar v') = if v' == v then Just t else Just t'
         g (SymType tf) = SymType <$> mapM g tf
     s <- getSemState
-    putSemState s{unifier = g}
+    putSemState s{unifier = f >=> g}
 
 -- Error handling functions
 throwSemAtPosn :: String -> AlexPosn -> Parser a

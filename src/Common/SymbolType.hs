@@ -10,9 +10,11 @@ module Common.SymbolType (
                         substScheme,
                         tvarInType,
                         notVarInType,
+                        typesToFunType,
                         paramsToFunType,
                         funTypeToTypes,
                         funTypeToArgTypes,
+                        outFunType,
                         paramsToConstFunType) where
 
 import Common.AST (Type(..), TypeF(..))
@@ -96,6 +98,11 @@ notVarInType :: Int -> SymbolType -> Bool
 notVarInType v = not . tvarInType v
 
 -- Fun Types Utils
+typesToFunType :: [SymbolType] -> SymbolType
+typesToFunType []     = SymType UnitType
+typesToFunType [out]  = out
+typesToFunType (t:ts) = SymType (FunType t (typesToFunType ts))
+
 paramsToFunType :: [SymbolType] -> SymbolType -> SymbolType
 paramsToFunType [] out = out
 paramsToFunType (t:ts) out = SymType (FunType t (paramsToFunType ts out))
@@ -113,6 +120,10 @@ funTypeToArgTypes s =
         f [_] = []
         f (x:xs) = x : f xs
     in if null ts then [] else f ts
+
+outFunType :: SymbolType -> SymbolType
+outFunType (SymType (FunType _ t2)) = outFunType t2
+outFunType st = st
 
 paramsToConstFunType :: [ConstType] -> ConstType -> ConstType
 paramsToConstFunType [] out = out

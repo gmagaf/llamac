@@ -90,6 +90,7 @@ test-suite test
                       Property.SemanticAST
                       Property.Property
                       Unit.TestExpectations
+                      Unit.SemanticTestSuites
                       Unit.Unit
  ghc-options:         -Wall
                       -Wcompat

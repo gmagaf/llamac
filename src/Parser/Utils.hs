@@ -1,4 +1,4 @@
-module Parser.Utils (parse, parseAndAnalyze, parseFile, debug, debugRepl) where
+module Parser.Utils (parse, analyze, parseAndAnalyze, parseFile, debug, debugRepl) where
 
 import Common.AST (AST)
 import Common.PrintAST (pretty, debugPrint)
@@ -13,9 +13,12 @@ import Semantics.Semantics (analyzeAST)
 parse :: String -> Either Error (AST AlexPosn)
 parse = fst . parseString calc
 
+analyze :: String -> Either Error (AST SemanticTag)
+analyze = fst . parseAndAnalyze
+
 -- The parsing and semantic analysis function
 parseAndAnalyze :: String -> (Either Error (AST SemanticTag), ParserState)
-parseAndAnalyze = parseString $ calc >>= analyzeAST
+parseAndAnalyze = parseString (calc >>= analyzeAST)
 
 -- Util function for debugging end to end
 debug :: String -> IO ()

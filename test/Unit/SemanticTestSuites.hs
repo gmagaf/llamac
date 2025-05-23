@@ -146,6 +146,10 @@ exprSuites =
         ("let f x y z = if x then y else z", True),
         ("let f x y z = if x then y", True),
         ("let main = while true do () done", True),
+        ("let rec pr i = () and main = for i = 17 to 42 do pr i done", True),
+        ("let rec mutable x : int and main = for i = 17 to 42 do x := i done", True),
+        ("let rec pr i = () and main = for i = 42 downto 17 do pr i done", True),
+        ("let rec mutable x : int and main = for i = 42 downto 17 do x := i done", True),
         -- Failing cases
         ("type t = T of t int \nlet t (t : t) = t\nlet g t : t -> t = T t", False),
         ("let rec mutable a [1, 2, 3] and d = dim 0 a", False),
@@ -225,5 +229,15 @@ exprSuites =
         ("let f (x : bool) (y : unit) = + if x then y", False),
         ("let main = while true do 5 done", False),
         ("let main = while 5 do () done", False),
-        ("let main : int = while true do () done", False)
+        ("let main : int = while true do () done", False),
+        ("let rec mutable x : char and main = for i = 17 to 42 do x := i done", False),
+        ("let main = for i = 17 to 42 do () done let f = i", False),
+        ("let main : int = for i = 17 to 42 do () done let f = i", False),
+        ("let main : int = for i = 17 to () do () done let f = i", False),
+        ("let main : int = for i = () to 42 do () done let f = i", False),
+        ("let rec mutable x : char and main = for i = 17 downto 42 do x := i done", False),
+        ("let main = for i = 17 downto 42 do () done let f = i", False),
+        ("let main : int = for i = 17 downto 42 do () done let f = i", False),
+        ("let main : int = for i = 17 downto () do () done let f = i", False),
+        ("let main : int = for i = () downto 42 do () done let f = i", False)
     ]

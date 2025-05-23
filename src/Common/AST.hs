@@ -200,9 +200,10 @@ traverseExprF :: Applicative f =>
                  (LetDef b -> f (LetDef a))
               -> (Type b -> f (Type a))
               -> (Clause b -> f (Clause a))
+              -> (Identifier -> e -> f e')
               -> (e -> f e')
               -> ExprF b e -> f (ExprF a e')
-traverseExprF lf tf cf f ef = case ef of
+traverseExprF lf tf cf forf f ef = case ef of
   IntCExpr c           -> pure $ IntCExpr c
   FloatCExpr c         -> pure $ FloatCExpr c
   CharCExpr c          -> pure $ CharCExpr c
@@ -225,14 +226,15 @@ traverseExprF lf tf cf f ef = case ef of
   IfThenExpr u v       -> IfThenExpr <$> f u <*> f v
   IfThenElseExpr u v w -> IfThenElseExpr <$> f u <*> f v <*> f w
   WhileExpr u v        -> WhileExpr <$> f u <*> f v
-  ForExpr i u v w      -> ForExpr i <$> f u <*> f v <*> f w
-  ForDownExpr i u v w  -> ForDownExpr i <$> f u <*> f v <*> f w
+  ForExpr i u v w      -> ForExpr i <$> f u <*> f v <*> forf i w
+  ForDownExpr i u v w  -> ForDownExpr i <$> f u <*> f v <*> forf i w
   MatchExpr e cs       -> MatchExpr <$> f e <*> traverse cf cs
 
 mapMExprF :: Monad m =>
             (LetDef b -> m (LetDef a))
          -> (Type b -> m (Type a))
          -> (Clause b -> m (Clause a))
+         -> (Identifier -> e -> m e')
          -> (e -> m e')
          -> ExprF b e -> m (ExprF a e')
 mapMExprF = traverseExprF

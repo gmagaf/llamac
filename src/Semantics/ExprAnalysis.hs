@@ -287,7 +287,13 @@ recSemExpr g e@(Expr ef p) = do
     let atype = stackTrace ("while analyzing expr " ++ pretty e) . analyzeType
     let aclause = stackTrace ("while analyzing expr " ++ pretty e) . analyzeClause
     let aexpr = stackTrace ("while analyzing expr " ++ pretty e) . recSemExpr g
-    semEf <- mapMExprF alet atype aclause aexpr ef
+    let afor i fore = do
+            openScopeInNames
+            insertName i (FunEntry (MonoType . SymType $ IntType) [])
+            e' <- aexpr fore
+            closeScopeInNames
+            return e'
+    semEf <- mapMExprF alet atype aclause afor aexpr ef
     putSemPosn p
     g semEf
 
@@ -561,14 +567,34 @@ semForExpr :: Identifier
            -> Expr SemanticTag
            -> Expr SemanticTag
            -> Parser (Expr SemanticTag)
-semForExpr i l u e = undefined -- TODO: Define
+semForExpr i l u e = do
+    lt <- getNodeType l
+    ut <- getNodeType u
+    et <- getNodeType e
+    unify (SymType IntType, lt)
+    unify (SymType IntType, ut)
+    unify (SymType UnitType, et)
+    rl <- resolveNodeType l
+    ru <- resolveNodeType u
+    re <- resolveNodeType e
+    retE (ForExpr i rl ru re) (SymType UnitType)
 
 semForDownExpr :: Identifier
                -> Expr SemanticTag
                -> Expr SemanticTag
                -> Expr SemanticTag
                -> Parser (Expr SemanticTag)
-semForDownExpr i u l e = undefined -- TODO: Define
+semForDownExpr i u l e = do
+    ut <- getNodeType u
+    lt <- getNodeType l
+    et <- getNodeType e
+    unify (SymType IntType, ut)
+    unify (SymType IntType, lt)
+    unify (SymType UnitType, et)
+    ru <- resolveNodeType u
+    rl <- resolveNodeType l
+    re <- resolveNodeType e
+    retE (ForExpr i ru rl re) (SymType UnitType)
 
 semMatchExpr :: Expr SemanticTag
              -> [Clause SemanticTag]

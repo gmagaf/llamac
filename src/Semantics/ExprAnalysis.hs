@@ -17,24 +17,6 @@ import Semantics.TypeAnalysis (analyzeType)
 
 -- Semantic analysis of definitions
 
-type KeyEntryPair = (Identifier, TableEntry)
-
-data SigAnalysisRes =
-    TypedMutSig (Type SemanticTag) KeyEntryPair AlexPosn
-  | TypedArrSig (Type SemanticTag) [Expr AlexPosn] KeyEntryPair AlexPosn
-  | TypedFunSig (Type SemanticTag) [Param SemanticTag] (Expr AlexPosn) KeyEntryPair AlexPosn
-  | UntypedMutSig SymbolType KeyEntryPair AlexPosn
-  | UntypedArrSig SymbolType [Expr AlexPosn] KeyEntryPair AlexPosn
-  | UnTypedFunSig SymbolType [Param SemanticTag] (Expr AlexPosn) KeyEntryPair AlexPosn
-
-entryPair :: SigAnalysisRes -> KeyEntryPair
-entryPair (TypedMutSig _ pair _)       = pair
-entryPair (TypedArrSig _ _ pair _)     = pair
-entryPair (TypedFunSig _ _ _ pair _)   = pair
-entryPair (UntypedMutSig _ pair _)     = pair
-entryPair (UntypedArrSig _ _ pair _)   = pair
-entryPair (UnTypedFunSig _ _ _ pair _) = pair
-
 {-
     Analyze let statements
     It will analyze all defs in the current typespace
@@ -90,18 +72,48 @@ analyzeLet (LetRec defs p) = do
     mapM_ (uncurry updateName . B.first ide) finalRes
     return $ Let finalSemDefs (cpPosn p)
 
+{-
+    In Second analysis we only analyze Untyped fun definitions
+    in order to get the most general unifier principal type
+-}
 secondAnalysis :: (Def SemanticTag, Def AlexPosn, TableEntry) -> Parser (Def SemanticTag, TableEntry)
 secondAnalysis (_, d@(FunDef {}), FunEntry _ _) = do
     sigRes <- analyzeDefSig d
     analyzeDefBody sigRes
 secondAnalysis (d, _, e) = return (d, e)
 
+{-
+    We generalize second analysis results to
+    get polymorphic functions
+-}
 genResult :: S.Set Int -> (Def SemanticTag, TableEntry) -> Parser (Def SemanticTag, TableEntry)
 genResult freeVars (FunDef i ps e tg, FunEntry (MonoType t) params) = do
     let scheme = gen freeVars t
     return (FunDef i ps e tg{typeInfo = DefType scheme}, FunEntry scheme params)
 genResult _ pair = return pair
 
+-- Util definitions for sig analysis
+type KeyEntryPair = (Identifier, TableEntry)
+
+data SigAnalysisRes =
+    TypedMutSig (Type SemanticTag) KeyEntryPair AlexPosn
+  | TypedArrSig (Type SemanticTag) [Expr AlexPosn] KeyEntryPair AlexPosn
+  | TypedFunSig (Type SemanticTag) [Param SemanticTag] (Expr AlexPosn) KeyEntryPair AlexPosn
+  | UntypedMutSig SymbolType KeyEntryPair AlexPosn
+  | UntypedArrSig SymbolType [Expr AlexPosn] KeyEntryPair AlexPosn
+  | UnTypedFunSig SymbolType [Param SemanticTag] (Expr AlexPosn) KeyEntryPair AlexPosn
+
+entryPair :: SigAnalysisRes -> KeyEntryPair
+entryPair (TypedMutSig _ pair _)       = pair
+entryPair (TypedArrSig _ _ pair _)     = pair
+entryPair (TypedFunSig _ _ _ pair _)   = pair
+entryPair (UntypedMutSig _ pair _)     = pair
+entryPair (UntypedArrSig _ _ pair _)   = pair
+entryPair (UnTypedFunSig _ _ _ pair _) = pair
+
+{-
+    Analysis of the signature of a definition
+-}
 analyzeDefSig :: Def AlexPosn -> Parser SigAnalysisRes
 analyzeDefSig (VarDef x p) = do
     tv <- freshTVar
@@ -178,6 +190,9 @@ analyzeParam fun (Param param p) = do
     insertName param (ParamEntry vt fun)
     return $ Param param SemTag{posn = p, typeInfo = NodeType vt}
 
+{-
+    Analysis of the body of a definition
+-}
 analyzeDefBody :: SigAnalysisRes -> Parser (Def SemanticTag, TableEntry)
 analyzeDefBody (UntypedMutSig st (i, entry) p) =
     let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}

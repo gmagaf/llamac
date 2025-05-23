@@ -278,6 +278,7 @@ analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do
 analyzeExpr :: Expr AlexPosn -> Parser (Expr SemanticTag)
 analyzeExpr = recSemExpr indSemExpr
 
+-- Inductively analyze expressions using mapM for expression functor
 recSemExpr :: (ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag))
          -> Expr AlexPosn
          -> Parser (Expr SemanticTag)
@@ -290,6 +291,7 @@ recSemExpr g e@(Expr ef p) = do
     putSemPosn p
     g semEf
 
+-- Util for returning the result expression by updating its node type
 retE :: ExprF SemanticTag (Expr SemanticTag) -> SymbolType -> Parser (Expr SemanticTag)
 retE ef t = do
     p <- getSemPosn
@@ -309,8 +311,12 @@ indSemExpr (FunAppExpr i es)    = semFunAppExpr i es
 indSemExpr (ConstrAppExpr i es) = semConstrAppExpr i es
 indSemExpr (ArrayDim i dim)     = semArrayDim i dim
 indSemExpr (LetIn l e)          = semLetIn l e
+indSemExpr (UnOpExpr op e)      = semUnOp op e
 -- TODO: Define
 indSemExpr e = trace (show e) undefined
+
+-- All functions implementing the inductive step
+-- of the analysis of the expression for each case
 
 semConstExpr :: Identifier -> Parser (Expr SemanticTag)
 semConstExpr i = do
@@ -410,6 +416,22 @@ semLetIn l e = do
     closeScopeInNames
     t <- getNodeType e
     retE (LetIn l e) t
+
+semUnOp :: UnOp -> Expr SemanticTag -> Parser (Expr SemanticTag)
+semUnOp op e = do
+    t <- getNodeType e
+    v <- freshTVar
+    case op of
+        BangOp         -> unify (SymType (RefType v), t)
+        PlusUnOp       -> unify (SymType IntType, t)
+        MinusUnOp      -> unify (SymType IntType, t)
+        PlusFloatUnOp  -> unify (SymType FloatType, t)
+        MinusFloatUnOp -> unify (SymType FloatType, t)
+        NotOp          -> unify (SymType BoolType, t)
+    rE <- resolveNodeType e
+    rt <- resolveType t
+    let finalT = if op == BangOp then v else rt
+    retE (UnOpExpr op rE) finalT
 
 -- Semantic analysis of clauses
 

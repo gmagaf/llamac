@@ -95,10 +95,23 @@ exprSuites =
     [
         ("let rec mutable a [1, 2, 3] and d1 = dim 1 a and d2 = dim 2 a and d3 = dim 3 a", True),
         ("let main id x = let c1 a = id a in let c2 a = c1 a in c2 x", True),
+        ("let rec mutable x and f : int = !x", True),
+        ("let rec mutable x : int and f : int = -!x", True),
+        ("let f x : int -> int = +x", True),
+        ("let f x : float -> float = +.x", True),
+        ("let f x : float -> float = -.x", True),
+        ("let my_not x : bool -> bool = not x", True),
+        ("let f x = + x", True),
         -- Failing cases
         ("type t = T of t int \nlet t (t : t) = t\nlet g t : t -> t = T t", False),
         ("let rec mutable a [1, 2, 3] and d = dim 0 a", False),
         ("let rec mutable a [1, 2, 3] and d = dim 42 a", False),
         ("let main id x = let c a = id a in c x let f = c 4", False),
-        ("let main id x = let c1 a = c2 a in let c2 a = id a in x", False)
+        ("let main id x = let c1 a = c2 a in let c2 a = id a in x", False),
+        ("let rec mutable x : float and f : int = !x", False),
+        ("let rec mutable x : float and f : int = -!x", False),
+        ("let f (x : char) = +x", False),
+        ("let f (x : char) = +.x", False),
+        ("let f (x : char) = -.x", False),
+        ("let my_not (x : char) = not x", False)
     ]

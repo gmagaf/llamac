@@ -33,7 +33,7 @@ letDefSuite =
     ("let ar id (f : int ref) g x (ar : array of float) = let d : int = id 2 in ar", True),
     ("type t = T\nlet t : t = T", True),
     ("type t = T\nlet t = T", True),
-    ("type t = T of t\nlet t (t : t) = t\nlet g : t -> t = T", True),
+    ("type t = T of t\nlet t (t : t) = t\nlet g t : t -> t = T t", True),
     ("let id id x = let c = id x in x", True),
     ("let main id x = let c = id x in c", True),
     ("let f id b = let c a = id a in c b", True),
@@ -48,17 +48,18 @@ letDefSuite =
     ("let f : t = T", False),
     ("let f x = f x", False),
     ("let f x : int -> int = let x = 'c' in x", False),
-    ("let f x : int -> int = x and c = 'c'\nlet g x = f c", False)
+    ("let f x : int -> int = x and c = 'c'\nlet g x = f c", False),
+    ("type t = T of t\nlet t (t : t) = t\nlet g : t -> t = T", False)
     ]
 
 letRecSuites :: [(String, Bool)]
 letRecSuites =
     [
     ("let rec main = 42", True),
-    ("let rec f = main and main a = 42 and g = main", True),
+    ("let rec f a = main a and main a = 42 and g a = main a", True),
     ("let rec f x = main x and main a = 42 and g x = main x", True),
     ("let rec f x : int -> int = main x and main a = 42 and g x = main x", True),
-    ("let rec f : int -> int = main and main a = 42 and g = main", True),
+    ("let rec f i : int -> int = main i and main a = 42 and g x = main x", True),
     ("let rec mutable x and main : int ref = x", True),
     ("let rec main : int ref = x and mutable x", True),
     ("let rec mutable a [3, 4] : int and mutable a [42]", True),
@@ -71,14 +72,30 @@ letRecSuites =
     ("let rec f x y = f y y and mutable ar [f 3 (f 0 42)]", True),
     ("let rec f x = x and mutable ar[f 42]", True),
     ("let id x = x\nlet c = id 3 and d = id 'a'", True),
-    ("let rec id x = x and c x = id 1 and main = id", True),
+    ("let rec id x = x and c x = id 1 and main y = id y", True),
     ("let rec id x = x and f : int ref = x and g x = id x and mutable x and mutable ar [id 2] : float", True),
     ("let rec id x = x and f : int ref = x and g x = id x and mutable x and mutable ar [id 2, g 3] : float", True),
     ("let rec mutable x [3] : float and mutable x : char", True),
     ("let rec id id x = let rec c = id x in c", True),
-    ("let rec f = main and main a = 42 and mutable x and g = x", True),
+    ("let rec f x = main x and main a = 42 and mutable x and g = x", True),
     -- Failing cases
     ("let rec f = main and main a = 42 and g = main and k1 = main 'c' and k2 = main 9.0", False),
     ("let rec f = main and main a = 42 and g (a : int) = main a and k1 = main 'c' and k2 = main 9.0", False),
-    ("let rec id x = x and c = id 3 and d = id 'a'", False)
+    ("let rec id x = x and c = id 3 and d = id 'a'", False),
+    ("let rec f x = x and g : int -> int = f", False),
+    ("let rec f x = x and g = f", False),
+    ("let rec f = main and main a = 42 and g = main", False),
+    ("let rec f : int -> int = main and main a = 42 and g = main", False),
+    ("let rec id x = x and c x = id 1 and main = id", False),
+    ("let rec f = main and main a = 42 and mutable x and g = x", False)
+    ]
+
+exprSuites :: [(String, Bool)]
+exprSuites =
+    [
+        ("let rec mutable a [1, 2, 3] and d1 = dim 1 a and d2 = dim 2 a and d3 = dim 3 a", True),
+        -- Failing cases
+        ("type t = T of t int \nlet t (t : t) = t\nlet g t : t -> t = T t", False),
+        ("let rec mutable a [1, 2, 3] and d = dim 0 a", False),
+        ("let rec mutable a [1, 2, 3] and d = dim 42 a", False)
     ]

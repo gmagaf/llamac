@@ -4,16 +4,18 @@ import Control.Monad (when)
 import qualified Data.Set as S
 import qualified Data.Bifunctor as B
 
-import Common.Token (Identifier)
+import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST
 import Common.PrintAST
 import Common.SymbolTable
 import Common.SymbolType
 import Lexer.Lexer (AlexPosn)
-import Parser.ParserM (Parser, stackTrace)
+import Parser.ParserM (Parser, stackTrace, throwInternalError)
 import Semantics.Utils
 import Semantics.Unifier (unify)
 import Semantics.TypeAnalysis (analyzeType)
+
+import Debug.Trace (trace)
 
 -- Semantic analysis of definitions
 
@@ -233,6 +235,10 @@ analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do
     unify (st, fType)
     rSemPs <- mapM resolveNodeType semPs
     rSemE <- resolveNodeType semE
+    reT <- getNodeType rSemE
+    case reT of
+        SymType (FunType _ _) -> throwSem ("Function " ++ i ++ " cannot return function type: " ++ pretty reT)
+        _ -> return ()
     rst <- resolveType st
     -- Close scope
     closeScopeInNames
@@ -257,6 +263,10 @@ analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do
     unify (st, fType)
     rSemPs <- mapM resolveNodeType semPs
     rSemE <- resolveNodeType semE
+    reT <- getNodeType rSemE
+    case reT of
+        SymType (FunType _ _) -> throwSem ("Function " ++ i ++ " cannot return function type: " ++ pretty reT)
+        _ -> return ()
     -- Close scope
     closeScopeInNames
     let fScheme = MonoType st
@@ -286,14 +296,27 @@ retE ef t = do
     return $ Expr ef SemTag{posn = p, typeInfo = NodeType t}
 
 indSemExpr :: ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag)
-indSemExpr (IntCExpr c)    = retE (IntCExpr c) (SymType IntType)
-indSemExpr (FloatCExpr c)  = retE (FloatCExpr c) (SymType FloatType)
-indSemExpr (CharCExpr c)   = retE (CharCExpr c) (SymType CharType)
-indSemExpr (StringCExpr c) = retE (StringCExpr c) (SymType (ArrayType 1 (SymType CharType)))
-indSemExpr TrueCExpr       = retE TrueCExpr (SymType BoolType)
-indSemExpr FalseCExpr      = retE FalseCExpr (SymType BoolType)
-indSemExpr UnitCExpr       = retE UnitCExpr (SymType UnitType)
-indSemExpr (ConstExpr i) = do
+indSemExpr (IntCExpr c)         = retE (IntCExpr c) (SymType IntType)
+indSemExpr (FloatCExpr c)       = retE (FloatCExpr c) (SymType FloatType)
+indSemExpr (CharCExpr c)        = retE (CharCExpr c) (SymType CharType)
+indSemExpr (StringCExpr c)      = retE (StringCExpr c) (SymType (ArrayType 1 (SymType CharType)))
+indSemExpr TrueCExpr            = retE TrueCExpr (SymType BoolType)
+indSemExpr FalseCExpr           = retE FalseCExpr (SymType BoolType)
+indSemExpr UnitCExpr            = retE UnitCExpr (SymType UnitType)
+indSemExpr (ConstExpr i)        = semConstExpr i
+indSemExpr (ConstConstrExpr i)  = semConstConstrExpr i
+indSemExpr (FunAppExpr i es)    = semFunAppExpr i es
+indSemExpr (ConstrAppExpr i es) = semConstrAppExpr i es
+indSemExpr (ArrayDim i dim)     = semArrayDim i dim
+indSemExpr ef@(LetIn _ e) = do
+    closeScopeInNames
+    t <- getNodeType e
+    retE ef t
+-- TODO: Define
+indSemExpr e = trace (show e) undefined
+
+semConstExpr :: Identifier -> Parser (Expr SemanticTag)
+semConstExpr i = do
     entry <- findName i
     case entry of
         FunEntry ft _ -> do
@@ -305,38 +328,43 @@ indSemExpr (ConstExpr i) = do
             retE (ConstExpr i) t
         ArrayEntry t _ -> do
             retE (ConstExpr i) t
-        ConstrEntry {} -> undefined
-indSemExpr (ConstConstrExpr i) = do
+        ConstrEntry {} -> throwInternalError $
+            "Constr entry: " ++ show entry ++ " is not expected for identifier key " ++ i
+
+semConstConstrExpr :: ConstrIdentifier -> Parser (Expr SemanticTag)
+semConstConstrExpr i = do
     entry <- findName i
     case entry of
-        FunEntry _ _ -> undefined
-        ParamEntry _ _ -> undefined
-        MutableEntry _ -> undefined
-        ArrayEntry _ _ -> undefined
         ConstrEntry t _ _ -> retE (ConstExpr i) (constTypeToSymbolType t)
-indSemExpr (FunAppExpr i es) = do
+        _                 -> throwInternalError $
+            "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
+
+semFunAppExpr :: Identifier -> [Expr SemanticTag] -> Parser (Expr SemanticTag)
+semFunAppExpr i es = do
     entry <- findName i
     case entry of
         FunEntry ft ps ->
-            -- need to make sure that if there are no args then the type of the function is returned
             case compare (length es) (length ps) of
                 LT -> throwSem $ "Function " ++ i ++ " is applied to too few arguments"
                 GT -> throwSem $ "Function " ++ i ++ " is applied to too many arguments"
                 EQ -> do
                     ts <- mapM getNodeType es
                     v <- freshTVar
-                    openScopeInNames
                     t <- inst ft
                     let inf = paramsToFunType ts v
                     unify (t, inf)
                     res <- mapM resolveNodeType es
                     rv <- resolveType v
-                    closeScopeInNames
+                    case rv of
+                        SymType (FunType _ _)
+                          -> throwSem ("Function " ++ i ++ " cannot return result of function type: " ++ pretty rv)
+                        _ -> return ()
                     retE (FunAppExpr i res) rv
         ParamEntry t _ -> do
             ts <- mapM getNodeType es
             v <- freshTVar
-            unify (t, paramsToFunType ts v) -- Need to make sure that if the param is function is applied to all args
+            let inf = paramsToFunType ts v
+            unify (t, inf)
             res <- mapM resolveNodeType es
             rv <- resolveType v
             rt <- resolveType t
@@ -348,18 +376,37 @@ indSemExpr (FunAppExpr i es) = do
         MutableEntry _    -> throwSem $ "Cannot apply arguments to the mutable variable " ++ i
         ArrayEntry _ _    -> throwSem $ "Cannot apply arguments to array " ++ i
         ConstrEntry {}    -> throwSem $ "Cannot apply function arguments to constr " ++ i
-indSemExpr e@(ArrayDim i dim) = findName i >>= run where
+
+semConstrAppExpr :: ConstrIdentifier -> [Expr SemanticTag] -> Parser (Expr SemanticTag)
+semConstrAppExpr i es = do
+    entry <- findName i
+    case entry of
+        ConstrEntry t psT _ ->
+            case compare (length es) (length psT) of
+                LT -> throwSem $ "Constructor " ++ i ++ " is applied to too few arguments"
+                GT -> throwSem $ "Constructor " ++ i ++ " is applied to too many arguments"
+                EQ -> do
+                    ts <- mapM getNodeType es
+                    v <- freshTVar
+                    let inf = paramsToFunType ts v
+                    unify (constTypeToSymbolType t, inf)
+                    res <- mapM resolveNodeType es
+                    rv <- resolveType v
+                    case rv of
+                        SymType (FunType _ _)
+                          -> throwSem ("Constructor " ++ i ++ " cannot return result of function type: " ++ pretty rv)
+                        _ -> return ()
+                    retE (ConstrAppExpr i res) rv
+        _ -> throwInternalError $
+            "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
+
+semArrayDim :: Identifier -> Int -> Parser (Expr SemanticTag)
+semArrayDim i dim = findName i >>= run where
     run (ArrayEntry _ dims)
       | dim < 1 = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of array " ++ i
       | dims < dim = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of " ++ show dims ++ "-dim array " ++ i
-      | otherwise = retE e (SymType IntType)
+      | otherwise = retE (ArrayDim i dim) (SymType IntType)
     run _ = throwSem $ "No array " ++ i ++ " in scope"
-indSemExpr ef@(LetIn _ e) = do
-    closeScopeInNames
-    t <- getNodeType e
-    retE ef t
--- TODO: Define
-indSemExpr _ = undefined
 
 -- Semantic analysis of clauses
 

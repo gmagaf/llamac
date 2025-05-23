@@ -75,3 +75,4 @@ testSemSuite = do
       semSpec "types" 0 typeDefSuite
       semSpec "let" 0 letDefSuite
       semSpec "let-rec" 0 letRecSuites
+      semSpec "expr" 0 exprSuites

@@ -298,24 +298,31 @@ retE ef t = do
     return $ Expr ef SemTag{posn = p, typeInfo = NodeType t}
 
 indSemExpr :: ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag)
-indSemExpr (IntCExpr c)         = retE (IntCExpr c) (SymType IntType)
-indSemExpr (FloatCExpr c)       = retE (FloatCExpr c) (SymType FloatType)
-indSemExpr (CharCExpr c)        = retE (CharCExpr c) (SymType CharType)
-indSemExpr (StringCExpr c)      = retE (StringCExpr c) (SymType (ArrayType 1 (SymType CharType)))
-indSemExpr TrueCExpr            = retE TrueCExpr (SymType BoolType)
-indSemExpr FalseCExpr           = retE FalseCExpr (SymType BoolType)
-indSemExpr UnitCExpr            = retE UnitCExpr (SymType UnitType)
-indSemExpr (ConstExpr i)        = semConstExpr i
-indSemExpr (ConstConstrExpr i)  = semConstConstrExpr i
-indSemExpr (FunAppExpr i es)    = semFunAppExpr i es
-indSemExpr (ConstrAppExpr i es) = semConstrAppExpr i es
-indSemExpr (ArrayDim i dim)     = semArrayDim i dim
-indSemExpr (LetIn l e)          = semLetIn l e
-indSemExpr (UnOpExpr op e)      = semUnOp op e
-indSemExpr (BinOpExpr op d e)   = semBinOp op d e
-indSemExpr (ArrayAccess i es)   = semArrayAccess i es
--- TODO: Define
-indSemExpr e = trace (show e) undefined
+indSemExpr (IntCExpr c)           = retE (IntCExpr c) (SymType IntType)
+indSemExpr (FloatCExpr c)         = retE (FloatCExpr c) (SymType FloatType)
+indSemExpr (CharCExpr c)          = retE (CharCExpr c) (SymType CharType)
+indSemExpr (StringCExpr c)        = retE (StringCExpr c) (SymType (ArrayType 1 (SymType CharType)))
+indSemExpr TrueCExpr              = retE TrueCExpr (SymType BoolType)
+indSemExpr FalseCExpr             = retE FalseCExpr (SymType BoolType)
+indSemExpr UnitCExpr              = retE UnitCExpr (SymType UnitType)
+indSemExpr (ConstExpr i)          = semConstExpr i
+indSemExpr (ConstConstrExpr i)    = semConstConstrExpr i
+indSemExpr (FunAppExpr i es)      = semFunAppExpr i es
+indSemExpr (ConstrAppExpr i es)   = semConstrAppExpr i es
+indSemExpr (ArrayDim i dim)       = semArrayDim i dim
+indSemExpr (LetIn l e)            = semLetIn l e
+indSemExpr (UnOpExpr op e)        = semUnOp op e
+indSemExpr (BinOpExpr op d e)     = semBinOp op d e
+indSemExpr (ArrayAccess i es)     = semArrayAccess i es
+indSemExpr (NewType t)            = semNewType t
+indSemExpr (DeleteExpr e)         = semDeleteExpr e
+indSemExpr (BeginExpr e)          = getNodeType e >>= retE (BeginExpr e)
+indSemExpr (IfThenElseExpr c d e) = semIfThenElseExpr c d e
+indSemExpr (IfThenExpr c e)       = semIfThenExpr c e
+indSemExpr (WhileExpr c e)        = semWhileExpr c e
+indSemExpr (ForExpr i l u e)      = semForExpr i l u e
+indSemExpr (ForDownExpr i u l e)  = semForDownExpr i u l e
+indSemExpr (MatchExpr e cs)       = semMatchExpr e cs
 
 -- All functions implementing the inductive step
 -- of the analysis of the expression for each case
@@ -496,13 +503,84 @@ semArrayAccess i es = do
                     retE (ArrayAccess i res) (SymType (RefType rv))
         _    -> throwSem $ "No array " ++ i ++ " found in scope"
 
+semNewType :: Type SemanticTag -> Parser (Expr SemanticTag)
+semNewType (Type (ArrayType {}) _) = throwSem "Cannot dynamically allocate memory for array types"
+semNewType t = do
+    retE (NewType t) (SymType . RefType $ typeToSymbolType t)
+
+semDeleteExpr :: Expr SemanticTag -> Parser (Expr SemanticTag)
+semDeleteExpr e = do
+    t <- getNodeType e
+    v <- freshTVar
+    unify (SymType (RefType v), t)
+    re <- resolveNodeType e
+    retE (DeleteExpr re) (SymType UnitType)
+
+semIfThenElseExpr :: Expr SemanticTag
+                  -> Expr SemanticTag
+                  -> Expr SemanticTag
+                  -> Parser (Expr SemanticTag)
+semIfThenElseExpr c d e = do
+    ct <- getNodeType c
+    dt <- getNodeType d
+    et <- getNodeType e
+    unify (SymType BoolType, ct)
+    unify (dt, et)
+    rc <- resolveNodeType c
+    rd <- resolveNodeType d
+    re <- resolveNodeType e
+    outT <- resolveType dt
+    retE (IfThenElseExpr rc rd re) outT
+
+semIfThenExpr :: Expr SemanticTag
+              -> Expr SemanticTag
+              -> Parser (Expr SemanticTag)
+semIfThenExpr c e = do
+    ct <- getNodeType c
+    et <- getNodeType e
+    unify (SymType BoolType, ct)
+    unify (SymType UnitType, et)
+    rc <- resolveNodeType c
+    re <- resolveNodeType e
+    retE (IfThenExpr rc re) (SymType UnitType)
+
+semWhileExpr :: Expr SemanticTag
+             -> Expr SemanticTag
+             -> Parser (Expr SemanticTag)
+semWhileExpr c e = do
+    ct <- getNodeType c
+    et <- getNodeType e
+    unify (SymType BoolType, ct)
+    unify (SymType UnitType, et)
+    rc <- resolveNodeType c
+    re <- resolveNodeType e
+    retE (WhileExpr rc re) (SymType UnitType)
+
+semForExpr :: Identifier
+           -> Expr SemanticTag
+           -> Expr SemanticTag
+           -> Expr SemanticTag
+           -> Parser (Expr SemanticTag)
+semForExpr i l u e = undefined -- TODO: Define
+
+semForDownExpr :: Identifier
+               -> Expr SemanticTag
+               -> Expr SemanticTag
+               -> Expr SemanticTag
+               -> Parser (Expr SemanticTag)
+semForDownExpr i u l e = undefined -- TODO: Define
+
+semMatchExpr :: Expr SemanticTag
+             -> [Clause SemanticTag]
+             -> Parser (Expr SemanticTag)
+semMatchExpr e cs = undefined -- TODO: Define
 
 -- Semantic analysis of clauses
 
 analyzeClause :: Clause AlexPosn -> Parser (Clause SemanticTag)
-analyzeClause = undefined
+analyzeClause (Match pat e p) = undefined -- TODO: Define
 
 -- Semantic analysis of patterns
 
 analyzePattern :: Pattern AlexPosn -> Parser (Pattern SemanticTag)
-analyzePattern = undefined
+analyzePattern = undefined -- TODO: Define

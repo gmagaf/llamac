@@ -10,7 +10,7 @@ import Common.PrintAST
 import Common.SymbolTable
 import Common.SymbolType
 import Lexer.Lexer (AlexPosn)
-import Parser.ParserM (Parser)
+import Parser.ParserM (Parser, stackTrace)
 import Semantics.Utils
 import Semantics.Unifier (unify)
 import Semantics.TypeAnalysis (analyzeType)
@@ -120,7 +120,7 @@ analyzeDefSig (VarDef x p) = do
     let varType = SymType . RefType $ tv
     return $ UntypedMutSig varType (x, MutableEntry varType) p
 analyzeDefSig (VarDefTyped x t p) = do
-    semT <- analyzeType t
+    semT <- stackTrace ("while analyzing mut var " ++ x) $ analyzeType t
     let varType = SymType . RefType $ typeToSymbolType semT
     return $ TypedMutSig semT (x, MutableEntry varType) p
 analyzeDefSig (ArrayDef i es p) = do
@@ -130,7 +130,7 @@ analyzeDefSig (ArrayDef i es p) = do
     return $ UntypedArrSig arrayType es (i, ArrayEntry arrayType dims) p
 analyzeDefSig (ArrayDefTyped i es t p) = do
     let dims = length es
-    semT <- analyzeType t
+    semT <- stackTrace ("while analyzing array " ++ i) $ analyzeType t
     let arrayType = SymType . ArrayType dims $ typeToSymbolType semT
     return $ TypedArrSig semT es (i, ArrayEntry arrayType dims) p
 analyzeDefSig (FunDef i ps e p) = do
@@ -140,7 +140,7 @@ analyzeDefSig (FunDef i ps e p) = do
     -- Open scope for params names and their types
     openScopeInNames
     -- Analyze params in the current scope
-    semPs <- mapM (analyzeParam i) ps
+    semPs <- mapM (stackTrace ("while analyzing the params of " ++ i) . analyzeParam i) ps
     putSemPosn p
     paramTypes <- mapM getNodeType semPs
     -- Fresh outV is the output type of the function
@@ -156,11 +156,11 @@ analyzeDefSig (FunDefTyped i ps t e p) = do
     when (hasDuplicates paramNames) $
         throwSemAtPosn ("Fun " ++ i ++ " cannot have duplicate params") p
     -- We analyze the overall type of the function
-    semT <- analyzeType t
+    semT <- stackTrace ("while analyzing fun " ++ i) $ analyzeType t
     -- Open scope for params names and their types
     openScopeInNames
     -- Analyze params and body in the current scope
-    semPs <- mapM (analyzeParam i) ps
+    semPs <- mapM (stackTrace ("while analyzing the params of " ++ i) . analyzeParam i) ps
     eT <- freshTVar
     -- Collect the results: the new param types, the expr type and unify tv with the result fun type
     putSemPosn p
@@ -179,7 +179,7 @@ analyzeDefSig (FunDefTyped i ps t e p) = do
 -}
 analyzeParam :: Identifier -> Param AlexPosn -> Parser (Param SemanticTag)
 analyzeParam fun (TypedParam param t p) = do
-    semT <- analyzeType t
+    semT <- stackTrace ("while analyzing param " ++ param) $ analyzeType t
     putSemPosn p
     let st = typeToSymbolType t
     insertName param (ParamEntry st fun)
@@ -201,7 +201,7 @@ analyzeDefBody (TypedMutSig semT (i, entry) p) =
     let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}
     in return (VarDefTyped i semT tg, entry)
 analyzeDefBody (UntypedArrSig st es (i, entry) p) = do
-    semEs <- mapM analyzeExpr es
+    semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
     typesEs <- mapM getNodeType semEs
     putSemPosn p
     mapM_ (unify . (,) (SymType IntType)) typesEs
@@ -209,7 +209,7 @@ analyzeDefBody (UntypedArrSig st es (i, entry) p) = do
     let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}
     return (ArrayDef i rSemEs tg, entry)
 analyzeDefBody (TypedArrSig semT es (i, entry) p) = do
-    semEs <- mapM analyzeExpr es
+    semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
     typesEs <- mapM getNodeType semEs
     putSemPosn p
     mapM_ (unify . (,) (SymType IntType)) typesEs
@@ -225,7 +225,7 @@ analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do
           insertName (ide param) (ParamEntry t i)
           return t
     paramTypes <- mapM insertParam semPs
-    semE <- analyzeExpr e
+    semE <- stackTrace ("while analyzing the body of " ++ i) (analyzeExpr e)
     -- Collect the results: the new param types, the expr type and unify tv with the result fun type
     putSemPosn p
     eT <- getNodeType semE
@@ -248,7 +248,7 @@ analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do
           insertName (ide param) (ParamEntry t i)
           return t
     paramTypes <- mapM insertParam semPs
-    semE <- analyzeExpr e
+    semE <- stackTrace ("while analyzing the body of " ++ i) (analyzeExpr e)
     -- Collect the results: the new param types, the expr type and unify tv with the result fun type
     putSemPosn p
     eT <- getNodeType semE
@@ -271,8 +271,12 @@ analyzeExpr = recSemExpr indSemExpr
 recSemExpr :: (ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag))
          -> Expr AlexPosn
          -> Parser (Expr SemanticTag)
-recSemExpr g (Expr ef p) = do
-    semEf <- mapMExprF analyzeLet analyzeType analyzeClause (recSemExpr g) ef
+recSemExpr g e@(Expr ef p) = do
+    let alet = stackTrace ("while analyzing expr " ++ pretty e) . analyzeLet
+    let atype = stackTrace ("while analyzing expr " ++ pretty e) . analyzeType
+    let aclause = stackTrace ("while analyzing expr " ++ pretty e) . analyzeClause
+    let aexpr = stackTrace ("while analyzing expr " ++ pretty e) . recSemExpr g
+    semEf <- mapMExprF alet atype aclause aexpr ef
     putSemPosn p
     g semEf
 

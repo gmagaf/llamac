@@ -2,12 +2,13 @@ module Parser.ParserM (Parser,
                        getAlexPos, getTokenPosn,
                        getSymbols, putSymbols,
                        getSemState, putSemState,
-                       Error, throwError, throwAtPosn, throwInternalError,
+                       Error, throwError, throwAtPosn, stackTrace,
+                       throwInternalError,
                        throwParsingError, throwSemanticError,
                        runParser, parseString, evalParser,
                        lexerWrap) where
 
-import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, runExceptT, withExceptT)
+import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, catchE, runExceptT, withExceptT)
 import Control.Monad.Trans.State (State, evalState, runState, state)
 
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
@@ -105,6 +106,9 @@ throwParsingError = throwE . ParsingError
 
 throwSemanticError :: String -> Parser a
 throwSemanticError = throwE . SemanticError
+
+stackTrace :: String -> Parser a -> Parser a
+stackTrace s p = catchE p (throwE . \e -> e{msg = msg e ++ "\n" ++ s})
 
 -- Utils to facilitate the communication with the lexer
 changeMonad :: Alex a -> Parser a

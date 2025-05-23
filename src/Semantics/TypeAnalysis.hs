@@ -14,8 +14,9 @@ import Common.AST
 import Common.SymbolTable (TypeTableEntry(..), TableEntry(..))
 import Common.SymbolType (ConstType(..), typeToConstType, paramsToConstFunType)
 import Lexer.Lexer (AlexPosn)
-import Parser.ParserM (Parser)
+import Parser.ParserM (Parser, stackTrace)
 import Semantics.Utils
+import Common.PrintAST (Pretty(pretty))
 
 -- Semantic analysis of type definitions
 
@@ -61,7 +62,7 @@ analyzeTDef (TDef tId cs p) = do
 
 analyzeConstr :: Identifier -> Constr AlexPosn -> Parser (Constr SemanticTag)
 analyzeConstr tId (Constr cId params p) = do
-    semParams <- mapM analyzeType params
+    semParams <- mapM (stackTrace ("while analyzing constr " ++ cId) . analyzeType) params
     let paramTypes = map typeToConstType semParams
     let outputType = ConstType $ UserDefinedType tId
     let typeOfConstr = paramsToConstFunType paramTypes outputType
@@ -71,8 +72,9 @@ analyzeConstr tId (Constr cId params p) = do
 recSemType :: (TypeF (Type SemanticTag) -> Parser (Type SemanticTag))
     -> Type AlexPosn
     -> Parser (Type SemanticTag)
-recSemType f (Type tf p) = do
-    semTf <- mapM (recSemType f) tf
+recSemType f t@(Type tf p) = do
+    let aType = stackTrace ("while analyzing type " ++ pretty t) . recSemType f
+    semTf <- mapM aType tf
     putSemPosn p
     f semTf
 

@@ -155,11 +155,13 @@ gen freeVars t =
         alg (ArrayType _ f) = f
         alg (RefType f)     = f
         alg _               = []
-        removeDuplicates :: Set.Set Int -> [Int] -> ([Int], Set.Set Int)
-        removeDuplicates s []     = ([], s)
-        removeDuplicates s (x:xs) = if Set.member x s then (xs, s) else (x:xs, Set.insert x s)
+        removeDuplicates :: Set.Set Int -> [Int] -> [Int]
+        removeDuplicates _ []     = []
+        removeDuplicates s (x:xs) = if Set.member x s
+                                    then removeDuplicates s xs
+                                    else x:removeDuplicates (Set.insert x s) xs
         varsNotInScope = cata (alg, varNotInScope) t
-        varsToBound = fst . removeDuplicates Set.empty $ varsNotInScope
+        varsToBound = removeDuplicates Set.empty varsNotInScope
     in foldr AbsType (MonoType t) varsToBound
 
 -- Parser symbol table utiles

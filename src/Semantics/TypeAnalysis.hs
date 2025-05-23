@@ -23,7 +23,7 @@ analyzeTypeDef :: TypeDef AlexPosn -> Parser (TypeDef SemanticTag)
 analyzeTypeDef (TypeDef tDefs p) =
     let typeNames = Set.fromList $ map ide tDefs
     in do
-        openScopeInTable
+        openScopeInTypes
         mapM_ (insertTypeDef typeNames) tDefs
         semTDefs <- mapM analyzeTDef tDefs
         return $ TypeDef semTDefs (cpPosn p)

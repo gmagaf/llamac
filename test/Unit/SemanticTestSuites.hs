@@ -36,6 +36,7 @@ letDefSuite =
     ("type t = T of t\nlet t (t : t) = t\nlet g : t -> t = T", True),
     ("let id id x = let c = id x in x", True),
     ("let main id x = let c = id x in c", True),
+    ("let f id b = let c a = id a in c b", True),
     ("let mutable f : float and f x : int -> int = 5\nlet g : int = f 42", True),
     ("let f (x : int) = let x = 'c' in x", True),
     -- Failing cases
@@ -60,6 +61,7 @@ letRecSuites =
     ("let rec f : int -> int = main and main a = 42 and g = main", True),
     ("let rec mutable x and main : int ref = x", True),
     ("let rec main : int ref = x and mutable x", True),
+    ("let rec mutable a [3, 4] : int and mutable a [42]", True),
     ("let k x y : int -> int -> int = 5 let rec f x = k (g x) x and g y = k y (f y)", True),
     ("let rec f x = x and g = f 4", True),
     ("let rec f x = x and mutable a [f 4, 5] : float", True),
@@ -72,6 +74,9 @@ letRecSuites =
     ("let rec id x = x and c x = id 1 and main = id", True),
     ("let rec id x = x and f : int ref = x and g x = id x and mutable x and mutable ar [id 2] : float", True),
     ("let rec id x = x and f : int ref = x and g x = id x and mutable x and mutable ar [id 2, g 3] : float", True),
+    ("let rec mutable x [3] : float and mutable x : char", True),
+    ("let rec id id x = let rec c = id x in c", True),
+    ("let rec f = main and main a = 42 and mutable x and g = x", True),
     -- Failing cases
     ("let rec f = main and main a = 42 and g = main and k1 = main 'c' and k2 = main 9.0", False),
     ("let rec f = main and main a = 42 and g (a : int) = main a and k1 = main 'c' and k2 = main 9.0", False),

@@ -9,14 +9,14 @@ module Common.SymbolTable (SymbolTable(..),
                            update,
                            openScope,
                            closeScope,
-                           varTypeKey) where
+                           foldContext) where
 
 import qualified Data.Map as M
 import Data.List (intercalate)
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (Pretty (pretty))
-import Common.SymbolType (SymbolType(TVar), TypeScheme, ConstType)
+import Common.SymbolType (SymbolType, TypeScheme, ConstType)
 
 -- This module contains the defintion of the Symbol table for the compiler
 
@@ -56,6 +56,9 @@ closeScope :: Context k e -> Context k e
 closeScope (Context scopes) = Context s where
     s = if null scopes then [] else tail scopes
 
+foldContext :: (a -> b -> b) -> b -> Context k a -> b
+foldContext f b (Context scopes) = foldr g b scopes where
+    g scope b' = M.foldr f b' scope
 
 -- Definitions for symbol table and table entries
 type NameSpace = Context String TableEntry
@@ -69,9 +72,6 @@ data SymbolTable = SymbolTable {
 emptySymbolTable :: SymbolTable
 emptySymbolTable = SymbolTable {names = emptyContext, types = emptyContext}
 
-varTypeKey :: Int -> String
-varTypeKey v = pretty (TVar v)
-
 data TableEntry
     = MutableEntry SymbolType                     -- Type of the mutable variable
     | ArrayEntry SymbolType Int                   -- Type of the entries, num of dimensions
@@ -80,9 +80,8 @@ data TableEntry
     | ConstrEntry ConstType [ConstType] ConstType -- Type of constructor, params, output type
         deriving Show
 
-data TypeTableEntry
+newtype TypeTableEntry
     = TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
-    | TVarEntry                                   -- Denotes whether the type variable is in scope
         deriving Show
 
 -- Pretty printing of symbol table
@@ -113,7 +112,6 @@ instance Pretty TypeTableEntry where
                 f (c, []) = c
                 f (c, ps) = c ++ " of " ++ unwords (map pretty ps)
                 cs = intercalate ", " (map f constrs)
-        TVarEntry -> "Type Var"
 
 instance (Show k, Pretty e) => Pretty (Context k e) where
     pretty (Context scopes) =
@@ -123,7 +121,7 @@ instance (Show k, Pretty e) => Pretty (Context k e) where
             toPaddings (ak, ek) (k, e) = (max ak k, max ek e)
             scopeToString sc = map toString $ M.assocs sc
             stringsToLengths = map toLengths
-            lengthsToPaddings = foldl toPaddings (0, 0)
+            lengthsToPaddings = foldr toPaddings (0, 0)
             strings = map scopeToString scopes
             lengths = map stringsToLengths strings
             paddings = map lengthsToPaddings lengths

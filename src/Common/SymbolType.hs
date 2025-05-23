@@ -5,18 +5,21 @@ module Common.SymbolType (
                         typeToConstType,
                         typeToSymbolType,
                         constTypeToSymbolType,
-                        cataMSymbolType,
+                        cata,
+                        cataM,
                         subst,
                         substScheme,
+                        tvarsInType,
+                        freeVarsInScheme,
                         tvarInType,
                         notVarInType,
-                        typesToFunType,
                         paramsToFunType,
                         funTypeToTypes,
                         funTypeToArgTypes,
                         outFunType,
                         paramsToConstFunType) where
 
+import qualified Data.Set as S
 import Common.AST (Type(..), TypeF(..))
 import Common.PrintAST (Pretty(prettyPrec))
 
@@ -67,13 +70,13 @@ bottomUp f v@(TVar _)  = f v
 -- bottomUpM f (SymType t) = mapM (bottomUpM f) t >>= f . SymType
 -- bottomUpM f v@(TVar _)  = f v
 
--- cata :: (TypeF a -> a, Int -> a) -> SymbolType -> a
--- cata alg@(f, _) (SymType t) = f $ fmap (cata alg) t
--- cata (_, g) (TVar v) = g v
+cata :: (TypeF a -> a, Int -> a) -> SymbolType -> a
+cata alg@(f, _) (SymType t) = f $ fmap (cata alg) t
+cata (_, g) (TVar v) = g v
 
-cataMSymbolType :: Monad m => (TypeF a -> m a, Int -> m a) -> SymbolType -> m a
-cataMSymbolType alg@(f, _) (SymType t) = mapM (cataMSymbolType alg) t >>= f
-cataMSymbolType (_, g) (TVar v) = g v
+cataM :: Monad m => (TypeF a -> m a, Int -> m a) -> SymbolType -> m a
+cataM alg@(f, _) (SymType t) = mapM (cataM alg) t >>= f
+cataM (_, g) (TVar v) = g v
 
 -- Type theoretic utils
 subst :: Int -> SymbolType -> SymbolType -> SymbolType
@@ -88,6 +91,25 @@ substScheme v r (MonoType t) = MonoType $ subst v r t
 substScheme v r (AbsType u t) | v == u    = AbsType u t
                               | otherwise = AbsType u $ substScheme v r t
 
+tvarsInType :: SymbolType -> [Int]
+tvarsInType st = cata (aux, (:)) st [] where
+    aux :: TypeF ([Int] -> [Int]) -> [Int] -> [Int]
+    aux (FunType f g)   = f . g
+    aux (ArrayType _ f) = f
+    aux (RefType f)     = f
+    aux _               = id
+
+tvarsInScheme :: TypeScheme -> [Int]
+tvarsInScheme (MonoType t)  = tvarsInType t
+tvarsInScheme (AbsType _ t) = tvarsInScheme t
+
+freeVarsInScheme :: TypeScheme -> [Int]
+freeVarsInScheme t = S.toList $ S.difference allvars bound where
+    allvars = S.fromList $ tvarsInScheme t
+    bound = S.fromList (aux t)
+    aux (MonoType _)  = []
+    aux (AbsType v s) = v : aux s
+
 tvarInType :: Int -> SymbolType -> Bool
 tvarInType v (TVar u)
                 | v == u = True
@@ -98,11 +120,6 @@ notVarInType :: Int -> SymbolType -> Bool
 notVarInType v = not . tvarInType v
 
 -- Fun Types Utils
-typesToFunType :: [SymbolType] -> SymbolType
-typesToFunType []     = SymType UnitType
-typesToFunType [out]  = out
-typesToFunType (t:ts) = SymType (FunType t (typesToFunType ts))
-
 paramsToFunType :: [SymbolType] -> SymbolType -> SymbolType
 paramsToFunType [] out = out
 paramsToFunType (t:ts) out = SymType (FunType t (paramsToFunType ts out))

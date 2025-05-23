@@ -308,10 +308,7 @@ indSemExpr (ConstConstrExpr i)  = semConstConstrExpr i
 indSemExpr (FunAppExpr i es)    = semFunAppExpr i es
 indSemExpr (ConstrAppExpr i es) = semConstrAppExpr i es
 indSemExpr (ArrayDim i dim)     = semArrayDim i dim
-indSemExpr ef@(LetIn _ e) = do
-    closeScopeInNames
-    t <- getNodeType e
-    retE ef t
+indSemExpr (LetIn l e)          = semLetIn l e
 -- TODO: Define
 indSemExpr e = trace (show e) undefined
 
@@ -407,6 +404,12 @@ semArrayDim i dim = findName i >>= run where
       | dims < dim = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of " ++ show dims ++ "-dim array " ++ i
       | otherwise = retE (ArrayDim i dim) (SymType IntType)
     run _ = throwSem $ "No array " ++ i ++ " in scope"
+
+semLetIn :: LetDef SemanticTag -> Expr SemanticTag -> Parser (Expr SemanticTag)
+semLetIn l e = do
+    closeScopeInNames
+    t <- getNodeType e
+    retE (LetIn l e) t
 
 -- Semantic analysis of clauses
 

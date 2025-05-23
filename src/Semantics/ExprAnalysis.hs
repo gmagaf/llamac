@@ -312,6 +312,8 @@ indSemExpr (ConstrAppExpr i es) = semConstrAppExpr i es
 indSemExpr (ArrayDim i dim)     = semArrayDim i dim
 indSemExpr (LetIn l e)          = semLetIn l e
 indSemExpr (UnOpExpr op e)      = semUnOp op e
+indSemExpr (BinOpExpr op d e)   = semBinOp op d e
+indSemExpr (ArrayAccess i es)   = semArrayAccess i es
 -- TODO: Define
 indSemExpr e = trace (show e) undefined
 
@@ -432,6 +434,68 @@ semUnOp op e = do
     rt <- resolveType t
     let finalT = if op == BangOp then v else rt
     retE (UnOpExpr op rE) finalT
+
+semBinOp :: BinOp -> Expr SemanticTag -> Expr SemanticTag -> Parser (Expr SemanticTag)
+semBinOp op d e = do
+    s <- getNodeType d
+    t <- getNodeType e
+    outT <- freshTVar
+    case op of
+        PlusOp          -> unifyAll (SymType IntType) s t outT
+        MinusOp         -> unifyAll (SymType IntType) s t outT
+        TimesOp         -> unifyAll (SymType IntType) s t outT
+        DivOp           -> unifyAll (SymType IntType) s t outT
+        ModOp           -> unifyAll (SymType IntType) s t outT
+        PlusFloatOp     -> unifyAll (SymType FloatType) s t outT
+        MinusFloatOp    -> unifyAll (SymType FloatType) s t outT
+        TimesFloatOp    -> unifyAll (SymType FloatType) s t outT
+        DivFloatOp      -> unifyAll (SymType FloatType) s t outT
+        ExpOp           -> unifyAll (SymType FloatType) s t outT
+        AndOp           -> unifyAll (SymType BoolType) s t outT
+        OrOp            -> unifyAll (SymType BoolType) s t outT
+        SemicolonOp     -> unify (t, outT)
+        AssignMutableOp -> do
+            unify (s, SymType (RefType t))
+            unify (SymType UnitType, outT)
+        -- TODO: Add constraints on the arguments
+        EqOp            -> unifyComp s t outT
+        NotEqOp         -> unifyComp s t outT
+        NatEqOp         -> unifyComp s t outT
+        NotNatEqOp      -> unifyComp s t outT
+        LTOp            -> unifyComp s t outT
+        GTOp            -> unifyComp s t outT
+        LEqOp           -> unifyComp s t outT
+        GEqOp           -> unifyComp s t outT
+    rd <- resolveNodeType d
+    re <- resolveNodeType e
+    retE (BinOpExpr op rd re) outT where
+        unifyAll expected s' t' outT' = do
+            unify (expected, s')
+            unify (expected, t')
+            unify (expected, outT')
+        unifyComp s' t' outT' = do
+            unify (s', t')
+            unify (SymType BoolType, outT')
+
+semArrayAccess :: Identifier -> [Expr SemanticTag] -> Parser (Expr SemanticTag)
+semArrayAccess i es = do
+    entry <- findName i
+    case entry of
+        ArrayEntry t dims ->
+            case compare (length es) dims of
+                LT -> throwSem $ "Array " ++ i ++ " is applied to too few arguments"
+                GT -> throwSem $ "Array " ++ i ++ " is applied to too many arguments"
+                EQ -> do
+                    ts <- mapM getNodeType es
+                    mapM_ (\et -> unify (SymType IntType, et)) ts
+                    v <- freshTVar
+                    let inf = SymType (ArrayType dims v)
+                    unify (t, inf)
+                    res <- mapM resolveNodeType es
+                    rv <- resolveType v
+                    retE (ArrayAccess i res) (SymType (RefType rv))
+        _    -> throwSem $ "No array " ++ i ++ " found in scope"
+
 
 -- Semantic analysis of clauses
 

@@ -10,7 +10,7 @@ import Common.PrintAST (pretty)
 import Common.SymbolType(SymbolType(..), constTypeToSymbolType, notVarInType)
 import Parser.ParserM (Parser)
 import Semantics.Utils (throwSem, getUnifier, putUnifier, getConstraints, putConstraints, resolveType, copyConstraints)
-import Semantics.SemanticState (TypeConstraint (..))
+import Semantics.SemanticState (TypeConstraint (..), constraintsToList, addConstraints, fromConstraint)
 
 checkConstraint :: SymbolType -> TypeConstraint -> Parser ()
 checkConstraint (SymType (FunType _ _)) (NotAllowedFunType s) =
@@ -35,17 +35,17 @@ checkConstraint (TVar v) c = do
         throwSem ("Unable to add constraint: " ++ show c ++
                   " . Variable " ++ pretty tv ++ " has never been used before")
     cs <- getConstraints
-    let g new_constrs old_contrs = new_constrs ++ old_contrs
-    putConstraints $ Map.insertWith g v [c] cs
+    let g = addConstraints
+    putConstraints $ Map.insertWith g v (fromConstraint c) cs
 
 applyConstraints :: (SymbolType, SymbolType) -> Parser ()
 applyConstraints (TVar v, TVar u) = copyConstraints (TVar v, TVar u)
 applyConstraints (TVar v, t) = do
     c <- getConstraints
-    forM_ (Map.lookup v c) (mapM_ (checkConstraint t))
+    forM_ (Map.lookup v c) (mapM_ (checkConstraint t) . constraintsToList)
 applyConstraints (t, TVar v) = do
     c <- getConstraints
-    forM_ (Map.lookup v c) (mapM_ (checkConstraint t))
+    forM_ (Map.lookup v c) (mapM_ (checkConstraint t) . constraintsToList)
 applyConstraints _ = return ()
 
 -- This function is used to unify two types

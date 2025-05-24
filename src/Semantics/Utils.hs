@@ -29,7 +29,7 @@ import Parser.ParserM (Parser,
     getSymbols, getSemState, putSymbols, putSemState,
     throwSemanticError, throwAtPosn)
 import Parser.ParserState (SemanticState(..), Unifier)
-import Semantics.SemanticState (Constraints)
+import Semantics.SemanticState (Constraints, addConstraints)
 
 -- This module contains semantic analysis tools
 data TypeInfo = NotTypable
@@ -130,11 +130,11 @@ putConstraints c = do
 copyConstraints :: (SymbolType, SymbolType) -> Parser ()
 copyConstraints (TVar v, TVar u) = do
     c <- getConstraints
-    let g new_constrs old_contrs = new_constrs ++ old_contrs
+    let g = addConstraints
     case (Map.lookup v c, Map.lookup u c) of
         (Nothing, Nothing) -> return ()
-        (Nothing, Just cs) -> putConstraints $ Map.insertWith g v cs c
-        (Just cs, Nothing) -> putConstraints $ Map.insertWith g u cs c
+        (Nothing, Just cs) -> putConstraints $ Map.insert v cs c
+        (Just cs, Nothing) -> putConstraints $ Map.insert u cs c
         (Just vc, Just uc) ->
             let finalC = Map.insertWith g u vc (Map.insertWith g v uc c)
             in putConstraints finalC

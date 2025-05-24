@@ -16,8 +16,6 @@ import Semantics.Utils
 import Semantics.Unifier (checkConstraint, unify)
 import Semantics.TypeAnalysis (analyzeType)
 
-import Debug.Trace (trace)
-
 -- Semantic analysis of definitions
 
 {-

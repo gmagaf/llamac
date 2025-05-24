@@ -11,8 +11,9 @@ import Common.SymbolTable
 import Common.SymbolType
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser, stackTrace, throwInternalError)
+import Semantics.SemanticState (TypeConstraint(..))
 import Semantics.Utils
-import Semantics.Unifier (unify)
+import Semantics.Unifier (checkConstraint, unify)
 import Semantics.TypeAnalysis (analyzeType)
 
 import Debug.Trace (trace)
@@ -434,13 +435,17 @@ semConstrAppExpr i es = do
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
 
 semArrayDim :: Identifier -> Int -> Parser (Expr SemanticTag)
+semArrayDim i dim | dim < 1 = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of array " ++ i
 semArrayDim i dim = findName i >>= run where
     run (ArrayEntry _ dims)
-      | dim < 1 = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of array " ++ i
       | dims < dim = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of " ++ show dims ++ "-dim array " ++ i
       | otherwise = retE (ArrayDim i dim) (SymType IntType)
-    run (ParamEntry t f) = undefined -- TODO: Define
-    run (PatternEntry t) = undefined -- TODO: Define
+    run (ParamEntry t _) = do
+        checkConstraint t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
+        retE (ArrayDim i dim) (SymType IntType)
+    run (PatternEntry t) = do
+        checkConstraint t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
+        retE (ArrayDim i dim) (SymType IntType)
     run _ = throwSem $ "No array " ++ i ++ " in scope"
 
 semLetIn :: LetDef SemanticTag -> Expr SemanticTag -> Parser (Expr SemanticTag)
@@ -487,11 +492,10 @@ semBinOp op d e = do
         AssignMutableOp -> do
             unify (s, SymType (RefType t))
             unify (SymType UnitType, outT)
-        -- TODO: Add constraints on the arguments
-        EqOp            -> unifyComp s t outT
-        NotEqOp         -> unifyComp s t outT
-        NatEqOp         -> unifyComp s t outT
-        NotNatEqOp      -> unifyComp s t outT
+        EqOp            -> unifyEq s t outT
+        NotEqOp         -> unifyEq s t outT
+        NatEqOp         -> unifyEq s t outT
+        NotNatEqOp      -> unifyEq s t outT
         LTOp            -> unifyComp s t outT
         GTOp            -> unifyComp s t outT
         LEqOp           -> unifyComp s t outT
@@ -503,7 +507,18 @@ semBinOp op d e = do
             unify (expected, s')
             unify (expected, t')
             unify (expected, outT')
+        unifyEq s' t' outT' = do
+            checkConstraint s' (NotAllowedFunType $ "Cannot apply operator " ++ pretty op ++ " to fun types")
+            checkConstraint s' (NotAllowedArrayType $ "Cannot apply operator " ++ pretty op ++ " to array types")
+            checkConstraint t' (NotAllowedFunType $ "Cannot apply operator " ++ pretty op ++ " to fun types")
+            checkConstraint t' (NotAllowedArrayType $ "Cannot apply operator " ++ pretty op ++ " to array types")
+            unify (s', t')
+            unify (SymType BoolType, outT')
         unifyComp s' t' outT' = do
+            let c = AllowedTypes [ConstType IntType, ConstType FloatType, ConstType CharType]
+                    ("Operator " ++ pretty op ++ " can only be applied to int, float or char")
+            checkConstraint s' c
+            checkConstraint t' c
             unify (s', t')
             unify (SymType BoolType, outT')
 
@@ -636,7 +651,7 @@ semMatchExpr :: Expr SemanticTag
              -> Parser (Expr SemanticTag)
 semMatchExpr e cs = do
     et <- getNodeType e
-    -- TODO: Add constraint to et to be user defined type
+    checkConstraint et (AllowedUserDefinedType "Can only apply pattern matching to user defined type")
     let getPat (Match pat _ _) = pat
     let pats = map getPat cs
     patTs <- mapM getNodeType pats

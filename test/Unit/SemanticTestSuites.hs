@@ -152,12 +152,7 @@ exprSuites =
         ("let rec mutable x : int and main = for i = 17 to 42 do x := i done", True),
         ("let rec pr i = () and main = for i = 42 downto 17 do pr i done", True),
         ("let rec mutable x : int and main = for i = 42 downto 17 do x := i done", True),
-        ("let main x = match x with 0 -> () | 1 -> () end", True),
         ("let main x = match x with y -> y end", True),
-        ("let main x = match x with y -> y 0 end", True),
-        ("let main x = match x with y -> y [0] end", True),
-        ("let main x = match x with y -> !y end", True),
-        ("let rec main x = match x with y -> y (main y) end", True),
         ("type t = T of t let main x = match x with y -> T y end", True),
         ("let print_int i = ()\n" ++
          "and print_float f = ()\n" ++
@@ -176,6 +171,7 @@ exprSuites =
          "  end", True),
          ("type t = T of bool and s = S of t let main s = match s with S x -> () end", True),
          ("type t = T of bool and s = S of t let main s = match s with S t -> match t with T true -> () end end", True),
+        ("type t = T of int let main x = match x with T f -> f = f end", True),
         -- Failing cases
         ("type t = T of t int \nlet t (t : t) = t\nlet g t : t -> t = T t", False),
         ("let rec mutable a [1, 2, 3] and d = dim 0 a", False),
@@ -235,6 +231,8 @@ exprSuites =
         ("let f x y : unit -> unit -> bool = x > y", False),
         ("let f x y : unit -> unit -> bool = x <= y", False),
         ("let f x y : unit -> unit -> bool = x >= y", False),
+        ("let main f g = let b = f = g in f 4", False),
+        ("let main f g = f = g and add x y = x + y let r = main add add", False),
         ("let rec mutable x : int and f : unit = x := 4.9", False),
         ("let rec mutable x and f : bool = x := 4", False),
         ("let rec x = 4 and y = x[4]", False),
@@ -267,5 +265,11 @@ exprSuites =
         ("let main : int = for i = 17 downto () do () done let f = i", False),
         ("let main : int = for i = () downto 42 do () done let f = i", False),
         ("let main x = match x with 0 -> () | 1 -> 'f' end", False),
-        ("type t = T of bool and s = S of t let main s = match s with S (T true) -> () end", False)
+        ("let main x = match x with 0 -> () | 1 -> () end", False),
+        ("let main x = match x with y -> y 0 end", False),
+        ("let main x = match x with y -> y [0] end", False),
+        ("let main x = match x with y -> !y end", False),
+        ("let rec main x = match x with y -> y (main y) end", False),
+        ("type t = T of bool and s = S of t let main s = match s with S (T true) -> () end", False),
+        ("let main x = match x with f -> f end + 3", False)
     ]

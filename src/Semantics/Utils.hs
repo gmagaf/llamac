@@ -2,6 +2,7 @@ module Semantics.Utils (module Semantics.Utils) where
 
 import Data.Foldable (foldrM)
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import Data.Maybe (isJust, isNothing)
 import Control.Monad ((>=>), when)
 
@@ -28,6 +29,7 @@ import Parser.ParserM (Parser,
     getSymbols, getSemState, putSymbols, putSemState,
     throwSemanticError, throwAtPosn)
 import Parser.ParserState (SemanticState(..), Unifier)
+import Semantics.SemanticState (Constraints)
 
 -- This module contains semantic analysis tools
 data TypeInfo = NotTypable
@@ -109,13 +111,34 @@ putUnifier v t = do
     let tv = TVar v
     f <- getUnifier
     when (isNothing (f tv)) $
-        throwSem ("Variable " ++ pretty tv ++ " has been used before")
+        throwSem ("Variable " ++ pretty tv ++ " has never been used before")
     when (isNothing (f t)) $
         throwSem ("Type " ++ pretty t ++ " contains variables never used before")
     let g t'@(TVar v') = if v' == v then Just t else Just t'
         g (SymType tf) = SymType <$> mapM g tf
     s <- getSemState
     putSemState s{unifier = f >=> g}
+
+getConstraints :: Parser Constraints
+getConstraints = constraints <$> getSemState
+
+putConstraints :: Constraints -> Parser ()
+putConstraints c = do
+    s <- getSemState
+    putSemState s{constraints = c}
+
+copyConstraints :: (SymbolType, SymbolType) -> Parser ()
+copyConstraints (TVar v, TVar u) = do
+    c <- getConstraints
+    let g new_constrs old_contrs = new_constrs ++ old_contrs
+    case (Map.lookup v c, Map.lookup u c) of
+        (Nothing, Nothing) -> return ()
+        (Nothing, Just cs) -> putConstraints $ Map.insertWith g v cs c
+        (Just cs, Nothing) -> putConstraints $ Map.insertWith g u cs c
+        (Just vc, Just uc) ->
+            let finalC = Map.insertWith g u vc (Map.insertWith g v uc c)
+            in putConstraints finalC
+copyConstraints _ = return ()
 
 -- Error handling functions
 throwSemAtPosn :: String -> AlexPosn -> Parser a
@@ -140,6 +163,7 @@ inst :: TypeScheme -> Parser SymbolType
 inst (MonoType t)  = return t
 inst (AbsType v t) = do
     v' <- freshTVar
+    copyConstraints (TVar v, v')
     let substt = substScheme v v' t
     inst substt
 

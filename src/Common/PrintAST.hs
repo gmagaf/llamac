@@ -320,6 +320,9 @@ binOpPrec OrOp = (L, 5, T_or_op)
 binOpPrec AssignMutableOp = (Non, 4, T_assign_mutable)
 binOpPrec SemicolonOp = (L, 1, T_semicolon)
 
+instance Pretty BinOp where
+  pretty = pretty . (\(_, _, t) -> t) . binOpPrec
+
 instance Pretty (Clause b) where
   pretty (Match p e _) = showPretty p . showString " " . showPretty T_arrow .
     showString " " . showPretty e $ ""

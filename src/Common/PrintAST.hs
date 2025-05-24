@@ -325,7 +325,10 @@ instance Pretty (Clause b) where
     showString " " . showPretty e $ ""
 
 instance Pretty (Pattern b) where
-  prettyPrec d (Pattern p _) = case p of
+  prettyPrec d (Pattern p _) = prettyPrec d p
+
+instance Pretty p => Pretty (PatternF p) where
+  prettyPrec d pf = case pf of
     IntConstPattern NoSign i -> prettyIntC i
     IntConstPattern Plus i -> showPretty T_plus . prettyIntC i
     IntConstPattern Minus i -> showPretty T_minus . prettyIntC i

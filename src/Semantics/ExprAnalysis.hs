@@ -346,6 +346,8 @@ semConstExpr i = do
             retE (ConstExpr i) t
         ArrayEntry t _ -> do
             retE (ConstExpr i) t
+        PatternEntry t -> do
+            retE (ConstExpr i) t
         ConstrEntry {} -> throwInternalError $
             "Constr entry: " ++ show entry ++ " is not expected for identifier key " ++ i
 
@@ -391,6 +393,19 @@ semFunAppExpr i es = do
                 LT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty t ++ " is applied to too few arguments"
                 GT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty t ++ " is applied to too many arguments"
                 EQ -> retE (FunAppExpr i res) rv
+        PatternEntry t -> do
+            ts <- mapM getNodeType es
+            v <- freshTVar
+            let inf = paramsToFunType ts v
+            unify (t, inf)
+            res <- mapM resolveNodeType es
+            rv <- resolveType v
+            rt <- resolveType t
+            let argTypes = funTypeToArgTypes rt
+            case compare (length es) (length argTypes) of
+                LT -> throwSem $ "Pattern " ++ i ++ " of type " ++ pretty t ++ " is applied to too few arguments"
+                GT -> throwSem $ "Pattern " ++ i ++ " of type " ++ pretty t ++ " is applied to too many arguments"
+                EQ -> retE (FunAppExpr i res) rv
         MutableEntry _    -> throwSem $ "Cannot apply arguments to the mutable variable " ++ i
         ArrayEntry _ _    -> throwSem $ "Cannot apply arguments to array " ++ i
         ConstrEntry {}    -> throwSem $ "Cannot apply function arguments to constr " ++ i
@@ -424,6 +439,8 @@ semArrayDim i dim = findName i >>= run where
       | dim < 1 = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of array " ++ i
       | dims < dim = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of " ++ show dims ++ "-dim array " ++ i
       | otherwise = retE (ArrayDim i dim) (SymType IntType)
+    run (ParamEntry t f) = undefined -- TODO: Define
+    run (PatternEntry t) = undefined -- TODO: Define
     run _ = throwSem $ "No array " ++ i ++ " in scope"
 
 semLetIn :: LetDef SemanticTag -> Expr SemanticTag -> Parser (Expr SemanticTag)
@@ -507,6 +524,24 @@ semArrayAccess i es = do
                     res <- mapM resolveNodeType es
                     rv <- resolveType v
                     retE (ArrayAccess i res) (SymType (RefType rv))
+        ParamEntry t _ -> do
+            ts <- mapM getNodeType es
+            mapM_ (\et -> unify (SymType IntType, et)) ts
+            v <- freshTVar
+            let inf = SymType (ArrayType (length es) v)
+            unify (t, inf)
+            res <- mapM resolveNodeType es
+            rv <- resolveType v
+            retE (ArrayAccess i res) (SymType (RefType rv))
+        PatternEntry t -> do
+            ts <- mapM getNodeType es
+            mapM_ (\et -> unify (SymType IntType, et)) ts
+            v <- freshTVar
+            let inf = SymType (ArrayType (length es) v)
+            unify (t, inf)
+            res <- mapM resolveNodeType es
+            rv <- resolveType v
+            retE (ArrayAccess i res) (SymType (RefType rv))
         _    -> throwSem $ "No array " ++ i ++ " found in scope"
 
 semNewType :: Type SemanticTag -> Parser (Expr SemanticTag)
@@ -599,14 +634,83 @@ semForDownExpr i u l e = do
 semMatchExpr :: Expr SemanticTag
              -> [Clause SemanticTag]
              -> Parser (Expr SemanticTag)
-semMatchExpr e cs = undefined -- TODO: Define
+semMatchExpr e cs = do
+    et <- getNodeType e
+    -- TODO: Add constraint to et to be user defined type
+    let getPat (Match pat _ _) = pat
+    let pats = map getPat cs
+    patTs <- mapM getNodeType pats
+    mapM_ (\t -> unify (et, t)) patTs
+    outT <- freshTVar
+    let getExp (Match _ expr _) = expr
+    let patExps = map getExp cs
+    patExpTs <- mapM getNodeType patExps
+    mapM_ (\t -> unify (outT, t)) patExpTs
+    re <- resolveNodeType e
+    rcs <- mapM resClause cs
+    routT <- resolveType outT
+    retE (MatchExpr re rcs) routT where
+        resClause (Match pat expr t) = do
+            rPat <- resolveNodeType pat
+            rExp <- resolveNodeType expr
+            return (Match rPat rExp t)
 
 -- Semantic analysis of clauses
 
 analyzeClause :: Clause AlexPosn -> Parser (Clause SemanticTag)
-analyzeClause (Match pat e p) = undefined -- TODO: Define
+analyzeClause c@(Match pat e p) = do
+    openScopeInNames
+    semP <- stackTrace ("while analyzing clause " ++ pretty c) $ analyzePattern pat
+    semE <- stackTrace ("while analyzing clause " ++ pretty c) $ analyzeExpr e
+    closeScopeInNames
+    return $ Match semP semE (cpPosn p)
 
 -- Semantic analysis of patterns
 
 analyzePattern :: Pattern AlexPosn -> Parser (Pattern SemanticTag)
-analyzePattern = undefined -- TODO: Define
+analyzePattern = recSemPattern indSemPat
+
+recSemPattern :: (PatternF (Pattern SemanticTag) -> Parser (Pattern SemanticTag))
+    -> Pattern AlexPosn
+    -> Parser (Pattern SemanticTag)
+recSemPattern f p@(Pattern pf psn) = do
+    let aPattern = stackTrace ("while analyzing pattern " ++ pretty p) . recSemPattern f
+    semPf <- mapM aPattern pf
+    putSemPosn psn
+    f semPf
+
+retP :: PatternF (Pattern SemanticTag) -> SymbolType -> Parser (Pattern SemanticTag)
+retP pat t = do
+    p <- getSemPosn
+    return $ Pattern pat SemTag{posn = p, typeInfo = NodeType t}
+
+indSemPat :: PatternF (Pattern SemanticTag) -> Parser (Pattern SemanticTag)
+indSemPat p@(IntConstPattern {}) = retP p (SymType IntType)
+indSemPat p@(FloatConstPattern {}) = retP p (SymType FloatType)
+indSemPat p@(CharConstPattern {}) = retP p (SymType CharType)
+indSemPat TruePattern = retP TruePattern (SymType BoolType)
+indSemPat FalsePattern = retP FalsePattern (SymType BoolType)
+indSemPat (IdPattern x) = do
+    v <- freshTVar
+    insertName x (PatternEntry v)
+    retP (IdPattern x) v
+indSemPat (ConstrPattern i pats) = do
+    entry <- findName i
+    case entry of
+        ConstrEntry _ argT outT ->
+            case compare (length pats) (length argT) of
+                LT -> throwSem $ "Constructor " ++ i ++ " is applied to too few patterns"
+                GT -> throwSem $ "Constructor " ++ i ++ " is applied to too many patterns"
+                EQ -> do
+                    patTs <- mapM getNodeType pats
+                    mapM_ unify (zipWith (\ct t -> (constTypeToSymbolType ct, t)) argT patTs)
+                    rpats <- mapM resolveNodeType pats
+                    mapM_ verifyParamPat rpats
+                    retP (ConstrPattern i rpats) (constTypeToSymbolType outT)
+            where verifyParamPat (Pattern (ConstrPattern _ []) _) = return ()
+                  verifyParamPat (Pattern (ConstrPattern p _) tg) =
+                    throwSemAtPosn ("Pattern param " ++ p ++
+                        " cannot be a pattern of a constructor with parameters") (posn tg)
+                  verifyParamPat _ = return ()
+        _ -> throwInternalError $
+            "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i

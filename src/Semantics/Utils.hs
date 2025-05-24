@@ -198,6 +198,7 @@ freeVarsInScope = foldContext g [] <$> getNames where
         ArrayEntry st _ -> tvarsInType st ++ acc
         FunEntry sch _  -> freeVarsInScheme sch ++ acc
         ParamEntry st _ -> tvarsInType st ++ acc
+        PatternEntry st -> tvarsInType st ++ acc
         ConstrEntry {}  -> acc
 
 -- Resolution utils
@@ -272,6 +273,13 @@ findName k = let
         ParamEntry t i -> do
             rt <- resolveType t
             let updated = ParamEntry rt i
+            if rt == t then return entry
+            else do
+                updateName k updated
+                return updated
+        PatternEntry t -> do
+            rt <- resolveType t
+            let updated = PatternEntry rt
             if rt == t then return entry
             else do
                 updateName k updated

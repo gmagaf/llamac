@@ -77,6 +77,7 @@ data TableEntry
     | ArrayEntry SymbolType Int                   -- Type of the entries, num of dimensions
     | FunEntry TypeScheme [Identifier]            -- TypeScheme of the function, params
     | ParamEntry SymbolType Identifier            -- Type of the param, function of the param
+    | PatternEntry SymbolType                     -- Type of the pattern
     | ConstrEntry ConstType [ConstType] ConstType -- Type of constructor, params, output type
         deriving Show
 
@@ -100,6 +101,8 @@ instance Pretty TableEntry where
         ConstrEntry constrType [] outputType ->
             "Constr of " ++ pretty outputType ++
             " with type: " ++ pretty constrType
+        PatternEntry t ->
+            "Pattern of type " ++ pretty t
         ConstrEntry constrType ts outputType ->
             "Constr of " ++ pretty outputType ++
             " with type: " ++ pretty constrType ++

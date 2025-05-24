@@ -135,6 +135,8 @@ exprSuites =
         ("let rec mutable x and f : unit = x := 4", True),
         ("let rec mutable a [0, 1, 3] and f = a[3, 5, 1]", True),
         ("let rec mutable a [0, 1, 3] and f : int = !a[3, 5, 9] + 4", True),
+        ("let f (ar : array [*, *, *] of float) = ar[0,0,0]", True),
+        ("let f (ar : array [*, *, *] of float) = dim 2 ar", True),
         ("let f : int ref = new int", True),
         ("let f : char ref = new char", True),
         ("let f : float ref = new float", True),
@@ -150,6 +152,30 @@ exprSuites =
         ("let rec mutable x : int and main = for i = 17 to 42 do x := i done", True),
         ("let rec pr i = () and main = for i = 42 downto 17 do pr i done", True),
         ("let rec mutable x : int and main = for i = 42 downto 17 do x := i done", True),
+        ("let main x = match x with 0 -> () | 1 -> () end", True),
+        ("let main x = match x with y -> y end", True),
+        ("let main x = match x with y -> y 0 end", True),
+        ("let main x = match x with y -> y [0] end", True),
+        ("let main x = match x with y -> !y end", True),
+        ("let rec main x = match x with y -> y (main y) end", True),
+        ("type t = T of t let main x = match x with y -> T y end", True),
+        ("let print_int i = ()\n" ++
+         "and print_float f = ()\n" ++
+         "and print_string s = ()\n" ++
+         "and abs_float f = f\n" ++
+         "type number = Integer of int | Real of float | Complex of float float\n" ++
+         "let main num =\n" ++
+         "  match num with\n" ++
+         "    Integer i      -> print_int i\n" ++
+         "  | Real f         -> print_float f\n" ++
+         "  | Complex re 0.0 -> print_float re\n" ++
+         "  | Complex 0.0 im -> print_string \"j\"; print_float im\n" ++
+         "  | Complex re im  -> print_float re;\n" ++
+         "                      print_string (if im > 0.0 then \"+j\" else \"-j\");" ++
+         "                      print_float (abs_float im)\n" ++
+         "  end", True),
+         ("type t = T of bool and s = S of t let main s = match s with S x -> () end", True),
+         ("type t = T of bool and s = S of t let main s = match s with S t -> match t with T true -> () end end", True),
         -- Failing cases
         ("type t = T of t int \nlet t (t : t) = t\nlet g t : t -> t = T t", False),
         ("let rec mutable a [1, 2, 3] and d = dim 0 a", False),
@@ -239,5 +265,7 @@ exprSuites =
         ("let main = for i = 17 downto 42 do () done let f = i", False),
         ("let main : int = for i = 17 downto 42 do () done let f = i", False),
         ("let main : int = for i = 17 downto () do () done let f = i", False),
-        ("let main : int = for i = () downto 42 do () done let f = i", False)
+        ("let main : int = for i = () downto 42 do () done let f = i", False),
+        ("let main x = match x with 0 -> () | 1 -> 'f' end", False),
+        ("type t = T of bool and s = S of t let main s = match s with S (T true) -> () end", False)
     ]

@@ -108,7 +108,7 @@ throwSemanticError :: String -> Parser a
 throwSemanticError = throwE . SemanticError
 
 stackTrace :: String -> Parser a -> Parser a
-stackTrace s p = catchE p (throwE . \e -> e{msg = msg e ++ "\n" ++ s})
+stackTrace s p = catchE p (throwE . \e -> e{msg = msg e ++ "\n\t\t" ++ s})
 
 -- Utils to facilitate the communication with the lexer
 changeMonad :: Alex a -> Parser a

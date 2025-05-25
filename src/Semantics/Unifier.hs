@@ -9,8 +9,11 @@ import Common.AST (TypeF(..))
 import Common.PrintAST (pretty)
 import Common.SymbolType(SymbolType(..), constTypeToSymbolType, notVarInType)
 import Parser.ParserM (Parser)
-import Semantics.Utils (throwSem, getUnifier, putUnifier, getConstraints, putConstraints, resolveType, copyConstraints)
-import Semantics.SemanticState (TypeConstraint (..), constraintsToList, addConstraints, fromConstraint)
+import Semantics.Utils (throwSem, getUnifier, putUnifier,
+                        getConstraints, putConstraints,
+                        resolveType, copyConstraints)
+import Semantics.SemanticState (TypeConstraint (..), constraintsToList,
+                                addConstraints, fromConstraint)
 
 checkConstraint :: SymbolType -> TypeConstraint -> Parser ()
 checkConstraint (SymType (FunType _ _)) (NotAllowedFunType s) =

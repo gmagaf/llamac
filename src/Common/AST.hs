@@ -58,13 +58,13 @@ data TypeF t = UnitType | IntType | CharType | BoolType | FloatType
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 -- Expressions
-data Expr b = Expr (ExprF b (Expr b)) b
-  deriving (Eq, Show)
+data Expr b = Expr (ExprF (Expr b)) b
+            | NewType (Type b) b
+            | LetIn (LetDef b) (Expr b) b
+            | MatchExpr (Expr b) [Clause b] b
+  deriving (Eq, Show, Functor)
 
-instance Functor Expr where
-  fmap f (Expr ef b) = Expr (fmapExprF (fmap f) (fmap f) (fmap f) (fmap f) ef) (f b)
-
-data ExprF b e = IntCExpr IntConstant
+data ExprF e = IntCExpr IntConstant
           | FloatCExpr FloatConstant
           | CharCExpr CharConstant
           | StringCExpr StringConstant
@@ -79,17 +79,14 @@ data ExprF b e = IntCExpr IntConstant
           | ConstrAppExpr ConstrIdentifier [e]
           | ArrayAccess Identifier [e]
           | ArrayDim Identifier Int
-          | NewType (Type b)
           | DeleteExpr e
-          | LetIn (LetDef b) e
           | BeginExpr e
           | IfThenExpr e e
           | IfThenElseExpr e e e
           | WhileExpr e e
           | ForExpr Identifier e e e
           | ForDownExpr Identifier e e e
-          | MatchExpr e [Clause b]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data UnOp = PlusUnOp | MinusUnOp
           | PlusFloatUnOp | MinusFloatUnOp
@@ -130,116 +127,6 @@ mapAST f = map g where
   g (Left l)  = Left (fmap f l)
   g (Right t) = Right (fmap f t)
 
--- Implementations of fmap, foldMap, traverse, mapM for expression functor
-fmapExprF :: (LetDef a -> LetDef b)
-          -> (Type a -> Type b)
-          -> (Clause a -> Clause b)
-          -> (e1 -> e2)
-          -> ExprF a e1 -> ExprF b e2
-fmapExprF lf tf cf f ef = case ef of
-  IntCExpr c           -> IntCExpr c
-  FloatCExpr c         -> FloatCExpr c
-  CharCExpr c          -> CharCExpr c
-  StringCExpr c        -> StringCExpr c
-  TrueCExpr            -> TrueCExpr
-  FalseCExpr           -> FalseCExpr
-  UnitCExpr            -> UnitCExpr
-  ConstExpr i          -> ConstExpr i
-  ConstConstrExpr i    -> ConstConstrExpr i
-  UnOpExpr op e        -> UnOpExpr op (f e)
-  BinOpExpr op u v     -> BinOpExpr op (f u) (f v)
-  FunAppExpr i es      -> FunAppExpr i (fmap f es)
-  ConstrAppExpr i es   -> ConstrAppExpr i (fmap f es)
-  ArrayAccess i es     -> ArrayAccess i (fmap f es)
-  ArrayDim i dim       -> ArrayDim i dim
-  NewType t            -> NewType (tf t)
-  DeleteExpr e         -> DeleteExpr (f e)
-  LetIn l e            -> LetIn (lf l) (f e)
-  BeginExpr e          -> BeginExpr (f e)
-  IfThenExpr u v       -> IfThenExpr (f u) (f v)
-  IfThenElseExpr u v w -> IfThenElseExpr (f u) (f v) (f w)
-  WhileExpr u v        -> WhileExpr (f u) (f v)
-  ForExpr i u v w      -> ForExpr i (f u) (f v) (f w)
-  ForDownExpr i u v w  -> ForDownExpr i (f u) (f v) (f w)
-  MatchExpr e cs       -> MatchExpr (f e) (fmap cf cs)
-
-foldMapExprF :: Monoid m =>
-                (LetDef b -> m)
-             -> (Type b -> m)
-             -> (Clause b -> m)
-             -> (e -> m)
-             -> ExprF b e -> m
-foldMapExprF lf tf cf f ef = case ef of
-  IntCExpr _           -> mempty
-  FloatCExpr _         -> mempty
-  CharCExpr _          -> mempty
-  StringCExpr _        -> mempty
-  TrueCExpr            -> mempty
-  FalseCExpr           -> mempty
-  UnitCExpr            -> mempty
-  ConstExpr _          -> mempty
-  ConstConstrExpr _    -> mempty
-  UnOpExpr _ e         -> f e
-  BinOpExpr _ u v      -> mappend (f u) (f v)
-  FunAppExpr _ es      -> mconcat (fmap f es)
-  ConstrAppExpr _ es   -> mconcat (fmap f es)
-  ArrayAccess _ es     -> mconcat (fmap f es)
-  ArrayDim _ _         -> mempty
-  NewType t            -> tf t
-  DeleteExpr e         -> f e
-  LetIn l e            -> mappend (lf l) (f e)
-  BeginExpr e          -> f e
-  IfThenExpr u v       -> mappend (f u) (f v)
-  IfThenElseExpr u v w -> mconcat (fmap f [u, v, w])
-  WhileExpr u v        -> mappend (f u) (f v)
-  ForExpr _ u v w      -> mconcat (fmap f [u, v, w])
-  ForDownExpr _ u v w  -> mconcat (fmap f [u, v, w])
-  MatchExpr e cs       -> mappend (f e) (mconcat $ fmap cf cs)
-
-traverseExprF :: Applicative f =>
-                 (LetDef b -> f (LetDef a))
-              -> (Type b -> f (Type a))
-              -> (Clause b -> f (Clause a))
-              -> (Identifier -> e -> f e')
-              -> (e -> f e')
-              -> ExprF b e -> f (ExprF a e')
-traverseExprF lf tf cf forf f ef = case ef of
-  IntCExpr c           -> pure $ IntCExpr c
-  FloatCExpr c         -> pure $ FloatCExpr c
-  CharCExpr c          -> pure $ CharCExpr c
-  StringCExpr c        -> pure $ StringCExpr c
-  TrueCExpr            -> pure TrueCExpr
-  FalseCExpr           -> pure FalseCExpr
-  UnitCExpr            -> pure UnitCExpr
-  ConstExpr i          -> pure $ ConstExpr i
-  ConstConstrExpr i    -> pure $ ConstConstrExpr i
-  UnOpExpr op e        -> UnOpExpr op <$> f e
-  BinOpExpr op u v     -> BinOpExpr op <$> f u <*> f v
-  FunAppExpr i es      -> FunAppExpr i <$> traverse f es
-  ConstrAppExpr i es   -> ConstrAppExpr i <$> traverse f es
-  ArrayAccess i es     -> ArrayAccess i <$> traverse f es
-  ArrayDim i dim       -> pure $ ArrayDim i dim
-  NewType t            -> NewType <$> tf t
-  DeleteExpr e         -> DeleteExpr <$> f e
-  LetIn l e            -> LetIn <$> lf l <*> f e
-  BeginExpr e          -> BeginExpr <$> f e
-  IfThenExpr u v       -> IfThenExpr <$> f u <*> f v
-  IfThenElseExpr u v w -> IfThenElseExpr <$> f u <*> f v <*> f w
-  WhileExpr u v        -> WhileExpr <$> f u <*> f v
-  ForExpr i u v w      -> ForExpr i <$> f u <*> f v <*> forf i w
-  ForDownExpr i u v w  -> ForDownExpr i <$> f u <*> f v <*> forf i w
-  MatchExpr e cs       -> MatchExpr <$> f e <*> traverse cf cs
-
-mapMExprF :: Monad m =>
-            (LetDef b -> m (LetDef a))
-         -> (Type b -> m (Type a))
-         -> (Clause b -> m (Clause a))
-         -> (Identifier -> e -> m e')
-         -> (e -> m e')
-         -> ExprF b e -> m (ExprF a e')
-mapMExprF = traverseExprF
-
-
 -- Instantiations of the node classes
 instance Node LetDef where
   tag (Let _ b)    = b
@@ -278,7 +165,14 @@ instance Node Type where
   mapTag f (Type tf b) = Type tf (f b)
 instance Node Expr where
   tag (Expr _ b) = b
+  tag (NewType _ b) = b
+  tag (LetIn _ _ b) = b
+  tag (MatchExpr _ _ b) = b
   mapTag f (Expr ef b) = Expr ef (f b)
+  mapTag f (NewType e b) = NewType e (f b)
+  mapTag f (LetIn l e b) = LetIn l e (f b)
+  mapTag f (MatchExpr e cs b) = MatchExpr e cs (f b)
+
 instance Node Clause where
   tag (Match _ _ b) = b
   mapTag f (Match p e b) = Match p e (f b)

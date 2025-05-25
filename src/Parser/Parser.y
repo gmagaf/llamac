@@ -224,7 +224,7 @@ Expr :: { Expr AlexPosn }
   | SemicolonLetExpr                { $1 }
 
 LetExpr :: { Expr AlexPosn }
-  : LetDef in Expr                  { Expr (LetIn $1 $3) (tag $1) }
+  : LetDef in Expr                  { LetIn $1 $3 (tag $1) }
 
 SemicolonExpr :: { Expr AlexPosn }
   : SemicolonExpr ';' SemicolonExpr { Expr (BinOpExpr SemicolonOp $1 $3) (tag $1) }
@@ -234,7 +234,7 @@ SemicolonLetExpr :: { Expr AlexPosn } -- Cannot have let in lhs
   : SemicolonExpr ';' LetExpr       { Expr (BinOpExpr SemicolonOp $1 $3) (tag $1) }
 
 LetIfExpr :: { Expr AlexPosn }
-  : LetDef in IfExpr                { Expr (LetIn $1 $3) (tag $1) }
+  : LetDef in IfExpr                { LetIn $1 $3 (tag $1) }
   | IfExpr                          { $1 }
 
 IfExpr :: { Expr AlexPosn } -- Cannot have semicolon in last Expr
@@ -318,7 +318,7 @@ NewTExpr :: { Expr AlexPosn }
   | BaseExpr                        { $1 }
 
 NewTExpr_ :: { AlexPosn -> Expr AlexPosn }
-  : new Type                        { Expr (NewType $2) }
+  : new Type                        { NewType $2 }
 
 BaseExpr :: { Expr AlexPosn }
   : P BaseExpr_                     { $2 $1 }
@@ -340,7 +340,7 @@ BaseExpr_ :: { AlexPosn -> Expr AlexPosn }
                                     { Expr (ForExpr $2 $4 $6 $8) }
   | for id '=' Expr downto Expr do Expr done
                                     { Expr (ForDownExpr $2 $4 $6 $8) }
-  | match Expr with Clauses end     { Expr (MatchExpr $2 (reverse $4)) }
+  | match Expr with Clauses end     { MatchExpr $2 (reverse $4) }
 
 Clauses :: { [Clause AlexPosn] }
   : Clause                          { $1 : [] }

@@ -78,9 +78,18 @@ arbParam = oneof [Param <$> arbitraryIdentifier <*> arbitrary,
 
 arbExpr :: Arbitrary b => Gen (Expr b)
 arbExpr = sized g where
-    g n = Expr <$> arbExprF (resize (div n 2) arbExpr) <*> arbitrary
+    g 0 = Expr <$> resize 0 $ arbExprF (resize 0 arbExpr) <*> arbitrary
+    g n =
+      let r = resize (div n 2) arbExpr
+          clauses = boundedListOf (1, 3) $ resize (div n 2) arbClause
+          letdef = resize (div n 2) arbLetDef
+      in oneof [Expr <$> resize n (arbExprF r) <*> arbitrary,
+                NewType <$> arbType <*> arbitrary,
+                LetIn <$> letdef <*> r <*> arbitrary,
+                MatchExpr <$> r <*> clauses <*> arbitrary
+              ]
 
-arbExprF :: Arbitrary b => Gen e -> Gen (ExprF b e)
+arbExprF :: Gen e -> Gen (ExprF e)
 arbExprF r = sized gen where
   baseGens = [IntCExpr <$> arbitraryIntConstant, FloatCExpr <$> arbitraryFloatConstant,
     CharCExpr <$> arbitraryCharConstant, StringCExpr <$> arbitraryStringConstant,
@@ -89,8 +98,6 @@ arbExprF r = sized gen where
   gen n = do
     unOp <- arbUnOp
     binOp <- arbBinOp
-    let clauses = boundedListOf (1, 3) $ resize (div n 2) arbClause
-    let letdef = resize (div n 2) arbLetDef
     oneof [gen (div n 2),
       UnOpExpr unOp <$> r,
       BinOpExpr binOp <$> r <*> r,
@@ -100,16 +107,13 @@ arbExprF r = sized gen where
       ConstrAppExpr <$> arbitraryConstrIdentifier <*> boundedListOf (1, 3) r,
       ArrayAccess <$> arbitraryIdentifier <*> boundedListOf (1, 3) r,
       ArrayDim <$> arbitraryIdentifier <*> arbitraryIntConstant,
-      NewType <$> arbType,
       DeleteExpr <$> r,
-      LetIn <$> letdef <*> r,
       BeginExpr <$> r,
       IfThenExpr <$> r <*> r,
       IfThenElseExpr <$> r <*> r <*> r,
       WhileExpr <$> r <*> r,
       ForExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
-      ForDownExpr <$> arbitraryIdentifier <*> r <*> r <*> r,
-      MatchExpr <$> r <*> clauses
+      ForDownExpr <$> arbitraryIdentifier <*> r <*> r <*> r
       ]
 
 arbUnOp :: Gen UnOp

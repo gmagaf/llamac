@@ -170,19 +170,31 @@ instance Pretty (Param b) where
             showString " " . showPretty t
 
 instance Pretty (Expr b) where
-  prettyPrec d (Expr e _) = prettyPrec d e
-
-instance Pretty e => Pretty (ExprF b e) where
-  prettyPrec d e =
+  prettyPrec d expr =
     let new_prec = 15
-        array_access_prec = 14
+        let_prec = 0
+    in case expr of
+      Expr e _ -> prettyPrec d e
+      NewType t _ -> showParen (always || d > new_prec) $
+        showPretty T_new . showString " " .
+        showPretty t
+      LetIn def u _ -> showParen (always || d > let_prec) $
+        prettyPrec d def . showString " " . showPretty T_in .
+        showString " " . prettyPrec (let_prec + 1) u
+      MatchExpr u cs _ -> showPretty T_match . showString " " .
+        showPretty u . showString " " . showPretty T_with . showString "\n" .
+        prettyPrecSepList 0 ("\n" ++ pretty T_bar ++ " ") cs . showString "\n" .
+        showPretty T_end
+
+instance Pretty e => Pretty (ExprF e) where
+  prettyPrec d e =
+    let array_access_prec = 14
         bang_prec = 13
         app_prec = 12
         un_op_prec = 11
         else_prec = 3
         then_prec = 2
         if_prec = 2
-        let_prec = 0
     in case e of
       IntCExpr i -> prettyIntC i
       FloatCExpr f -> prettyFloatC f
@@ -198,9 +210,6 @@ instance Pretty e => Pretty (ExprF b e) where
       ArrayDim i n -> showParen (always || d > un_op_prec) $
         showPretty T_dim . showString " " . prettyIntC n .
         showString " " . prettyId i
-      NewType t -> showParen (always || d > new_prec) $
-        showPretty T_new . showString " " .
-        showPretty t
       ArrayAccess i es -> showParen (always || d > array_access_prec) $
         prettyId i . showPretty T_lbracket .
         prettyPrecSepList 0 ", " es .
@@ -232,9 +241,6 @@ instance Pretty e => Pretty (ExprF b e) where
         showPretty T_then . showString " " .
         prettyPrec (then_prec + 1) v . showString " " .
         showPretty T_else . showString " " . prettyPrec (else_prec + 1) w
-      LetIn def u -> showParen (always || d > let_prec) $
-        prettyPrec d def . showString " " . showPretty T_in .
-        showString " " . prettyPrec (let_prec + 1) u
       BeginExpr u -> showParen always $
         showPretty T_begin . showString " " . showPretty u .
         showString " " . showPretty T_end
@@ -254,10 +260,6 @@ instance Pretty e => Pretty (ExprF b e) where
         showPretty u . showString " " . showPretty T_downto . showString " " .
         showPretty v . showString " " . showPretty T_do . showString " " .
         showPretty w . showString " " . showPretty T_done
-      MatchExpr u cs -> showPretty T_match . showString " " .
-        showPretty u . showString " " . showPretty T_with . showString "\n" .
-        prettyPrecSepList 0 ("\n" ++ pretty T_bar ++ " ") cs . showString "\n" .
-        showPretty T_end
 
 data Assoc = L | R | Non
   deriving Eq

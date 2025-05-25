@@ -278,31 +278,59 @@ analyzeExpr :: Expr AlexPosn -> Parser (Expr SemanticTag)
 analyzeExpr = recSemExpr indSemExpr
 
 -- Inductively analyze expressions using mapM for expression functor
-recSemExpr :: (ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag))
+recSemExpr :: (ExprF (Expr SemanticTag) -> Parser (Expr SemanticTag))
          -> Expr AlexPosn
          -> Parser (Expr SemanticTag)
-recSemExpr g e@(Expr ef p) = do
-    let alet = stackTrace ("while analyzing expr " ++ pretty e) . analyzeLet
-    let atype = stackTrace ("while analyzing expr " ++ pretty e) . analyzeType
-    let aclause = stackTrace ("while analyzing expr " ++ pretty e) . analyzeClause
-    let aexpr = stackTrace ("while analyzing expr " ++ pretty e) . recSemExpr g
-    let afor i fore = do
+recSemExpr g expr =
+    let aexpr = stackTrace ("while analyzing expr " ++ pretty expr) . recSemExpr g
+        atype = stackTrace ("while analyzing expr " ++ pretty expr) . analyzeType
+        alet = stackTrace ("while analyzing expr " ++ pretty expr) . analyzeLet
+        aclause = stackTrace ("while analyzing expr " ++ pretty expr) . analyzeClause
+    in case expr of
+        Expr (ForExpr i l u e) p -> do
+            semL <- aexpr l
+            semU <- aexpr u
             openScopeInNames
             insertName i (FunEntry (MonoType . SymType $ IntType) [])
-            e' <- aexpr fore
+            semE <- aexpr e
             closeScopeInNames
-            return e'
-    semEf <- mapMExprF alet atype aclause afor aexpr ef
-    putSemPosn p
-    g semEf
+            putSemPosn p
+            g (ForExpr i semL semU semE)
+        Expr (ForDownExpr i u l e) p -> do
+            semU <- aexpr u
+            semL <- aexpr l
+            openScopeInNames
+            insertName i (FunEntry (MonoType . SymType $ IntType) [])
+            semE <- aexpr e
+            closeScopeInNames
+            putSemPosn p
+            g (ForExpr i semU semL semE)
+        Expr ef p -> do
+            semEf <- mapM aexpr ef
+            putSemPosn p
+            g semEf
+        NewType t p -> do
+            semT <- atype t
+            putSemPosn p
+            semNewType semT
+        LetIn l e p -> do
+            semL <- alet l
+            semE <- aexpr e
+            putSemPosn p
+            semLetIn semL semE
+        MatchExpr e cs p -> do
+            semE <- aexpr e
+            semCs <- mapM aclause cs
+            putSemPosn p
+            semMatchExpr semE semCs
 
 -- Util for returning the result expression by updating its node type
-retE :: ExprF SemanticTag (Expr SemanticTag) -> SymbolType -> Parser (Expr SemanticTag)
+retE :: ExprF (Expr SemanticTag) -> SymbolType -> Parser (Expr SemanticTag)
 retE ef t = do
     p <- getSemPosn
     return $ Expr ef SemTag{posn = p, typeInfo = NodeType t}
 
-indSemExpr :: ExprF SemanticTag (Expr SemanticTag) -> Parser (Expr SemanticTag)
+indSemExpr :: ExprF (Expr SemanticTag) -> Parser (Expr SemanticTag)
 indSemExpr (IntCExpr c)           = retE (IntCExpr c) (SymType IntType)
 indSemExpr (FloatCExpr c)         = retE (FloatCExpr c) (SymType FloatType)
 indSemExpr (CharCExpr c)          = retE (CharCExpr c) (SymType CharType)
@@ -315,11 +343,9 @@ indSemExpr (ConstConstrExpr i)    = semConstConstrExpr i
 indSemExpr (FunAppExpr i es)      = semFunAppExpr i es
 indSemExpr (ConstrAppExpr i es)   = semConstrAppExpr i es
 indSemExpr (ArrayDim i dim)       = semArrayDim i dim
-indSemExpr (LetIn l e)            = semLetIn l e
 indSemExpr (UnOpExpr op e)        = semUnOp op e
 indSemExpr (BinOpExpr op d e)     = semBinOp op d e
 indSemExpr (ArrayAccess i es)     = semArrayAccess i es
-indSemExpr (NewType t)            = semNewType t
 indSemExpr (DeleteExpr e)         = semDeleteExpr e
 indSemExpr (BeginExpr e)          = getNodeType e >>= retE (BeginExpr e)
 indSemExpr (IfThenElseExpr c d e) = semIfThenElseExpr c d e
@@ -327,7 +353,6 @@ indSemExpr (IfThenExpr c e)       = semIfThenExpr c e
 indSemExpr (WhileExpr c e)        = semWhileExpr c e
 indSemExpr (ForExpr i l u e)      = semForExpr i l u e
 indSemExpr (ForDownExpr i u l e)  = semForDownExpr i u l e
-indSemExpr (MatchExpr e cs)       = semMatchExpr e cs
 
 -- All functions implementing the inductive step
 -- of the analysis of the expression for each case
@@ -448,9 +473,10 @@ semArrayDim i dim = findName i >>= run where
 
 semLetIn :: LetDef SemanticTag -> Expr SemanticTag -> Parser (Expr SemanticTag)
 semLetIn l e = do
+    p <- getSemPosn
     closeScopeInNames
     t <- getNodeType e
-    retE (LetIn l e) t
+    return $ LetIn l e SemTag{posn = p, typeInfo = NodeType t}
 
 semUnOp :: UnOp -> Expr SemanticTag -> Parser (Expr SemanticTag)
 semUnOp op e = do
@@ -560,7 +586,9 @@ semArrayAccess i es = do
 semNewType :: Type SemanticTag -> Parser (Expr SemanticTag)
 semNewType (Type (ArrayType {}) _) = throwSem "Cannot dynamically allocate memory for array types"
 semNewType t = do
-    retE (NewType t) (SymType . RefType $ typeToSymbolType t)
+    p <- getSemPosn
+    let nt = SymType . RefType $ typeToSymbolType t
+    return $ NewType t SemTag{posn = p, typeInfo = NodeType nt}
 
 semDeleteExpr :: Expr SemanticTag -> Parser (Expr SemanticTag)
 semDeleteExpr e = do
@@ -648,6 +676,7 @@ semMatchExpr :: Expr SemanticTag
              -> [Clause SemanticTag]
              -> Parser (Expr SemanticTag)
 semMatchExpr e cs = do
+    p <- getSemPosn
     et <- getNodeType e
     checkConstraint et (AllowedUserDefinedType "Can only apply pattern matching to user defined type")
     let getPat (Match pat _ _) = pat
@@ -662,7 +691,7 @@ semMatchExpr e cs = do
     re <- resolveNodeType e
     rcs <- mapM resClause cs
     routT <- resolveType outT
-    retE (MatchExpr re rcs) routT where
+    return $ MatchExpr re rcs SemTag{posn = p, typeInfo = NodeType routT} where
         resClause (Match pat expr t) = do
             rPat <- resolveNodeType pat
             rExp <- resolveNodeType expr

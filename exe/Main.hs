@@ -1,8 +1,8 @@
 module Main (main) where
 
-import Parser.Utils (parse)
+import Parser.Utils (debug)
 
 main :: IO ()
 main = do
   s <- getContents
-  putStrLn $ show (parse s)
+  debug s

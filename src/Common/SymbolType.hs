@@ -3,6 +3,12 @@ module Common.SymbolType (
                         SymbolType(..),
                         TypeScheme(..),
                         typeToConstType,
+                        intConstType,
+                        floatConstType,
+                        boolConstType,
+                        charConstType,
+                        unitConstType,
+                        stringConstType,
                         typeToSymbolType,
                         constTypeToSymbolType,
                         cata,
@@ -35,6 +41,19 @@ instance Pretty ConstType where
 typeToConstType :: Type b -> ConstType
 typeToConstType (Type tf _) = ConstType (fmap typeToConstType tf)
 
+-- Some useful consts
+intConstType :: ConstType
+intConstType = ConstType IntType
+floatConstType :: ConstType
+floatConstType = ConstType FloatType
+boolConstType :: ConstType
+boolConstType = ConstType BoolType
+charConstType :: ConstType
+charConstType = ConstType CharType
+unitConstType :: ConstType
+unitConstType = ConstType UnitType
+stringConstType :: ConstType
+stringConstType = ConstType (ArrayType 1 (ConstType CharType))
 
 data SymbolType = SymType (TypeF SymbolType)
                 | TVar Int

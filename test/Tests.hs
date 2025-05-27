@@ -15,8 +15,7 @@ main = do
   putStrLn "Starting property based testing using QuickCheck"
   checkForSizes checkParsedPrettyAST expSizes
   checkForSizes checkSemTypesAST linearSizes
-  checkForSizes checkSemScopesAST (expSizes ++ hugeSizes)
+  checkForSizes checkSemScopesAST linearSizes
   putStrLn "Finished testing!" where
     linearSizes = [0..15]
     expSizes = [0, 1, 2, 3, 4, 5, 10, 30, 100, 1000, 2000, 5000]
-    hugeSizes = [10000, 20000, 50000, 100000]

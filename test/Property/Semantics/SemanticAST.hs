@@ -78,7 +78,7 @@ arbTypeF s r = sized gen where
 
 -- Generator for semantically correct programs
 -- that define functions.
--- The sizes work logarithmically
+-- The sizes work exponentially
 
 semanticScopesAST :: Arbitrary b => Gen (AST b)
 semanticScopesAST = do
@@ -129,15 +129,15 @@ arbSimpleType ts = sized gen where
     b <- arbitrary
     elements $ map (`Type` b) basicTf
   gen n = do
-    let r = gen (div n 2)
+    let r = gen (n - 1)
     i <- choose (1, 3) :: Gen Int
     oneof [r, (Type . RefType <$> r) <*> arbitrary,
             (Type . ArrayType i <$> r) <*> arbitrary,
             Type <$> (FunType <$> gen 0 <*> gen 0) <*> arbitrary] -- TODO: Add support for fun types
 
 arbLetDef :: Arbitrary b => Scope -> TypeScope -> Gen (LetDef b, Scope)
-arbLetDef s ts = do
-  ids <- boundedListOf (1, 6) arbId
+arbLetDef s ts = sized $ \n -> do
+  ids <- boundedListOf (1, n) arbId
   let idc = length ids
   types <- boundedListOf (idc, idc) (arbSimpleType ts)
   let pairs = zip ids types
@@ -204,7 +204,7 @@ arbExprF s t@(ConstType tf) r = sized gen where
     -- TODO: Add support for more types
   gen n = do
     let funs = filter (\(_, ct) -> outFunType ctCoAlg ct == t) (M.toList s)
-    let r' = resize (div n 2) . r
+    let r' = resize (n - 1) . r
     if null funs
       then gen 0
       else do

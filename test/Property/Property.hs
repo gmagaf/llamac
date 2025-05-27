@@ -46,7 +46,7 @@ semanticASTisOK gen =
         parser = analyzeAST p'
         res = evalParser (initParserState "") parser
     in case res of
-        Right _ -> True
+        Right r -> setDummyPosn r == p' -- check that semantic analysis only affects tags
         Left _  -> False)
 
 checkSemTypesAST :: Int -> IO Result

@@ -73,7 +73,7 @@ analyzeLet (LetRec defs p) = do
     let finalSemDefs = map fst finalRes
     -- Final update in scope
     mapM_ (uncurry updateName . B.first ide) finalRes
-    return $ Let finalSemDefs (cpPosn p)
+    return $ LetRec finalSemDefs (cpPosn p)
 
 {-
     In Second analysis we only analyze Untyped fun definitions
@@ -384,7 +384,7 @@ semConstConstrExpr :: ConstrIdentifier -> Parser (Expr SemanticTag)
 semConstConstrExpr i = do
     entry <- findName i
     case entry of
-        ConstrEntry t _ _ -> retE (ConstExpr i) (constTypeToSymbolType t)
+        ConstrEntry t _ _ -> retE (ConstConstrExpr i) (constTypeToSymbolType t)
         _                 -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
 
@@ -675,7 +675,7 @@ semForDownExpr i u l e = do
     ru <- resolveNodeType u
     rl <- resolveNodeType l
     re <- resolveNodeType e
-    retE (ForExpr i ru rl re) (SymType UnitType)
+    retE (ForDownExpr i ru rl re) (SymType UnitType)
 
 semMatchExpr :: Expr SemanticTag
              -> [Clause SemanticTag]

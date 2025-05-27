@@ -12,7 +12,7 @@ import Common.AST
       TypeDef(..),
       NameDef(ide))
 import Common.SymbolTable (TypeTableEntry(..), TableEntry(..))
-import Common.SymbolType (ConstType(..), typeToConstType, paramsToConstFunType)
+import Common.SymbolType (ConstType(..), typeTo, paramsToFun)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser, stackTrace)
 import Semantics.Utils
@@ -40,12 +40,12 @@ insertTypeDef typesInDef (TDef tId cs p) =
         checkTypeInCtx :: Type AlexPosn -> Parser ConstType
         checkTypeInCtx t@(Type (UserDefinedType tName) tp) =
             if Set.member tName typesInDef
-            then return (typeToConstType t)
+            then return (typeTo ConstType t)
             else do
                 putSemPosn tp
                 checkTypeInScope tName
-                return (typeToConstType t)
-        checkTypeInCtx t = return (typeToConstType t)
+                return (typeTo ConstType t)
+        checkTypeInCtx t = return (typeTo ConstType t)
         checkConstrParams :: Constr AlexPosn -> Parser (ConstrIdentifier, [ConstType])
         checkConstrParams (Constr c ts _) = do
             checkedTs <- mapM checkTypeInCtx ts
@@ -64,9 +64,9 @@ analyzeTDef (TDef tId cs p) = do
 analyzeConstr :: Identifier -> Constr AlexPosn -> Parser (Constr SemanticTag)
 analyzeConstr tId (Constr cId params p) = do
     semParams <- mapM (stackTrace ("while analyzing constr " ++ cId) . analyzeType) params
-    let paramTypes = map typeToConstType semParams
+    let paramTypes = map (typeTo ConstType) semParams
     let outputType = ConstType $ UserDefinedType tId
-    let typeOfConstr = paramsToConstFunType paramTypes outputType
+    let typeOfConstr = paramsToFun ConstType paramTypes outputType
     insertName cId (ConstrEntry typeOfConstr paramTypes outputType)
     return $ Constr cId semParams (cpPosn p)
 

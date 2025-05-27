@@ -8,7 +8,9 @@ import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST
 import Common.PrintAST
 import Common.SymbolTable
-import Common.SymbolType
+import Common.SymbolType (TypeScheme(..), SymbolType(..), ConstType(..),
+                          constTypeToSymbolType, typeTo, tvarsInType,
+                          funToArgs, stCoAlg, paramsToFun )
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser, stackTrace, throwInternalError)
 import Semantics.SemanticState (TypeConstraint(..))
@@ -112,6 +114,9 @@ entryPair (UntypedMutSig _ pair _)     = pair
 entryPair (UntypedArrSig _ _ pair _)   = pair
 entryPair (UnTypedFunSig _ _ _ pair _) = pair
 
+typeToSymbolType :: Type b -> SymbolType
+typeToSymbolType = typeTo SymType
+
 {-
     Analysis of the signature of a definition
 -}
@@ -146,7 +151,7 @@ analyzeDefSig (FunDef i ps e p) = do
     paramTypes <- mapM getNodeType semPs
     -- Fresh outV is the output type of the function
     outV <- freshTVar
-    let fType = paramsToFunType paramTypes outV
+    let fType = paramsToFun SymType paramTypes outV
     -- Close scope
     closeScopeInNames
     -- fScheme <- gen fType
@@ -166,7 +171,7 @@ analyzeDefSig (FunDefTyped i ps t e p) = do
     -- Collect the results: the new param types, the expr type and unify tv with the result fun type
     putSemPosn p
     paramTypes <- mapM getNodeType semPs
-    let fType = paramsToFunType paramTypes eT
+    let fType = paramsToFun SymType paramTypes eT
     unify (typeToSymbolType semT, fType)
     -- Close scope
     closeScopeInNames
@@ -230,7 +235,7 @@ analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do
     -- Collect the results: the new param types, the expr type and unify tv with the result fun type
     putSemPosn p
     eT <- getNodeType semE
-    let fType = paramsToFunType paramTypes eT
+    let fType = paramsToFun SymType paramTypes eT
     unify (st, fType)
     rSemPs <- mapM resolveNodeType semPs
     rSemE <- resolveNodeType semE
@@ -257,7 +262,7 @@ analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do
     -- Collect the results: the new param types, the expr type and unify tv with the result fun type
     putSemPosn p
     eT <- getNodeType semE
-    let fType = paramsToFunType paramTypes eT
+    let fType = paramsToFun SymType paramTypes eT
     let st = typeToSymbolType semT
     unify (st, fType)
     rSemPs <- mapM resolveNodeType semPs
@@ -384,7 +389,7 @@ semConstConstrExpr i = do
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
 
 semFunAppExpr :: Identifier -> [Expr SemanticTag] -> Parser (Expr SemanticTag)
-semFunAppExpr i es = do
+semFunAppExpr i es = let funTypeToArgTypes = funToArgs stCoAlg in do
     entry <- findName i
     case entry of
         FunEntry ft ps ->
@@ -395,7 +400,7 @@ semFunAppExpr i es = do
                     ts <- mapM getNodeType es
                     v <- freshTVar
                     t <- inst ft
-                    let inf = paramsToFunType ts v
+                    let inf = paramsToFun SymType ts v
                     unify (t, inf)
                     res <- mapM resolveNodeType es
                     rv <- resolveType v
@@ -407,7 +412,7 @@ semFunAppExpr i es = do
         ParamEntry t _ -> do
             ts <- mapM getNodeType es
             v <- freshTVar
-            let inf = paramsToFunType ts v
+            let inf = paramsToFun SymType ts v
             unify (t, inf)
             res <- mapM resolveNodeType es
             rv <- resolveType v
@@ -420,7 +425,7 @@ semFunAppExpr i es = do
         PatternEntry t -> do
             ts <- mapM getNodeType es
             v <- freshTVar
-            let inf = paramsToFunType ts v
+            let inf = paramsToFun SymType ts v
             unify (t, inf)
             res <- mapM resolveNodeType es
             rv <- resolveType v
@@ -445,7 +450,7 @@ semConstrAppExpr i es = do
                 EQ -> do
                     ts <- mapM getNodeType es
                     v <- freshTVar
-                    let inf = paramsToFunType ts v
+                    let inf = paramsToFun SymType ts v
                     unify (constTypeToSymbolType t, inf)
                     res <- mapM resolveNodeType es
                     rv <- resolveType v

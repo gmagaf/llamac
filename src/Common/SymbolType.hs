@@ -1,29 +1,4 @@
-module Common.SymbolType (
-                        ConstType(..),
-                        SymbolType(..),
-                        TypeScheme(..),
-                        typeToConstType,
-                        intConstType,
-                        floatConstType,
-                        boolConstType,
-                        charConstType,
-                        unitConstType,
-                        stringConstType,
-                        typeToSymbolType,
-                        constTypeToSymbolType,
-                        cata,
-                        cataM,
-                        subst,
-                        substScheme,
-                        tvarsInType,
-                        freeVarsInScheme,
-                        tvarInType,
-                        notVarInType,
-                        paramsToFunType,
-                        funTypeToTypes,
-                        funTypeToArgTypes,
-                        outFunType,
-                        paramsToConstFunType) where
+module Common.SymbolType (module Common.SymbolType) where
 
 import qualified Data.Set as S
 import Common.AST (Type(..), TypeF(..))
@@ -32,14 +7,12 @@ import Common.PrintAST (Pretty(prettyPrec))
 
 -- A representation for semantic types
 
+-- Const types are types without type variables
 newtype ConstType = ConstType (TypeF ConstType)
     deriving (Show, Eq)
 
 instance Pretty ConstType where
     prettyPrec d (ConstType t) = prettyPrec d t
-
-typeToConstType :: Type b -> ConstType
-typeToConstType (Type tf _) = ConstType (fmap typeToConstType tf)
 
 -- Some useful consts
 intConstType :: ConstType
@@ -55,6 +28,7 @@ unitConstType = ConstType UnitType
 stringConstType :: ConstType
 stringConstType = ConstType (ArrayType 1 (ConstType CharType))
 
+-- Symbol Types are types including type variables
 data SymbolType = SymType (TypeF SymbolType)
                 | TVar Int
     deriving (Show, Eq)
@@ -63,13 +37,14 @@ instance Pretty SymbolType where
     prettyPrec d (SymType t) = prettyPrec d t
     prettyPrec _ (TVar i)    = showString $ "@" ++ show i
 
+-- Some convertion utils
+typeTo :: (TypeF a -> a) -> Type b -> a
+typeTo alg (Type tf _) = alg (fmap (typeTo alg) tf)
+
 constTypeToSymbolType :: ConstType -> SymbolType
 constTypeToSymbolType (ConstType tf) = SymType $ fmap constTypeToSymbolType tf
 
-typeToSymbolType :: Type b -> SymbolType
-typeToSymbolType (Type tf _) = SymType (fmap typeToSymbolType tf)
-
-
+-- Type schemes are polymorphic types
 data TypeScheme = MonoType SymbolType
                 | AbsType Int TypeScheme
     deriving Show
@@ -139,28 +114,32 @@ notVarInType :: Int -> SymbolType -> Bool
 notVarInType v = not . tvarInType v
 
 -- Fun Types Utils
-paramsToFunType :: [SymbolType] -> SymbolType -> SymbolType
-paramsToFunType [] out = out
-paramsToFunType (t:ts) out = SymType (FunType t (paramsToFunType ts out))
+paramsToFun :: (TypeF a -> a) -> [a] -> a -> a
+paramsToFun _ [] out       = out
+paramsToFun alg (t:ts) out = alg (FunType t (paramsToFun alg ts out))
 
-funTypeToTypes :: SymbolType -> [SymbolType]
-funTypeToTypes = reverse . aux [] where
-    aux :: [SymbolType] -> SymbolType -> [SymbolType]
-    aux acc (SymType (FunType t1 t2)) = aux (t1:acc) t2
-    aux acc s = s:acc
+funToTypes :: (a -> Either (TypeF a) a) -> a -> [a]
+funToTypes coalg = reverse . aux [] where
+    aux acc t = case coalg t of
+        Left (FunType t1 t2) -> aux (t1:acc) t2
+        _                    -> t:acc
 
-funTypeToArgTypes :: SymbolType -> [SymbolType]
-funTypeToArgTypes s =
-    let ts = funTypeToTypes s
+funToArgs :: (a -> Either (TypeF a) a) -> a -> [a]
+funToArgs coalg s =
+    let ts = funToTypes coalg s
         f [] = []
         f [_] = []
         f (x:xs) = x : f xs
     in if null ts then [] else f ts
 
-outFunType :: SymbolType -> SymbolType
-outFunType (SymType (FunType _ t2)) = outFunType t2
-outFunType st = st
+outFunType :: (a -> Either (TypeF a) a) -> a -> a
+outFunType out t = case out t of
+    Left (FunType _ t2) -> outFunType out t2
+    _ -> t
 
-paramsToConstFunType :: [ConstType] -> ConstType -> ConstType
-paramsToConstFunType [] out = out
-paramsToConstFunType (t:ts) out = ConstType (FunType t (paramsToConstFunType ts out))
+ctCoAlg :: ConstType -> Either (TypeF ConstType) ConstType
+ctCoAlg (ConstType t) = Left t
+
+stCoAlg :: SymbolType -> Either (TypeF SymbolType) SymbolType
+stCoAlg (SymType t) = Left t
+stCoAlg st          = Right st

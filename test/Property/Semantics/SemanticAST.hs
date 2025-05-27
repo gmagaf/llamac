@@ -99,25 +99,25 @@ arbSimpleTypeDef = do
   b <- arbitrary
   elements
     [
-      (TypeDef [TDef "t1" [Constr "C1" [] b, Constr "C2" [] b, Constr "C3" [] b] b] b,
+      (TypeDef [TDef "t1" [Constr "C1" [] b, Constr "C2" [Type IntType b] b, Constr "C3" [Type (UserDefinedType "t1") b] b] b] b,
         M.fromList [("C1", ConstType (UserDefinedType "t1")),
-                    ("C2", ConstType (UserDefinedType "t1")),
-                    ("C3", ConstType (UserDefinedType "t1"))],
+                    ("C2", ConstType (FunType (ConstType IntType) (ConstType (UserDefinedType "t1")))),
+                    ("C3", ConstType (FunType (ConstType (UserDefinedType "t1")) (ConstType (UserDefinedType "t1"))))],
         S.fromList ["t1"]),
-      (TypeDef [TDef "t2" [Constr "D1" [] b, Constr "D2" [] b, Constr "D3" [] b] b] b,
+      (TypeDef [TDef "t2" [Constr "D1" [] b, Constr "D2" [Type IntType b] b, Constr "D3" [Type (UserDefinedType "t2") b] b] b] b,
         M.fromList [("D1", ConstType (UserDefinedType "t2")),
-                    ("D2", ConstType (UserDefinedType "t2")),
-                    ("D3", ConstType (UserDefinedType "t2"))],
+                    ("D2", ConstType (FunType (ConstType IntType) (ConstType (UserDefinedType "t2")))),
+                    ("D3", ConstType (FunType (ConstType (UserDefinedType "t2")) (ConstType (UserDefinedType "t2"))))],
         S.fromList ["t2"]),
-        (TypeDef [TDef "t3" [Constr "E1" [] b, Constr "E2" [] b, Constr "E3" [] b] b] b,
+        (TypeDef [TDef "t3" [Constr "E1" [] b, Constr "E2" [Type IntType b] b, Constr "E3" [Type (UserDefinedType "t3") b] b] b] b,
         M.fromList [("E1", ConstType (UserDefinedType "t3")),
-                    ("E2", ConstType (UserDefinedType "t3")),
-                    ("E3", ConstType (UserDefinedType "t3"))],
+                    ("E2", ConstType (FunType (ConstType IntType) (ConstType (UserDefinedType "t3")))),
+                    ("E3", ConstType (FunType (ConstType (UserDefinedType "t3")) (ConstType (UserDefinedType "t3"))))],
         S.fromList ["t3"]),
-        (TypeDef [TDef "t4" [Constr "F1" [] b, Constr "F2" [] b, Constr "F3" [] b] b] b,
+        (TypeDef [TDef "t4" [Constr "F1" [] b, Constr "F2" [Type IntType b] b, Constr "F3" [Type (UserDefinedType "t4") b] b] b] b,
         M.fromList [("F1", ConstType (UserDefinedType "t4")),
-                    ("F2", ConstType (UserDefinedType "t4")),
-                    ("F3", ConstType (UserDefinedType "t4"))],
+                    ("F2", ConstType (FunType (ConstType IntType) (ConstType (UserDefinedType "t4")))),
+                    ("F3", ConstType (FunType (ConstType (UserDefinedType "t4")) (ConstType (UserDefinedType "t4"))))],
         S.fromList ["t4"])
     ]
 
@@ -131,15 +131,16 @@ arbSimpleType ts = sized gen where
   gen n = do
     let r = gen (n - 1)
     i <- choose (1, 3) :: Gen Int
-    oneof [r, (Type . RefType <$> r) <*> arbitrary,
-            (Type . ArrayType i <$> r) <*> arbitrary,
-            Type <$> (FunType <$> gen 0 <*> gen 0) <*> arbitrary] -- TODO: Add support for fun types
+    oneof [r,
+           Type . RefType <$> r <*> arbitrary,
+           Type . ArrayType i <$> r <*> arbitrary,
+           Type <$> (FunType <$> r <*> r) <*> arbitrary]
 
 arbLetDef :: Arbitrary b => Scope -> TypeScope -> Gen (LetDef b, Scope)
 arbLetDef s ts = sized $ \n -> do
   ids <- boundedListOf (1, n) arbId
   let idc = length ids
-  types <- boundedListOf (idc, idc) (arbSimpleType ts)
+  types <- boundedListOf (idc, idc) (resize n $ arbSimpleType ts)
   let pairs = zip ids types
   let constTypes = map (typeTo ConstType) types
   let entries = zip ids constTypes
@@ -149,35 +150,36 @@ arbLetDef s ts = sized $ \n -> do
   if isRec
     then do
       -- Let rec -> run with s'
-      defs <- mapM (arbDef s') pairs
+      defs <- mapM (resize n . arbDef s') pairs
       return (LetRec defs b, s')
     else do
       -- Let case -> run with s
-      defs <- mapM (arbDef s) pairs
+      defs <- mapM (resize n . arbDef s) pairs
       return (Let defs b, s')
 
 arbDef :: Arbitrary b => Scope -> (Identifier, Type b) -> Gen (Def b)
-arbDef s (i, t@(Type tf _)) = do
-  case tf of
-    RefType t'       -> frequency [(2, VarDef i <$> arbitrary),
-                             (1, VarDefTyped i t' <$> arbitrary)]
-    ArrayType dim t' -> frequency [(2, ArrayDef i <$> es dim s (ConstType IntType) <*> arbitrary),
-                                   (1, ArrayDefTyped i <$> es dim s (ConstType IntType) <*> return t' <*> arbitrary)]
-    FunType _ _      -> do
-      let types = funToTypes (\(Type tf' _) -> Left tf') t
-      let pc = length types - 1
-      let argTypes = take pc types
-      let outT = typeTo ConstType (last types)
-      pids <- suchThat (boundedListOf (pc, pc) arbId) (not . hasDuplicates)
-      ps <- mapM arbParam (zip pids argTypes)
-      let s' = M.union s (M.fromList $ zipWith pEntry ps argTypes)
-      frequency [(2, FunDef i ps <$> arbExpr s' outT <*> arbitrary),
-                 (3, FunDefTyped i ps t <$> arbExpr s' outT <*> arbitrary)]
-    _ -> frequency [(2, FunDef i [] <$> arbExpr s ct <*> arbitrary),
-                    (1, FunDefTyped i [] t <$> arbExpr s ct <*> arbitrary)]
+arbDef s (i, t@(Type tf _)) = sized $ \n -> case tf of
+  RefType t'       -> frequency [(2, VarDef i <$> arbitrary),
+                                 (1, VarDefTyped i t' <$> arbitrary)]
+  ArrayType dim t' -> do
+    b <- arbitrary
+    let intType = Type IntType b
+    frequency [(2, ArrayDef i <$> es intType <*> arbitrary),
+               (1, ArrayDefTyped i <$> es intType <*> return t' <*> arbitrary)]
+      where es et = boundedListOf (dim, dim) (resize n $ arbExpr s et)
+  FunType _ _      -> do
+    let types = funToTypes (\(Type tf' _) -> Left tf') t
+    let pc = length types - 1
+    let argTypes = take pc types
+    let outT = last types
+    pids <- suchThat (boundedListOf (pc, pc) arbId) (not . hasDuplicates)
+    ps <- mapM arbParam (zip pids argTypes)
+    let s' = M.union s (M.fromList $ zipWith pEntry ps argTypes)
+    frequency [(2, FunDef i ps <$> resize n (arbExpr s' outT) <*> arbitrary),
+               (3, FunDefTyped i ps t <$> resize n (arbExpr s' outT) <*> arbitrary)]
+  _ -> frequency [(2, FunDef i [] <$> resize n (arbExpr s t) <*> arbitrary),
+                  (1, FunDefTyped i [] t <$> resize n (arbExpr s t) <*> arbitrary)]
   where
-    ct = typeTo ConstType t
-    es dim s' t' = boundedListOf (1, dim) (arbExpr s' t')
     pEntry :: Param b -> Type b -> (Identifier, ConstType)
     pEntry p t' = (ide p, typeTo ConstType t')
 
@@ -185,39 +187,50 @@ arbParam :: Arbitrary b => (Identifier, Type b) -> Gen (Param b)
 arbParam (i, t) = oneof [Param i <$> arbitrary,
                          TypedParam i t <$> arbitrary]
 
-arbExpr :: Arbitrary b => Scope -> ConstType -> Gen (Expr b)
-arbExpr s t = Expr <$> arbExprF s t (arbExpr s) <*> arbitrary
-
-arbExprF :: Scope -> ConstType -> (ConstType -> Gen e) -> Gen (ExprF e)
-arbExprF s t@(ConstType tf) r = sized gen where
-  gen 0 = case tf of
-    IntType -> IntCExpr <$> arbitraryIntConstant
-    FloatType -> FloatCExpr <$> arbitraryFloatConstant
-    CharType -> CharCExpr <$> arbitraryCharConstant
-    BoolType -> elements [TrueCExpr, FalseCExpr]
-    UnitType -> return UnitCExpr
-    UserDefinedType _ -> do
-      i <- fst <$> suchThat (elements (M.toList s)) (\(_, ct) -> t == ct)
-      if isUpper (head i)
-        then return (ConstConstrExpr i)
-        else return (ConstExpr i)
-    -- TODO: Add support for more types
+arbExpr :: Arbitrary b => Scope -> Type b -> Gen (Expr b)
+arbExpr s t@(Type tf _) = sized gen where
+  gen 0 = do
+    case tf of
+      IntType -> Expr . IntCExpr <$> arbitraryIntConstant <*> arbitrary
+      FloatType -> (Expr . FloatCExpr <$> arbitraryFloatConstant) <*> arbitrary
+      CharType -> (Expr . CharCExpr <$> arbitraryCharConstant) <*> arbitrary
+      BoolType -> Expr <$> elements [TrueCExpr, FalseCExpr] <*> arbitrary
+      UnitType -> Expr UnitCExpr <$> arbitrary
+      RefType (Type (ArrayType _ _) _) -> do
+        b <- arbitrary
+        def <- resize 0 $ arbDef s ("id_ref_arr", t)
+        return (LetIn (Let [def] b) (Expr (ConstExpr "id_ref_arr") b) b)
+      RefType t' -> NewType t' <$> arbitrary
+      UserDefinedType _ -> do
+        i <- fst <$> suchThat (elements (M.toList s)) (\(_, ct) -> typeTo ConstType t == ct)
+        if isUpper (head i)
+          then Expr (ConstConstrExpr i) <$> arbitrary
+          else Expr (ConstExpr i) <$> arbitrary
+      ArrayType _ _ -> do
+        b <- arbitrary
+        def <- resize 0 $ arbDef s ("id_arr", t)
+        return (LetIn (Let [def] b) (Expr (ConstExpr "id_arr") b) b)
+      FunType _ _ -> do
+        b <- arbitrary
+        def <- resize 0 $ arbDef s ("id_fun", t)
+        return (LetIn (Let [def] b) (Expr (ConstExpr "id_fun") b) b)
   gen n = do
-    let funs = filter (\(_, ct) -> outFunType ctCoAlg ct == t) (M.toList s)
-    let r' = resize (n - 1) . r
+    let ctToType :: Arbitrary b' => ConstType -> Gen (Type b')
+        ctToType (ConstType ctf) = do
+          b <- arbitrary
+          tf' <- mapM ctToType ctf
+          return (Type tf' b)
+    let funs = filter (\(_, ct) -> outFunType ctCoAlg ct == typeTo ConstType t) (M.toList s)
+    let r = resize (n - 1) . arbExpr s
     if null funs
       then gen 0
       else do
         (fun, ct) <- elements funs
-        let argTypes = funToArgs ctCoAlg ct
-        args <- mapM r' argTypes
+        let argctTypes = funToArgs ctCoAlg ct
+        argTypes <- mapM ctToType argctTypes
+        args <- mapM r argTypes
         if isUpper (head fun)
-        then return (ConstrAppExpr fun args)
-        else return (FunAppExpr fun args)
-
--- sample (arbExpr (Data.Map.fromList [("f", ConstType (FunType (ConstType CharType) (ConstType IntType )))]) (ConstType IntType))
-
--- m = Data.Map.fromList [("f", ConstType (FunType (ConstType CharType) (ConstType IntType )))]
--- filter (\(_, ct) -> outFunConstType ct == (ConstType IntType )) (M.toList m)
--- (f, ct) = head $ filter (\(_, ct) -> outFunConstType ct == (ConstType IntType )) (M.toList m)
--- funTypeToArgConstTypes ct
+        then if null args then Expr (ConstConstrExpr fun) <$> arbitrary
+                          else Expr (ConstrAppExpr fun args) <$> arbitrary
+        else if null args then Expr (ConstExpr fun) <$> arbitrary
+                          else Expr (FunAppExpr fun args) <$> arbitrary

@@ -4,8 +4,8 @@ module Unit.Unit (testParserSuite,
 
 import Test.Hspec (Spec, hspec, describe, it, shouldBe)
 import Test.QuickCheck (Gen, generate, vectorOf, elements)
-import Unit.TestExpectations
-import Unit.SemanticTestSuites
+import Unit.Parser.ExpectedASTs
+import Unit.Semantics.SemanticTestSuites
 import Lexer.Lexer (AlexPosn)
 import Parser.Utils (parse, analyze)
 import Common.AST (AST)

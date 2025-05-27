@@ -1,33 +1,25 @@
-module Property.Property (checkForSize,
-                          checkForSizes,
-                          parsedPrettyASTisAST,
-                          semanticASTisOK,
-                          checkParsedPrettyAST,
-                          checkSemanticASTisOK) where
+module Property.Property (checkParsedPrettyAST,
+                          checkSemTypesAST,
+                          checkSemScopesAST) where
 
-import Test.QuickCheck
-    ( Gen,
-      resize,
-      forAll,
-      isSuccess,
-      quickCheckResult,
-      Property,
-      Result )
-import Parser.Utils (parse)
+import Test.QuickCheck (Gen, forAll, Property, Result)
+
 import Common.AST (mapAST, AST)
 import Common.PrintAST (prettyAST)
-import Property.ArbitraryAST (arbitraryAST)
-import Property.SemanticAST (semanticAST)
 import Lexer.Lexer (AlexPosn (AlexPn))
-import Semantics.Semantics (analyzeAST)
+import Parser.Utils (parse)
 import Parser.ParserState (initParserState)
 import Parser.ParserM (evalParser)
+import Semantics.Semantics (analyzeAST)
+import Property.Utils (checkForSize)
+import Property.Parser.ArbitraryAST (arbitraryAST)
+import Property.Semantics.SemanticAST (semanticTypesAST, semanticScopesAST)
 
+-- This module defines the desired test properties and tests
+
+-- Parser tests
 removeASTtags :: AST b -> AST ()
 removeASTtags = mapAST (const ())
-
-setDummyPosn :: AST b -> AST AlexPosn
-setDummyPosn = mapAST (const $ AlexPn 0 0 0)
 
 parsedPrettyASTisAST :: Show b => Gen (AST b) -> Property
 parsedPrettyASTisAST gen =
@@ -37,6 +29,15 @@ parsedPrettyASTisAST gen =
     in case ast of
         Right pp -> removeASTtags p == removeASTtags pp
         _        -> False)
+
+checkParsedPrettyAST :: Int -> IO Result
+checkParsedPrettyAST n = do
+  putStrLn $ "Testing property (parse . pretty $ AST == AST) for size: " ++ show n
+  checkForSize parsedPrettyASTisAST (arbitraryAST :: Gen (AST ())) n
+
+-- Semantic tests
+setDummyPosn :: AST b -> AST AlexPosn
+setDummyPosn = mapAST (const $ AlexPn 0 0 0)
 
 semanticASTisOK :: (Show b) => Gen (AST b) -> Property
 semanticASTisOK gen =
@@ -48,24 +49,12 @@ semanticASTisOK gen =
         Right _ -> True
         Left _  -> False)
 
-checkForSize :: (Gen a -> Property) -> Gen a -> Int -> IO Result
-checkForSize prop gen size = quickCheckResult . prop $ resize size gen
+checkSemTypesAST :: Int -> IO Result
+checkSemTypesAST n = do
+  putStrLn $ "Testing property (analyzeAST $ (correct, types) AST == True) for size: " ++ show n
+  checkForSize semanticASTisOK (semanticTypesAST :: Gen (AST ())) n
 
-checkForSizes :: (Int -> IO Result) -> [Int] -> IO ()
-checkForSizes _ [] = return ()
-checkForSizes t (x:xs) = do
-  res <- t x
-  if isSuccess res then checkForSizes t xs
-  else do
-    putStrLn "Test failed :("
-
-checkParsedPrettyAST :: Int -> IO Result
-checkParsedPrettyAST n = do
- putStrLn $ "Testing property (parse . pretty $ AST == AST) for size: " ++ show n
- checkForSize parsedPrettyASTisAST (arbitraryAST :: Gen (AST ())) n
-
-checkSemanticASTisOK :: Int -> IO Result
-checkSemanticASTisOK n = do
- putStrLn $ "Testing property (analyzeAST $ (correct) AST == True) for size: " ++ show n
- checkForSize semanticASTisOK (semanticAST :: Gen (AST ())) n
- 
+checkSemScopesAST :: Int -> IO Result
+checkSemScopesAST n = do
+  putStrLn $ "Testing property (analyzeAST $ (correct, scopes) AST == True) for size: " ++ show n
+  checkForSize semanticASTisOK (semanticScopesAST :: Gen (AST ())) n

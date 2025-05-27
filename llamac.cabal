@@ -88,12 +88,14 @@ test-suite test
                       QuickCheck >= 2.5,
                       hspec >= 2.10,
                       llamac
- other-modules:       Property.ArbitraryAST
-                      Property.SemanticAST
+ other-modules:       Unit.Unit
+                      Unit.Parser.ExpectedASTs
+                      Unit.Semantics.SemanticTestSuites
+                      Property.Utils
                       Property.Property
-                      Unit.TestExpectations
-                      Unit.SemanticTestSuites
-                      Unit.Unit
+                      Property.Lexer.ArbitraryTokens
+                      Property.Parser.ArbitraryAST
+                      Property.Semantics.SemanticAST
  ghc-options:         -Wall
                       -Wcompat
                       -Widentities

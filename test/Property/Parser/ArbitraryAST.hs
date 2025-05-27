@@ -1,33 +1,11 @@
-module Property.ArbitraryAST (arbitraryAST, boundedListOf,
-                              arbitraryIntConstant, arbitraryFloatConstant,
-                              arbitraryCharConstant, arbitraryStringConstant) where
+module Property.Parser.ArbitraryAST (arbitraryAST) where
 
 import Test.QuickCheck
-import Common.Token
 import Common.AST
+import Property.Utils
 
-arbitraryIdentifier :: Gen Identifier
-arbitraryIdentifier = elements ["a", "b", "c", "d", "e", "f", "g", "foo", "bar", "main"]
-
-arbitraryConstrIdentifier :: Gen ConstrIdentifier
-arbitraryConstrIdentifier = elements ["A", "B", "C", "D", "Nil", "Cons", "Empty", "Tree"]
-
-arbitraryIntConstant :: Gen IntConstant
-arbitraryIntConstant = elements [0..42]
-
-arbitraryFloatConstant :: Gen FloatConstant
-arbitraryFloatConstant = elements [0.0, 2.56, 3.14, 0.420e+2, 42000.0e-3]
-
-arbitraryCharConstant :: Gen CharConstant
-arbitraryCharConstant = elements ["a", "7", "\\n", "\\\"", "\\xE9"]
-
-arbitraryStringConstant :: Gen StringConstant
-arbitraryStringConstant = elements ["foo", "bar", "Route66", "Name:\\t\\\"DouglasAdams\\\"\\nValue:\\t42\\n"]
-
-boundedListOf :: (Int, Int) -> Gen a -> Gen [a]
-boundedListOf (l, u) gen = do
-  k <- choose (l, u)
-  vectorOf k gen
+-- This module defines a generator for syntactically correct
+-- programs. The sizes work logarithmically
 
 arbitraryAST :: Arbitrary b => Gen (AST b)
 arbitraryAST = boundedListOf (0, 6) g where
@@ -78,16 +56,16 @@ arbParam = oneof [Param <$> arbitraryIdentifier <*> arbitrary,
 
 arbExpr :: Arbitrary b => Gen (Expr b)
 arbExpr = sized g where
-    g 0 = Expr <$> resize 0 $ arbExprF (resize 0 arbExpr) <*> arbitrary
+    g 0 = Expr <$> arbExprF (resize 0 arbExpr) <*> arbitrary
     g n =
       let r = resize (div n 2) arbExpr
           clauses = boundedListOf (1, 3) $ resize (div n 2) arbClause
           letdef = resize (div n 2) arbLetDef
-      in oneof [Expr <$> resize n (arbExprF r) <*> arbitrary,
-                NewType <$> arbType <*> arbitrary,
-                LetIn <$> letdef <*> r <*> arbitrary,
-                MatchExpr <$> r <*> clauses <*> arbitrary
-              ]
+      in frequency [(3, Expr <$> resize n (arbExprF r) <*> arbitrary),
+                    (1, NewType <$> arbType <*> arbitrary),
+                    (1, LetIn <$> letdef <*> r <*> arbitrary),
+                    (1, MatchExpr <$> r <*> clauses <*> arbitrary)
+                  ]
 
 arbExprF :: Gen e -> Gen (ExprF e)
 arbExprF r = sized gen where

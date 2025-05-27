@@ -1,4 +1,4 @@
-module Unit.TestExpectations (module Unit.TestExpectations) where
+module Unit.Parser.ExpectedASTs (module Unit.Parser.ExpectedASTs) where
 
 import Common.AST
 import Lexer.Lexer (AlexPosn(..))

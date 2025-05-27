@@ -1,4 +1,4 @@
-module Unit.SemanticTestSuites (module Unit.SemanticTestSuites) where
+module Unit.Semantics.SemanticTestSuites (module Unit.Semantics.SemanticTestSuites) where
 
 typeDefSuite :: [(String, Bool)]
 typeDefSuite =
@@ -169,8 +169,8 @@ exprSuites =
          "                      print_string (if im > 0.0 then \"+j\" else \"-j\");" ++
          "                      print_float (abs_float im)\n" ++
          "  end", True),
-         ("type t = T of bool and s = S of t let main s = match s with S x -> () end", True),
-         ("type t = T of bool and s = S of t let main s = match s with S t -> match t with T true -> () end end", True),
+        ("type t = T of bool and s = S of t let main s = match s with S x -> () end", True),
+        ("type t = T of bool and s = S of t let main s = match s with S t -> match t with T true -> () end end", True),
         ("type t = T of int let main x = match x with T f -> f = f end", True),
         -- Failing cases
         ("type t = T of t int \nlet t (t : t) = t\nlet g t : t -> t = T t", False),

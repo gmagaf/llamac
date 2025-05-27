@@ -309,7 +309,7 @@ recSemExpr g expr =
             semE <- aexpr e
             closeScopeInNames
             putSemPosn p
-            g (ForExpr i semU semL semE)
+            g (ForDownExpr i semU semL semE)
         Expr ef p -> do
             semEf <- mapM aexpr ef
             putSemPosn p

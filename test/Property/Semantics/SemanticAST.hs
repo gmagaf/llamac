@@ -215,22 +215,53 @@ arbExpr s t@(Type tf _) = sized gen where
         def <- resize 0 $ arbDef s ("id_fun", t)
         return (LetIn (Let [def] b) (Expr (ConstExpr "id_fun") b) b)
   gen n = do
-    let ctToType :: Arbitrary b' => ConstType -> Gen (Type b')
-        ctToType (ConstType ctf) = do
-          b <- arbitrary
-          tf' <- mapM ctToType ctf
-          return (Type tf' b)
-    let funs = filter (\(_, ct) -> outFunType ctCoAlg ct == typeTo ConstType t) (M.toList s)
     let r = resize (n - 1) . arbExpr s
-    if null funs
-      then gen 0
-      else do
-        (fun, ct) <- elements funs
-        let argctTypes = funToArgs ctCoAlg ct
-        argTypes <- mapM ctToType argctTypes
-        args <- mapM r argTypes
-        if isUpper (head fun)
-        then if null args then Expr (ConstConstrExpr fun) <$> arbitrary
-                          else Expr (ConstrAppExpr fun args) <$> arbitrary
-        else if null args then Expr (ConstExpr fun) <$> arbitrary
-                          else Expr (FunAppExpr fun args) <$> arbitrary
+    oneof [funApp r, ifgen r, loopgen r] where
+    loopgen r = case tf of
+      UnitType -> do
+        b <- arbitrary
+        condExpr <- r (Type BoolType b)
+        lExpr <- r (Type IntType b)
+        uExpr <- r (Type IntType b)
+        e <- r t
+        i <- arbId
+        fe <- resize (n - 1) $ arbExpr (M.insert i (ConstType IntType) s) t
+        elements [Expr (WhileExpr condExpr e) b,
+                  Expr (ForExpr i lExpr uExpr fe) b,
+                  Expr (ForDownExpr i uExpr lExpr fe) b]
+      _ -> do
+        b <- arbitrary
+        e1 <- r t
+        e2 <- r (Type UnitType b)
+        return (Expr (BinOpExpr SemicolonOp e2 e1) b)
+    ifgen r = case tf of
+      UnitType -> do
+        b <- arbitrary
+        condExpr <- r (Type BoolType b)
+        e <- r t
+        return (Expr (IfThenExpr condExpr e) b)
+      _ -> do
+        b <- arbitrary
+        condExpr <- r (Type BoolType b)
+        e1 <- r t
+        e2 <- r t
+        return (Expr (IfThenElseExpr condExpr e1 e2) b)
+    funApp r =
+      let funs = filter (\(_, ct) -> outFunType ctCoAlg ct == typeTo ConstType t) (M.toList s)
+          ctToType :: Arbitrary b' => ConstType -> Gen (Type b')
+          ctToType (ConstType ctf) = do
+            b <- arbitrary
+            tf' <- mapM ctToType ctf
+            return (Type tf' b)
+      in if null funs
+        then gen 0
+        else do
+          (fun, ct) <- elements funs
+          let argctTypes = funToArgs ctCoAlg ct
+          argTypes <- mapM ctToType argctTypes
+          args <- mapM r argTypes
+          if isUpper (head fun)
+          then if null args then Expr (ConstConstrExpr fun) <$> arbitrary
+                            else Expr (ConstrAppExpr fun args) <$> arbitrary
+          else if null args then Expr (ConstExpr fun) <$> arbitrary
+                            else Expr (FunAppExpr fun args) <$> arbitrary

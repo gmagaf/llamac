@@ -129,7 +129,7 @@ arbSimpleType ts = sized gen where
     b <- arbitrary
     elements $ map (`Type` b) basicTf
   gen n = do
-    let r = gen (n - 1)
+    let r = gen (div n 2)
     i <- choose (1, 3) :: Gen Int
     oneof [r,
            Type . RefType <$> r <*> arbitrary,
@@ -215,7 +215,7 @@ arbExpr s t@(Type tf _) = sized gen where
         def <- resize 0 $ arbDef s ("id_fun", t)
         return (LetIn (Let [def] b) (Expr (ConstExpr "id_fun") b) b)
   gen n = do
-    let r = resize (n - 1) . arbExpr s
+    let r = resize (div n 2) . arbExpr s
     oneof [funApp r, ifgen r, loopgen r] where
     loopgen r = case tf of
       UnitType -> do
@@ -225,7 +225,7 @@ arbExpr s t@(Type tf _) = sized gen where
         uExpr <- r (Type IntType b)
         e <- r t
         i <- arbId
-        fe <- resize (n - 1) $ arbExpr (M.insert i (ConstType IntType) s) t
+        fe <- resize (div n 2) $ arbExpr (M.insert i (ConstType IntType) s) t
         elements [Expr (WhileExpr condExpr e) b,
                   Expr (ForExpr i lExpr uExpr fe) b,
                   Expr (ForDownExpr i uExpr lExpr fe) b]

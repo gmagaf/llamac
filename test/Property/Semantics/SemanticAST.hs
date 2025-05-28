@@ -206,6 +206,7 @@ arbExpr s t@(Type tf _) = sized gen where
         if isUpper (head i)
           then Expr (ConstConstrExpr i) <$> arbitrary
           else Expr (ConstExpr i) <$> arbitrary
+      ArrayType 1 (Type CharType _) -> Expr (StringCExpr "TEST_STRING") <$> arbitrary
       ArrayType _ _ -> do
         b <- arbitrary
         def <- resize 0 $ arbDef s ("id_arr", t)
@@ -216,7 +217,7 @@ arbExpr s t@(Type tf _) = sized gen where
         return (LetIn (Let [def] b) (Expr (ConstExpr "id_fun") b) b)
   gen n = do
     let r = resize (div n 2) . arbExpr s
-    oneof [funApp r, ifgen r, loopgen r] where
+    oneof [funApp r, ifgen r, loopgen r {-- TODO: MatchExpr, UnOpExpr, BinOpExpr, ArrayAccess, ArrayDim, DeleteExpr, BeginExpr,  --}] where
     loopgen r = case tf of
       UnitType -> do
         b <- arbitrary

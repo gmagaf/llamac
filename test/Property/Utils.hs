@@ -2,6 +2,7 @@ module Property.Utils (module Property.Utils) where
 
 import Test.QuickCheck
 import Common.Token
+import Lexer.Lexer (AlexPosn(..))
 
 -- Some util functions for Gen
 
@@ -20,6 +21,12 @@ checkForSizes t (x:xs) = do
   if isSuccess res then checkForSizes t xs
   else do
     putStrLn "Test failed :("
+
+newtype ArbPosn = ArbPosn {arb_posn :: AlexPosn}
+  deriving Show
+
+instance Arbitrary ArbPosn where
+   arbitrary = ArbPosn <$> (AlexPn <$> arbitrary <*> arbitrary <*> arbitrary)
 
 -- Some arbitrary names and constants from a predefined set
 

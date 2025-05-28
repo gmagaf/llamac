@@ -2,16 +2,16 @@ module Property.Property (checkParsedPrettyAST,
                           checkSemTypesAST,
                           checkSemScopesAST) where
 
-import Test.QuickCheck (Gen, forAll, Property, Result)
+import Test.QuickCheck (Gen, Property, Result, forAll)
 
 import Common.AST (mapAST, AST)
 import Common.PrintAST (prettyAST)
-import Lexer.Lexer (AlexPosn (AlexPn))
 import Parser.Utils (parse)
 import Parser.ParserState (initParserState)
 import Parser.ParserM (evalParser)
+import Semantics.Utils (SemanticTag(..))
 import Semantics.Semantics (analyzeAST)
-import Property.Utils (checkForSize)
+import Property.Utils (checkForSize, ArbPosn (arb_posn))
 import Property.Parser.ArbitraryAST (arbitraryAST)
 import Property.Semantics.SemanticAST (semanticTypesAST, semanticScopesAST)
 
@@ -36,25 +36,22 @@ checkParsedPrettyAST n = do
   checkForSize parsedPrettyASTisAST (arbitraryAST :: Gen (AST ())) n
 
 -- Semantic tests
-setDummyPosn :: AST b -> AST AlexPosn
-setDummyPosn = mapAST (const $ AlexPn 0 0 0)
-
-semanticASTisOK :: (Show b) => Gen (AST b) -> Property
+semanticASTisOK :: Gen (AST ArbPosn) -> Property
 semanticASTisOK gen =
   forAll gen (\p ->
-    let p' = setDummyPosn p
+    let p' = mapAST arb_posn p
         parser = analyzeAST p'
         res = evalParser (initParserState "") parser
     in case res of
-        Right r -> setDummyPosn r == p' -- check that semantic analysis only affects tags
+        Right r -> mapAST posn r == p' -- check that semantic analysis only affects tags
         Left _  -> False)
 
 checkSemTypesAST :: Int -> IO Result
 checkSemTypesAST n = do
   putStrLn $ "Testing property (analyzeAST $ (correct, types) AST == True) for size: " ++ show n
-  checkForSize semanticASTisOK (semanticTypesAST :: Gen (AST ())) n
+  checkForSize semanticASTisOK (semanticTypesAST :: Gen (AST ArbPosn)) n
 
 checkSemScopesAST :: Int -> IO Result
 checkSemScopesAST n = do
   putStrLn $ "Testing property (analyzeAST $ (correct, scopes) AST == True) for size: " ++ show n
-  checkForSize semanticASTisOK (semanticScopesAST :: Gen (AST ())) n
+  checkForSize semanticASTisOK (semanticScopesAST :: Gen (AST ArbPosn)) n

@@ -13,9 +13,8 @@ main = do
   testParserGuidedSuite
   testSemSuite
   putStrLn "Starting property based testing using QuickCheck"
-  checkForSizes checkParsedPrettyAST expSizes
-  checkForSizes checkSemTypesAST linearSizes
-  checkForSizes checkSemScopesAST linearSizes
+  checkForSizes checkParsedPrettyAST sizes
+  checkForSizes checkSemTypesAST sizes
+  checkForSizes checkSemScopesAST sizes
   putStrLn "Finished testing!" where
-    linearSizes = [0..15]
-    expSizes = [0, 1, 2, 3, 4, 5, 10, 30, 100, 1000, 2000, 5000]
+    sizes = [0, 1, 2, 3, 4, 5, 10, 30, 100]

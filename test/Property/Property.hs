@@ -11,8 +11,8 @@ import Parser.ParserState (initParserState)
 import Parser.ParserM (evalParser)
 import Semantics.Utils (SemanticTag(..))
 import Semantics.Semantics (analyzeAST)
-import Property.Utils (checkForSize, ArbPosn (arb_posn))
-import Property.Parser.ArbitraryAST (arbitraryAST)
+import Property.Utils (checkForSize)
+import Property.Parser.ArbitraryAST (arbitraryAST, ArbPosn (arb_posn))
 import Property.Semantics.SemanticAST (semanticTypesAST, semanticScopesAST)
 
 -- This module defines the desired test properties and tests

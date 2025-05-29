@@ -1,11 +1,19 @@
-module Property.Parser.ArbitraryAST (arbitraryAST) where
+module Property.Parser.ArbitraryAST (arbitraryAST, ArbPosn(..)) where
 
-import Test.QuickCheck
 import Common.AST
+import Lexer.Lexer (AlexPosn(..))
+import Test.QuickCheck
 import Property.Utils
+import Property.Lexer.ArbitraryTokens
 
 -- This module defines a generator for syntactically correct
--- programs. The sizes work logarithmically
+-- programs.
+
+newtype ArbPosn = ArbPosn {arb_posn :: AlexPosn}
+  deriving Show
+
+instance Arbitrary ArbPosn where
+   arbitrary = ArbPosn <$> (AlexPn <$> arbitrary <*> arbitrary <*> arbitrary)
 
 arbitraryAST :: Arbitrary b => Gen (AST b)
 arbitraryAST = boundedListOf (0, 6) g where
@@ -21,8 +29,7 @@ arbConstr :: Arbitrary b => Gen (Constr b)
 arbConstr = Constr <$> arbitraryConstrIdentifier <*> boundedListOf (0, 2) arbType <*> arbitrary
 
 arbType :: Arbitrary b => Gen (Type b)
-arbType = sized g where
-  g n = Type <$> arbTypeF (resize (div n 2) arbType) <*> arbitrary
+arbType = sized $ \n -> Type <$> arbTypeF (resize (div n 2) arbType) <*> arbitrary
 
 arbTypeF :: Gen t -> Gen (TypeF t)
 arbTypeF r = sized gen where
@@ -34,20 +41,19 @@ arbTypeF r = sized gen where
     oneof [gen (div n 2), RefType <$> r, ArrayType i <$> r, FunType <$> r <*> r]
 
 arbLetDef :: Arbitrary b => Gen (LetDef b)
-arbLetDef = sized $ \n -> frequency [(3, Let <$> g n <*> arbitrary),
-                                     (1, LetRec <$> g n <*> arbitrary)] where
-  g n = boundedListOf (1, 2) $ resize n arbDef
+arbLetDef = frequency [(3, Let <$> defs <*> arbitrary),
+                       (1, LetRec <$> defs <*> arbitrary)] where
+  defs = boundedListOf (1, 2) arbDef
 
 arbDef :: Arbitrary b => Gen (Def b)
-arbDef = sized $ \n -> frequency [(3, FunDef <$> i <*> ps <*> g n <*> arbitrary),
-    (3, FunDefTyped <$> i <*> ps <*> arbType <*> g n <*> arbitrary),
+arbDef = frequency [(3, FunDef <$> i <*> ps <*> arbExpr <*> arbitrary),
+    (3, FunDefTyped <$> i <*> ps <*> arbType <*> arbExpr <*> arbitrary),
     (1, VarDef <$> i <*> arbitrary),
     (1, VarDefTyped <$> i <*> arbType <*> arbitrary),
-    (1, ArrayDef <$> i <*> es n <*> arbitrary),
-    (1, ArrayDefTyped <$> i <*> es n <*> arbType <*> arbitrary)] where
+    (1, ArrayDef <$> i <*> es <*> arbitrary),
+    (1, ArrayDefTyped <$> i <*> es <*> arbType <*> arbitrary)] where
   i = arbitraryIdentifier
-  g n = resize n arbExpr
-  es n = boundedListOf (1, 3) (g n)
+  es = boundedListOf (1, 3) arbExpr
   ps = boundedListOf (0, 3) arbParam
 
 arbParam :: Arbitrary b => Gen (Param b)
@@ -61,7 +67,7 @@ arbExpr = sized g where
       let r = resize (div n 2) arbExpr
           clauses = boundedListOf (1, 3) $ resize (div n 2) arbClause
           letdef = resize (div n 2) arbLetDef
-      in frequency [(3, Expr <$> resize n (arbExprF r) <*> arbitrary),
+      in frequency [(3, Expr <$> arbExprF r <*> arbitrary),
                     (1, NewType <$> arbType <*> arbitrary),
                     (1, LetIn <$> letdef <*> r <*> arbitrary),
                     (1, MatchExpr <$> r <*> clauses <*> arbitrary)
@@ -105,14 +111,13 @@ arbBinOp = elements [PlusOp, MinusOp, TimesOp, DivOp, PlusFloatOp,
                       NatEqOp, NotNatEqOp, AndOp, OrOp, SemicolonOp, AssignMutableOp]
 
 arbClause :: Arbitrary b => Gen (Clause b)
-arbClause = sized $ \n -> do
+arbClause = do
   p <- arbPattern
-  e <- resize n arbExpr
+  e <- arbExpr
   Match p e <$> arbitrary
 
 arbPattern :: Arbitrary b => Gen (Pattern b)
-arbPattern = sized g where
-  g n = Pattern <$> arbPatternF (resize (div n 2) arbPattern) <*> arbitrary
+arbPattern = sized $ \n -> Pattern <$> arbPatternF (resize (div n 2) arbPattern) <*> arbitrary
 
 arbPatternF :: Gen p -> Gen (PatternF p)
 arbPatternF genP = sized gen where

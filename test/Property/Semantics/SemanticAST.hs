@@ -241,8 +241,9 @@ arbExpr s t@(Type tf _) = sized gen where
                (2, ifGen t r),
                (2, loopGen n s t r),
                (1, (Expr . BeginExpr <$> r t) <*> arbitrary),
-               (2, arrayAccGen s t r)]
-    {-- TODO: MatchExpr, UnOpExpr, BinOpExpr, --}
+               (2, arrayAccGen s t r),
+               (3, unOpGen t r)]
+    {-- TODO: MatchExpr, BinOpExpr, --}
 
 ctToType :: Arbitrary b' => ConstType -> Gen (Type b')
 ctToType (ConstType ctf) = do
@@ -331,3 +332,21 @@ arrayAccGen s reft@(Type (RefType t) b) r = do
           return (Expr (ArrayAccess arr args) b')
         _ -> r reft
 arrayAccGen _ t r = r t
+
+unOpGen :: Arbitrary b => Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
+unOpGen t@(Type tf _) r = case tf of
+  IntType -> do
+    op <- elements [PlusUnOp, MinusUnOp]
+    e <- r t
+    Expr (UnOpExpr op e) <$> arbitrary
+  FloatType -> do
+    op <- elements [PlusFloatUnOp, MinusFloatUnOp]
+    e <- r t
+    Expr (UnOpExpr op e) <$> arbitrary
+  BoolType -> do
+    e <- r t
+    Expr (UnOpExpr NotOp e) <$> arbitrary
+  _ -> do
+    b <- arbitrary
+    e <- r (Type (RefType t) b)
+    Expr (UnOpExpr BangOp e) <$> arbitrary

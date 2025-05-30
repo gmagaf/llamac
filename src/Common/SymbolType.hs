@@ -47,7 +47,7 @@ constTypeToSymbolType (ConstType tf) = SymType $ fmap constTypeToSymbolType tf
 -- Type schemes are polymorphic types
 data TypeScheme = MonoType SymbolType
                 | AbsType Int TypeScheme
-    deriving Show
+    deriving (Show, Eq)
 
 instance Pretty TypeScheme where
     prettyPrec d (MonoType t)  = prettyPrec d t

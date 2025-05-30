@@ -93,6 +93,7 @@ test-suite test
  other-modules:       Unit.Unit
                       Unit.Parser.ExpectedASTs
                       Unit.Semantics.SemanticTestSuites
+                      Unit.Semantics.AnalyzedASTs
                       Property.Utils
                       Property.Property
                       Property.Lexer.ArbitraryTokens

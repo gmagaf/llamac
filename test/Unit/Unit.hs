@@ -1,14 +1,17 @@
 module Unit.Unit (testParserSuite,
                   testParserGuidedSuite,
-                  testSemSuite) where
+                  testSemSuite,
+                  testSemGuidedSuite) where
 
 import Test.Hspec (Spec, hspec, describe, it, shouldBe)
 import Test.QuickCheck (Gen, generate, vectorOf, elements)
 import Unit.Parser.ExpectedASTs
 import Unit.Semantics.SemanticTestSuites
+import Unit.Semantics.AnalyzedASTs
+import Common.AST (AST)
 import Lexer.Lexer (AlexPosn)
 import Parser.Utils (parse, analyze, readFileB)
-import Common.AST (AST)
+import Semantics.Utils (SemanticTag)
 
 testGuidedParser :: (String, AST AlexPosn, FilePath) -> IO ()
 testGuidedParser (descr, p, f) = do
@@ -56,6 +59,19 @@ testParserSuite k = do
       let fileName = "p" ++ show n ++ ".lla"
       f <- readFileB $ "test/resources/1000-llamas/" ++ fileName
       return (fileName, f)
+
+testGuidedSem :: (String, AST SemanticTag, FilePath) -> IO ()
+testGuidedSem (descr, p, f) = do
+  s <- readFileB f
+  hspec $ do
+    describe "Unit testing suite: (sem program == Expected AST)" $ do
+      it descr $ do
+        analyze s `shouldBe` Right p
+
+testSemGuidedSuite :: IO ()
+testSemGuidedSuite = mapM_ testGuidedSem suite where
+    suite = [("helloWorld.llama", helloWorldSemAST, "./test/resources/helloWorld.llama")
+            ]
 
 semSpec :: String -> Int -> [(String, Bool)] -> Spec
 semSpec _ _ [] = return ()

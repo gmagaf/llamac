@@ -35,13 +35,13 @@ import Semantics.SemanticState (Constraints, addConstraints)
 data TypeInfo = NotTypable
               | DefType TypeScheme
               | NodeType SymbolType
-    deriving Show
+    deriving (Show, Eq)
 
 data SemanticTag = SemTag {
                     posn     :: AlexPosn,
                     typeInfo :: TypeInfo
                     }
-    deriving Show
+    deriving (Show, Eq)
 
 cpPosn :: AlexPosn -> SemanticTag
 cpPosn p = SemTag {posn = p, typeInfo = NotTypable}

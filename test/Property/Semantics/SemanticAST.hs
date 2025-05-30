@@ -237,14 +237,14 @@ arbExpr s t@(Type tf _) = sized gen where
         return (LetIn (Let [def] b) (Expr (ConstExpr "id_fun") b) b)
   gen n = do
     let r = resize (div n 2) . arbExpr s
-    frequency [(4, funAppGen s t r),
+    frequency [(5, funAppGen s t r),
                (2, ifGen t r),
                (2, loopGen n s t r),
                (1, (Expr . BeginExpr <$> r t) <*> arbitrary),
                (2, arrayAccGen s t r),
                (3, unOpGen t r),
                (3, binOpGen t r)]
-    {-- TODO: MatchExpr, --}
+    {-- TODO: MatchExpr --}
 
 ctToType :: Arbitrary b' => ConstType -> Gen (Type b')
 ctToType (ConstType ctf) = do

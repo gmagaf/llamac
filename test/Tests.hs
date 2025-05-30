@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Unit.Unit (testParserGuidedSuite, testParserSuite, testSemSuite)
+import Unit.Unit (testParserGuidedSuite, testParserSuite, testSemGuidedSuite, testSemSuite)
 import Property.Utils (checkForSizes)
 import Property.Property (checkParsedPrettyAST, checkSemTypesAST, checkSemScopesAST)
 
@@ -9,9 +9,10 @@ main = do
   putStrLn "Hello from tests!"
   putStrLn "Starting unit (non-guided) testing using HSpec"
   testParserSuite 1000
+  testSemSuite
   putStrLn "Starting unit guided testing using HSpec"
   testParserGuidedSuite
-  testSemSuite
+  testSemGuidedSuite
   putStrLn "Starting property based testing using QuickCheck"
   checkForSizes checkParsedPrettyAST sizes
   checkForSizes checkSemTypesAST sizes

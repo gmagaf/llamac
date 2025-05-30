@@ -191,11 +191,31 @@ arbExpr :: Arbitrary b => Scope -> Type b -> Gen (Expr b)
 arbExpr s t@(Type tf _) = sized gen where
   gen 0 = do
     case tf of
-      IntType -> Expr . IntCExpr <$> arbitraryIntConstant <*> arbitrary
+      IntType -> do
+        let intExpr = Expr . IntCExpr <$> arbitraryIntConstant <*> arbitrary
+        let arrays = filter (typeIsArray . snd) (M.toList s)
+        if null arrays
+          then intExpr
+          else do
+            (ref, ct) <- elements arrays
+            case ct of
+              ConstType (ArrayType dim _) -> do
+                i <- choose (1, dim)
+                frequency [(1, Expr (ArrayDim ref i) <$> arbitrary),
+                          (4, intExpr)]
+              _ -> intExpr
       FloatType -> (Expr . FloatCExpr <$> arbitraryFloatConstant) <*> arbitrary
       CharType -> (Expr . CharCExpr <$> arbitraryCharConstant) <*> arbitrary
       BoolType -> Expr <$> elements [TrueCExpr, FalseCExpr] <*> arbitrary
-      UnitType -> Expr UnitCExpr <$> arbitrary
+      UnitType -> do
+        let unitExpr = Expr UnitCExpr <$> arbitrary
+        let refs = filter (typeIsRef . snd) (M.toList s)
+        if null refs
+          then unitExpr
+          else do
+            (ref, _) <- elements refs
+            frequency [(1, ((Expr <$> DeleteExpr) . Expr (ConstExpr ref) <$> arbitrary) <*> arbitrary),
+                       (4, unitExpr)]
       RefType (Type (ArrayType _ _) _) -> do
         b <- arbitrary
         def <- resize 0 $ arbDef s ("id_ref_arr", t)
@@ -220,17 +240,29 @@ arbExpr s t@(Type tf _) = sized gen where
     frequency [(4, funAppGen s t r),
                (2, ifGen t r),
                (2, loopGen n s t r),
-               (1, (Expr . BeginExpr <$> r t) <*> arbitrary)]
-    {-- TODO: MatchExpr, UnOpExpr, BinOpExpr, ArrayAccess, ArrayDim, DeleteExpr, --}
+               (1, (Expr . BeginExpr <$> r t) <*> arbitrary),
+               (2, arrayAccGen s t r)]
+    {-- TODO: MatchExpr, UnOpExpr, BinOpExpr, --}
+
+ctToType :: Arbitrary b' => ConstType -> Gen (Type b')
+ctToType (ConstType ctf) = do
+  b <- arbitrary
+  tf' <- mapM ctToType ctf
+  return (Type tf' b)
+
+typeIsRef :: ConstType -> Bool
+typeIsRef ct = case ct of
+  ConstType (RefType _) -> True
+  _ -> False
+
+typeIsArray :: ConstType -> Bool
+typeIsArray ct = case ct of
+  ConstType (ArrayType _ _) -> True
+  _ -> False
 
 funAppGen :: Arbitrary b => Scope -> Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
 funAppGen s t r =
   let funs = filter (\(_, ct) -> outFunType ctCoAlg ct == typeTo ConstType t) (M.toList s)
-      ctToType :: Arbitrary b' => ConstType -> Gen (Type b')
-      ctToType (ConstType ctf) = do
-        b <- arbitrary
-        tf' <- mapM ctToType ctf
-        return (Type tf' b)
   in if null funs
     then resize 0 (r t)
     else do
@@ -276,3 +308,26 @@ loopGen n s t@(Type tf _) r = case tf of
     e1 <- r t
     e2 <- r (Type UnitType b)
     return (Expr (BinOpExpr SemicolonOp e2 e1) b)
+
+arrayAccGen :: Arbitrary b => Scope -> Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
+arrayAccGen s reft@(Type (RefType t) b) r = do
+  let ct = typeTo ConstType t
+  let isArrayOfT (ConstType (ArrayType _ arrt)) = arrt == ct
+      isArrayOfT _ = False
+  let arrs = filter (isArrayOfT . snd) (M.toList s)
+  if null arrs
+    then do
+      def <- arbDef s ("new_array_to_access", Type (ArrayType 4 t) b)
+      let s' = M.insert "new_array_to_access" (typeTo ConstType (Type (ArrayType 4 t) b)) s
+      arrAcc <- arrayAccGen s' reft r
+      b' <- arbitrary
+      return (LetIn (Let [def] b') arrAcc b')
+    else do
+      (arr, arrCt) <- elements arrs
+      case arrCt of
+        ConstType (ArrayType d _) -> do
+          b' <- arbitrary
+          args <- mapM (const $ r (Type IntType b')) [1..d]
+          return (Expr (ArrayAccess arr args) b')
+        _ -> r reft
+arrayAccGen _ t r = r t

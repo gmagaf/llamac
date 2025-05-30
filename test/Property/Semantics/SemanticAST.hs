@@ -242,8 +242,9 @@ arbExpr s t@(Type tf _) = sized gen where
                (2, loopGen n s t r),
                (1, (Expr . BeginExpr <$> r t) <*> arbitrary),
                (2, arrayAccGen s t r),
-               (3, unOpGen t r)]
-    {-- TODO: MatchExpr, BinOpExpr, --}
+               (3, unOpGen t r),
+               (3, binOpGen t r)]
+    {-- TODO: MatchExpr, --}
 
 ctToType :: Arbitrary b' => ConstType -> Gen (Type b')
 ctToType (ConstType ctf) = do
@@ -350,3 +351,39 @@ unOpGen t@(Type tf _) r = case tf of
     b <- arbitrary
     e <- r (Type (RefType t) b)
     Expr (UnOpExpr BangOp e) <$> arbitrary
+
+binOpGen :: Arbitrary b => Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
+binOpGen t@(Type tf _) r = case tf of
+  IntType -> do
+    op <- elements [PlusOp, MinusOp, TimesOp, DivOp, ModOp]
+    e1 <- r t
+    e2 <- r t
+    Expr (BinOpExpr op e1 e2) <$> arbitrary
+  FloatType -> do
+    op <- elements [PlusFloatOp, MinusFloatOp, TimesFloatOp, DivFloatOp, ExpOp]
+    e1 <- r t
+    e2 <- r t
+    Expr (BinOpExpr op e1 e2) <$> arbitrary
+  BoolType -> do
+    op <- elements [AndOp, OrOp]
+    e1 <- r t
+    e2 <- r t
+    let boolOp = Expr (BinOpExpr op e1 e2) <$> arbitrary
+    let compTypes = [Type CharType <$> arbitrary, Type IntType <$> arbitrary, Type FloatType <$> arbitrary]
+    t' <- oneof $ compTypes ++ [Type UnitType <$> arbitrary, Type BoolType <$> arbitrary, Type FloatType <$> arbitrary, Type <$> (RefType <$> (Type FloatType <$> arbitrary)) <*> arbitrary]
+    op' <- elements [EqOp, NotEqOp, NatEqOp, NotNatEqOp]
+    e1' <- r t'
+    e2' <- r t'
+    let eqOp = Expr (BinOpExpr op' e1' e2') <$> arbitrary
+    t'' <- oneof compTypes
+    op'' <- elements [LTOp, GTOp, LEqOp, GEqOp]
+    e1'' <- r t''
+    e2'' <- r t''
+    let compOp = Expr (BinOpExpr op'' e1'' e2'') <$> arbitrary
+    oneof [boolOp, eqOp, compOp]
+  UnitType -> do
+    b <- arbitrary
+    e1 <- r (Type (RefType t) b)
+    e2 <- r t
+    Expr (BinOpExpr AssignMutableOp e1 e2) <$> arbitrary
+  _ -> r t

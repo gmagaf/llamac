@@ -1,4 +1,8 @@
-module Parser.Utils (parse, analyze, parseAndAnalyze, parseFile, debug, debugRepl) where
+module Parser.Utils (parse, analyze, parseAndAnalyze, readFileB, parseFile, debug, debugRepl) where
+
+import qualified Data.ByteString    as B
+import qualified Data.Text          as T
+import qualified Data.Text.Encoding as T
 
 import Common.AST (AST)
 import Common.PrintAST (pretty, debugPrint)
@@ -39,9 +43,14 @@ debugRepl = do
   debugRepl
 
 -- Parsing utils for files
+readFileB :: String -> IO String
+readFileB fileName = do
+  bts <- B.readFile fileName
+  return (T.unpack . T.decodeUtf8 $ bts)
+
 parseFile :: FilePath -> IO ()
 parseFile f = do
-  s <- readFile f
+  s <- readFileB f
   let res = parse s
   case res of
     Left err -> print err

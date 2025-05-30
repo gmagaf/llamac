@@ -7,12 +7,12 @@ import Test.QuickCheck (Gen, generate, vectorOf, elements)
 import Unit.Parser.ExpectedASTs
 import Unit.Semantics.SemanticTestSuites
 import Lexer.Lexer (AlexPosn)
-import Parser.Utils (parse, analyze)
+import Parser.Utils (parse, analyze, readFileB)
 import Common.AST (AST)
 
 testGuidedParser :: (String, AST AlexPosn, FilePath) -> IO ()
 testGuidedParser (descr, p, f) = do
-  s <- readFile f
+  s <- readFileB f
   hspec $ do
     describe "Unit testing suite: (parse program == Expected AST)" $ do
       it descr $ do
@@ -54,7 +54,7 @@ testParserSuite k = do
       parserSpec s where
     fun n = do
       let fileName = "p" ++ show n ++ ".lla"
-      f <- readFile $ "test/resources/1000-llamas/" ++ fileName
+      f <- readFileB $ "test/resources/1000-llamas/" ++ fileName
       return (fileName, f)
 
 semSpec :: String -> Int -> [(String, Bool)] -> Spec

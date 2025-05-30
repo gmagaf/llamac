@@ -48,10 +48,10 @@ semanticASTisOK gen =
 
 checkSemTypesAST :: Int -> IO Result
 checkSemTypesAST n = do
-  putStrLn $ "Testing property (analyzeAST $ (correct, types) AST == True) for size: " ++ show n
+  putStrLn $ "Testing property (analyzeAST typesAST == True) for size: " ++ show n
   checkForSize semanticASTisOK (semanticTypesAST :: Gen (AST ArbPosn)) n
 
 checkSemScopesAST :: Int -> IO Result
 checkSemScopesAST n = do
-  putStrLn $ "Testing property (analyzeAST $ (correct, scopes) AST == True) for size: " ++ show n
+  putStrLn $ "Testing property (analyzeAST scopeAST == True) for size: " ++ show n
   checkForSize semanticASTisOK (semanticScopesAST :: Gen (AST ArbPosn)) n

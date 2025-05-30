@@ -28,7 +28,7 @@ typeInScope :: TypeScope -> Gen Identifier
 typeInScope s = elements (S.toList s)
 
 logSize :: Integral p => p -> Int
-logSize n = 2 * ceiling (log . fromIntegral $ (n + 1) :: Double) :: Int
+logSize n = ceiling (logBase 2 (fromIntegral n + 1) :: Double) :: Int
 
 -- Generator for semantically correct programs
 -- that define types.

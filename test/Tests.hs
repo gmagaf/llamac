@@ -17,4 +17,4 @@ main = do
   checkForSizes checkSemTypesAST sizes
   checkForSizes checkSemScopesAST sizes
   putStrLn "Finished testing!" where
-    sizes = [0, 1, 2, 3, 4, 5, 10, 30, 100]
+    sizes = [0, 2, 4, 8, 16, 32, 64, 128, 256]

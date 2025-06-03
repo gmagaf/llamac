@@ -6,7 +6,7 @@ import Common.SymbolTable (SymbolTable (..), TableEntry (FunEntry), NameSpace,
                            emptySymbolTable, insert,openScope)
 import Lexer.Lexer (AlexState(..), alexStartPos, alexInitUserState)
 import Semantics.SemanticState (SemanticState(..), Unifier, initSemanticState)
-import RunTimeLib.LibHeaders (RunTimeLibSib, libSigs)
+import RunTime.LibHeaders (RunTimeLibSib, libSigs)
 
 
 -- The state of the parser

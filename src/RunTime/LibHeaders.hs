@@ -1,4 +1,4 @@
-module RunTimeLib.LibHeaders (module RunTimeLib.LibHeaders) where
+module RunTime.LibHeaders (module RunTime.LibHeaders) where
 
 import Common.Token (Identifier)
 import Common.AST (TypeF(FunType, RefType))

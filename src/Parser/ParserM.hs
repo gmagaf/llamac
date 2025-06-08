@@ -1,11 +1,12 @@
-module Parser.ParserM (Parser,
+module Parser.ParserM (ExceptState, Parser,
+                       get, put,
                        getAlexPos, getTokenPosn,
                        getSymbols, putSymbols,
                        getSemState, putSemState,
                        Error, throwError, throwAtPosn, stackTrace,
                        throwInternalError,
                        throwParsingError, throwSemanticError,
-                       runParser, parseString, evalParser,
+                       run, parseString, eval,
                        lexerWrap) where
 
 import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, catchE, runExceptT, withExceptT)
@@ -36,10 +37,12 @@ instance Show Error where
   show (SemanticError s)  = "Semantic Error: " ++ s
 
 -- The monad definition
-type Parser a = ExceptT Error (State ParserState) a
+type ExceptState e s a = ExceptT e (State s) a
+
+type Parser a = ExceptState Error ParserState a
 
 -- Monad utils
-get :: Parser ParserState
+get :: ExceptState e s s
 get = ExceptT $ state $ \s -> (Right s, s)
 
 getAlexState :: Parser AlexState
@@ -57,7 +60,7 @@ getSymbols = symbols <$> get
 getSemState :: Parser SemanticState
 getSemState = sem_state <$> get
 
-put :: ParserState -> Parser ()
+put :: s -> ExceptState e s ()
 put s = ExceptT $ state $ const (Right (), s)
 
 putAlexState :: AlexState -> Parser ()
@@ -76,15 +79,15 @@ putSemState s = do
   put ps{sem_state = s}
 
 -- Utils for running a Parser
-evalParser :: ParserState -> Parser a -> Either Error a
-evalParser s p = evalState (runExceptT p) s
+eval :: s -> ExceptState e s a -> Either e a
+eval s p = evalState (runExceptT p) s
 
-runParser :: ParserState -> Parser a -> (Either Error a, ParserState)
-runParser s p = runState (runExceptT p) s
+run :: s -> ExceptState e s a -> (Either e a, s)
+run s p = runState (runExceptT p) s
 
 -- Util that initilizes a parser state and runs a parser monad
 parseString :: Parser a -> String -> (Either Error a, ParserState)
-parseString m s = runParser initState m where
+parseString m s = run initState m where
   initState :: ParserState
   initState = initParserState s
 

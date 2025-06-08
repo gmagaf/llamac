@@ -1,6 +1,6 @@
 module Semantics.TypeAnalysis (analyzeTypeDef, analyzeType) where
 
-import qualified Data.Set as Set
+import qualified Data.Set as S
 import Control.Monad (when)
 
 import Common.Token (Identifier, ConstrIdentifier)
@@ -22,7 +22,7 @@ import Common.PrintAST (Pretty(pretty))
 
 analyzeTypeDef :: TypeDef AlexPosn -> Parser (TypeDef SemanticTag)
 analyzeTypeDef (TypeDef tDefs p) =
-    let typeNames = Set.fromList $ map ide tDefs
+    let typeNames = S.fromList $ map ide tDefs
     in do
         openScopeInTypes
         openScopeInNames
@@ -30,7 +30,7 @@ analyzeTypeDef (TypeDef tDefs p) =
         semTDefs <- mapM analyzeTDef tDefs
         return $ TypeDef semTDefs (cpPosn p)
 
-insertTypeDef :: Set.Set Identifier -> TDef AlexPosn -> Parser ()
+insertTypeDef :: S.Set Identifier -> TDef AlexPosn -> Parser ()
 insertTypeDef typesInDef (TDef tId cs p) =
     let constrNames :: [ConstrIdentifier]
         constrNames = map ide cs
@@ -39,7 +39,7 @@ insertTypeDef typesInDef (TDef tId cs p) =
             throwSem $ "Type " ++ tId ++ " cannot have duplicate constructors"
         checkTypeInCtx :: Type AlexPosn -> Parser ConstType
         checkTypeInCtx t@(Type (UserDefinedType tName) tp) =
-            if Set.member tName typesInDef
+            if S.member tName typesInDef
             then return (typeTo ConstType t)
             else do
                 putSemPosn tp

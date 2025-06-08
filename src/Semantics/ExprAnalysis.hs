@@ -28,16 +28,21 @@ import Semantics.TypeAnalysis (analyzeType)
 -}
 analyzeLet :: LetDef AlexPosn -> Parser (LetDef SemanticTag)
 analyzeLet (Let defs p) = do
-    -- First get all the free variables from the outer scope
-    outerScopeVars <- freeVarsInScope
     -- Analyze the signatures of the definitions
     sigAnalysisResults <- mapM analyzeDefSig defs
     -- Analyze the body of the definitions
     semDefEntries <- mapM analyzeDefBody sigAnalysisResults
-    -- Update the tvars in freeVars
-    freeVars <- resolveFreeVars outerScopeVars
-    -- Generalize the results
-    finalRes <- mapM (genResult freeVars) semDefEntries
+    -- Get all the free variables from the outer scope and update them
+    outerScopeVars <- getFreeTVars >>= resolveFreeVars
+    -- Add free vars of mutables in outerScopeVars
+    let mutVar (UntypedMutSig st _ _) acc   = tvarsInType st ++ acc
+        mutVar (UntypedArrSig st _ _ _) acc = tvarsInType st ++ acc
+        mutVar _ acc                        = acc
+    let thisScopeTVars = foldr mutVar [] sigAnalysisResults
+    let newFreeTVars = foldr S.insert outerScopeVars thisScopeTVars
+    putFreeTVars newFreeTVars
+    -- Generalize the results (using only outer scope tvars)
+    finalRes <- mapM (genResult outerScopeVars) semDefEntries
     -- Open the scope
     openScopeInNames
     -- Insert the definitions in the scope
@@ -46,15 +51,16 @@ analyzeLet (Let defs p) = do
     let finalSemDefs = map fst finalRes
     return $ Let finalSemDefs (cpPosn p)
 analyzeLet (LetRec defs p) = do
-    -- First get all the free variables from the outer scope
-    outerScopeVars <- freeVarsInScope
     -- Analyze the signatures of the definitions
     sigAnalysisResults <- mapM analyzeDefSig defs
+    -- Get all the free variables from the outer scope
+    outerScopeVars <- getFreeTVars
     -- Add free vars of mutables in outerScopeVars
     let mutVar (UntypedMutSig st _ _) acc   = tvarsInType st ++ acc
         mutVar (UntypedArrSig st _ _ _) acc = tvarsInType st ++ acc
         mutVar _ acc                        = acc
-    let scopeVars = foldr mutVar outerScopeVars sigAnalysisResults
+    let thisScopeTVars = foldr mutVar [] sigAnalysisResults
+    let newFreeTVars = foldr S.insert outerScopeVars thisScopeTVars
     -- Open the scope
     openScopeInNames
     -- Insert the definitions in the scope with placeholder type vars
@@ -63,7 +69,8 @@ analyzeLet (LetRec defs p) = do
     semDefEntries <- mapM analyzeDefBody sigAnalysisResults
     -- Update the tvars in symbol table and in freeVars
     updatedEntries <- mapM (findName . ide . fst) semDefEntries
-    freeVars <- resolveFreeVars scopeVars
+    freeVars <- resolveFreeVars newFreeTVars
+    putFreeTVars freeVars
     -- Second analysis of the definitions to get the most general signatures
     let semDefs = map fst semDefEntries
     let genInput = zip3 semDefs defs updatedEntries
@@ -143,17 +150,13 @@ analyzeDefSig (FunDef i ps e p) = do
     let paramNames = map ide ps
     when (hasDuplicates paramNames) $
         throwSemAtPosn ("Fun " ++ i ++ " cannot have duplicate params") p
-    -- Open scope for params names and their types
-    openScopeInNames
     -- Analyze params in the current scope
-    semPs <- mapM (stackTrace ("while analyzing the params of " ++ i) . analyzeParam i) ps
+    semPs <- mapM (stackTrace ("while analyzing the params of " ++ i) . analyzeParam) ps
     putSemPosn p
     paramTypes <- mapM getNodeType semPs
     -- Fresh outV is the output type of the function
     outV <- freshTVar
     let fType = paramsToFun SymType paramTypes outV
-    -- Close scope
-    closeScopeInNames
     -- fScheme <- gen fType
     return $ UnTypedFunSig fType semPs e (i, FunEntry (MonoType fType) paramNames) p
 analyzeDefSig (FunDefTyped i ps t e p) = do
@@ -163,18 +166,14 @@ analyzeDefSig (FunDefTyped i ps t e p) = do
         throwSemAtPosn ("Fun " ++ i ++ " cannot have duplicate params") p
     -- We analyze the overall type of the function
     semT <- stackTrace ("while analyzing fun " ++ i) $ analyzeType t
-    -- Open scope for params names and their types
-    openScopeInNames
     -- Analyze params and body in the current scope
-    semPs <- mapM (stackTrace ("while analyzing the params of " ++ i) . analyzeParam i) ps
+    semPs <- mapM (stackTrace ("while analyzing the params of " ++ i) . analyzeParam) ps
     eT <- freshTVar
     -- Collect the results: the new param types, the expr type and unify tv with the result fun type
     putSemPosn p
     paramTypes <- mapM getNodeType semPs
     let fType = paramsToFun SymType paramTypes eT
     unify (typeToSymbolType semT, fType)
-    -- Close scope
-    closeScopeInNames
     let fScheme = MonoType $ typeToSymbolType semT
     return $ TypedFunSig semT semPs e (i, FunEntry fScheme paramNames) p
 
@@ -183,17 +182,15 @@ analyzeDefSig (FunDefTyped i ps t e p) = do
     the symbol table
     - Checks the explicit types of params
 -}
-analyzeParam :: Identifier -> Param AlexPosn -> Parser (Param SemanticTag)
-analyzeParam fun (TypedParam param t p) = do
+analyzeParam :: Param AlexPosn -> Parser (Param SemanticTag)
+analyzeParam (TypedParam param t p) = do
     semT <- stackTrace ("while analyzing param " ++ param) $ analyzeType t
     putSemPosn p
     let st = typeToSymbolType t
-    insertName param (ParamEntry st fun)
     return $ TypedParam param semT SemTag{posn = p, typeInfo = NodeType st}
-analyzeParam fun (Param param p) = do
+analyzeParam (Param param p) = do
     putSemPosn p
     vt <- freshTVar
-    insertName param (ParamEntry vt fun)
     return $ Param param SemTag{posn = p, typeInfo = NodeType vt}
 
 {-
@@ -223,11 +220,14 @@ analyzeDefBody (TypedArrSig semT es (i, entry) p) = do
     let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}
     return (ArrayDefTyped i rSemEs semT tg, entry)
 analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do
+    -- Hold the free vars outside the body
+    outerScopeVars <- getFreeTVars
     -- Open scope for params names and their types
     openScopeInNames
     -- Insert params in the current scope
     let insertParam param = do
           t <- getNodeType param
+          addFreeTVars t
           insertName (ide param) (ParamEntry t i)
           return t
     paramTypes <- mapM insertParam semPs
@@ -240,21 +240,23 @@ analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do
     rSemPs <- mapM resolveNodeType semPs
     rSemE <- resolveNodeType semE
     reT <- getNodeType rSemE
-    case reT of
-        SymType (FunType _ _) -> throwSem ("Function " ++ i ++ " cannot return function type: " ++ pretty reT)
-        _ -> return ()
+    checkConstraint reT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty reT)
     rst <- resolveType st
     -- Close scope
     closeScopeInNames
+    putFreeTVars outerScopeVars
     let fScheme = MonoType rst
     let tg = SemTag{posn = p, typeInfo = DefType fScheme}
     return (FunDef i rSemPs rSemE tg, FunEntry fScheme (map ide rSemPs))
 analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do
+    -- Hold the free vars outside the body
+    outerScopeVars <- getFreeTVars
     -- Open scope for params names and their types
     openScopeInNames
     -- Insert params in the current scope
     let insertParam param = do
           t <- getNodeType param
+          addFreeTVars t
           insertName (ide param) (ParamEntry t i)
           return t
     paramTypes <- mapM insertParam semPs
@@ -268,11 +270,10 @@ analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do
     rSemPs <- mapM resolveNodeType semPs
     rSemE <- resolveNodeType semE
     reT <- getNodeType rSemE
-    case reT of
-        SymType (FunType _ _) -> throwSem ("Function " ++ i ++ " cannot return function type: " ++ pretty reT)
-        _ -> return ()
+    checkConstraint reT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty reT)
     -- Close scope
     closeScopeInNames
+    putFreeTVars outerScopeVars
     let fScheme = MonoType st
     let tg = SemTag{posn = p, typeInfo = DefType fScheme}
     return (FunDefTyped i rSemPs semT rSemE tg, FunEntry fScheme (map ide rSemPs))
@@ -404,10 +405,7 @@ semFunAppExpr i es = let funTypeToArgTypes = funToArgs stCoAlg in do
                     unify (t, inf)
                     res <- mapM resolveNodeType es
                     rv <- resolveType v
-                    case rv of
-                        SymType (FunType _ _)
-                          -> throwSem ("Function " ++ i ++ " cannot return result of function type: " ++ pretty rv)
-                        _ -> return ()
+                    checkConstraint rv (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty rv)
                     retE (FunAppExpr i res) rv
         ParamEntry t _ -> do
             ts <- mapM getNodeType es
@@ -454,10 +452,7 @@ semConstrAppExpr i es = do
                     unify (constTypeToSymbolType t, inf)
                     res <- mapM resolveNodeType es
                     rv <- resolveType v
-                    case rv of
-                        SymType (FunType _ _)
-                          -> throwSem ("Constructor " ++ i ++ " cannot return result of function type: " ++ pretty rv)
-                        _ -> return ()
+                    checkConstraint rv (NotAllowedFunType $ "Constructor " ++ i ++ " cannot return function type: " ++ pretty rv)
                     retE (ConstrAppExpr i res) rv
         _ -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
@@ -706,10 +701,14 @@ semMatchExpr e cs = do
 
 analyzeClause :: Clause AlexPosn -> Parser (Clause SemanticTag)
 analyzeClause c@(Match pat e p) = do
+    -- Hold the free vars outside the body
+    outerScopeVars <- getFreeTVars
     openScopeInNames
     semP <- stackTrace ("while analyzing clause " ++ pretty c) $ analyzePattern pat
     semE <- stackTrace ("while analyzing clause " ++ pretty c) $ analyzeExpr e
     closeScopeInNames
+    -- Restore the free tVars
+    putFreeTVars outerScopeVars
     return $ Match semP semE (cpPosn p)
 
 -- Semantic analysis of patterns
@@ -739,6 +738,7 @@ indSemPat TruePattern = retP TruePattern (SymType BoolType)
 indSemPat FalsePattern = retP FalsePattern (SymType BoolType)
 indSemPat (IdPattern x) = do
     v <- freshTVar
+    addFreeTVars v
     insertName x (PatternEntry v)
     retP (IdPattern x) v
 indSemPat (ConstrPattern i pats) = do

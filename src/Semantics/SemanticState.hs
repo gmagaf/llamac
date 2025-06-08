@@ -9,6 +9,7 @@ module Semantics.SemanticState (SemanticState(..),
 
 import Data.List (intercalate, delete)
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 import Common.PrintAST (Pretty(pretty))
 import Common.SymbolType (SymbolType (..), ConstType)
@@ -44,6 +45,7 @@ data SemanticState = SemanticState
                                 -- result for each type in scope should be
                                 -- a type in scope.
   , constraints  :: Constraints -- a map to hold all the constraints for each type var
+  , freeTVars :: S.Set Int      -- a set of all free type variables at current scope
   }
 
 instance Show SemanticState where
@@ -52,6 +54,7 @@ instance Show SemanticState where
     ++ ", " ++ "posnOfSem = " ++ show (posnOfSem s)
     ++ ", " ++ "unifier = " ++ showUnifierVals (unifier s) (varTypeC s)
     ++ ", " ++ "constraints = " ++ showConstraints (constraints s)
+    ++ ", " ++ "freeTVarsInScope = " ++ showFreeTVars (freeTVars s)
     ++ "}"
 
 showUnifierVals :: Unifier -> Int -> String
@@ -67,6 +70,9 @@ showConstraints m = "[" ++ intercalate ", " (map showConstraint (M.toList m)) ++
 
 showConstraint :: (Int, TypeConstraints) -> String
 showConstraint (v, c) = pretty (TVar v) ++ ": " ++ show (constraintsToList c)
+
+showFreeTVars :: S.Set Int -> String
+showFreeTVars s = "[" ++ intercalate ", " (map (pretty . TVar) (S.toList s)) ++ "]"
 
 constraintsToList :: TypeConstraints -> [TypeConstraint]
 constraintsToList c =
@@ -121,6 +127,7 @@ initSemanticState = SemanticState
                 , posnOfSem = alexStartPos
                 , unifier = initUnifier
                 , constraints = M.empty
+                , freeTVars = S.empty
                 }
 
 initUnifier :: SymbolType -> Maybe SymbolType

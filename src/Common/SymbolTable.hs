@@ -8,8 +8,7 @@ module Common.SymbolTable (SymbolTable(..),
                            insert,
                            update,
                            openScope,
-                           closeScope,
-                           foldContext) where
+                           closeScope) where
 
 import qualified Data.Map as M
 import Data.List (intercalate)
@@ -55,10 +54,6 @@ openScope (Context scopes) = Context $ M.empty:scopes
 closeScope :: Context k e -> Context k e
 closeScope (Context scopes) = Context s where
     s = if null scopes then [] else tail scopes
-
-foldContext :: (a -> b -> b) -> b -> Context k a -> b
-foldContext f b (Context scopes) = foldr g b scopes where
-    g scope b' = M.foldr f b' scope
 
 -- Definitions for symbol table and table entries
 type NameSpace = Context String TableEntry

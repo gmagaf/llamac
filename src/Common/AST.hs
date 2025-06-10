@@ -9,7 +9,7 @@ import Common.Token (Identifier,
                      StringConstant)
 
 -- Utils for nodes
-class Functor n => Node n where
+class Traversable n => Node n where
   tag :: n b -> b
   mapTag :: (a -> a) -> n a -> n a
 
@@ -23,7 +23,7 @@ type AST t = [Either (LetDef t) (TypeDef t)]
 -- Definitions
 data LetDef b = Let [Def b] b
               | LetRec [Def b] b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data Def b = FunDef Identifier [Param b] (Expr b) b
            | FunDefTyped Identifier [Param b] (Type b) (Expr b) b
@@ -31,24 +31,24 @@ data Def b = FunDef Identifier [Param b] (Expr b) b
            | VarDefTyped Identifier (Type b) b
            | ArrayDef Identifier [Expr b] b
            | ArrayDefTyped Identifier [Expr b] (Type b) b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data Param b = Param Identifier b
              | TypedParam Identifier (Type b) b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 -- Types
 data TypeDef b = TypeDef [TDef b] b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data TDef b = TDef Identifier [Constr b] b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data Constr b = Constr ConstrIdentifier [Type b] b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data Type b = Type (TypeF (Type b)) b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data TypeF t = UnitType | IntType | CharType | BoolType | FloatType
              | FunType t t
@@ -62,7 +62,7 @@ data Expr b = Expr (ExprF (Expr b)) b
             | NewType (Type b) b
             | LetIn (LetDef b) (Expr b) b
             | MatchExpr (Expr b) [Clause b] b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data ExprF e = IntCExpr IntConstant
           | FloatCExpr FloatConstant
@@ -104,13 +104,13 @@ data BinOp = PlusOp | MinusOp | TimesOp | DivOp
   deriving (Eq, Show)
 
 data Clause b = Match (Pattern b) (Expr b) b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data PatternSign = NoSign | Plus | Minus
   deriving (Eq, Show)
 
 data Pattern b = Pattern (PatternF (Pattern b)) b
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data PatternF p = IntConstPattern PatternSign IntConstant
              | FloatConstPattern PatternSign FloatConstant

@@ -53,6 +53,12 @@ analyzeLet (Let defs p) = do
 analyzeLet (LetRec defs p) = do
     -- Analyze the signatures of the definitions
     sigAnalysisResults <- mapM analyzeDefSig defs
+    -- Open the scope
+    openScopeInNames
+    -- Insert the definitions in the scope with placeholder type vars
+    mapM_ (uncurry insertName . entryPair) sigAnalysisResults
+    -- Analyze the body of the definitions
+    semDefEntries <- mapM analyzeDefBody sigAnalysisResults
     -- Get all the free variables from the outer scope
     outerScopeVars <- getFreeTVars
     -- Add free vars of mutables in outerScopeVars
@@ -61,12 +67,6 @@ analyzeLet (LetRec defs p) = do
         mutVar _ acc                        = acc
     let thisScopeTVars = foldr mutVar [] sigAnalysisResults
     let newFreeTVars = foldr S.insert outerScopeVars thisScopeTVars
-    -- Open the scope
-    openScopeInNames
-    -- Insert the definitions in the scope with placeholder type vars
-    mapM_ (uncurry insertName . entryPair) sigAnalysisResults
-    -- Analyze the body of the definitions
-    semDefEntries <- mapM analyzeDefBody sigAnalysisResults
     -- Update the tvars in symbol table and in freeVars
     updatedEntries <- mapM (findName . ide . fst) semDefEntries
     freeVars <- resolveFreeVars newFreeTVars

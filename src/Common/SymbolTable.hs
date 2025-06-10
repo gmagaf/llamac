@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveTraversable #-}
 module Common.SymbolTable (SymbolTable(..),
                            NameSpace,
                            TypeSpace,
@@ -22,7 +23,7 @@ import Common.SymbolType (SymbolType, TypeScheme, ConstType)
 type Scope = M.Map
 
 newtype Context k e = Context [Scope k e]
-    deriving Show
+    deriving (Show, Functor, Foldable, Traversable)
 
 -- Symbol table operations
 emptyContext :: Context k e

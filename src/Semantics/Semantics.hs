@@ -6,7 +6,8 @@ import Common.AST (Expr, Type, TypeDef, LetDef, AST, Node(..))
 import Common.SymbolType (SymbolType)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser)
-import Semantics.Utils (SemanticTag(..), TypeInfo (..), throwSemAtPosn)
+import Semantics.Utils (SemanticTag(..), TypeInfo (..), throwSemAtPosn,
+    getNames, putNames, resolveTableEntry, resolveNodeRec)
 import Semantics.TypeAnalysis (analyzeTypeDef, analyzeType)
 import Semantics.ExprAnalysis (analyzeLet, analyzeExpr)
 
@@ -31,9 +32,16 @@ class Analyzable f => TypeAble f where
 
 -- Functions for analyzing nodes
 analyzeAST :: AST AlexPosn -> Parser (AST SemanticTag)
-analyzeAST []                 = return []
-analyzeAST (Left def : ast)   = (:) . Left <$> sem def <*> analyzeAST ast
-analyzeAST (Right tDef : ast) = (:) . Right <$> sem tDef <*> analyzeAST ast
+analyzeAST ast = do
+    semAst <- mapM auxSem ast
+    n <- getNames
+    rn <- mapM resolveTableEntry n
+    putNames rn
+    mapM auxRes semAst where
+        auxSem (Left def)   = Left <$> sem def
+        auxSem (Right tdef) = Right <$> sem tdef
+        auxRes (Left def)   = Left <$> resolveNodeRec def
+        auxRes (Right tdef) = return (Right tdef)
 
 instance Analyzable TypeDef where
     sem = analyzeTypeDef

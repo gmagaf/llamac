@@ -8,7 +8,7 @@ import Common.AST (mapAST, AST)
 import Common.PrintAST (prettyAST)
 import Parser.Utils (parse)
 import Parser.ParserState (initParserState)
-import Parser.ParserM (eval)
+import Parser.ParserM (evalParser)
 import Semantics.Utils (SemanticTag(..))
 import Semantics.Semantics (analyzeAST)
 import Property.Utils (checkForSize)
@@ -41,7 +41,7 @@ semanticASTisOK gen =
   forAll gen (\p ->
     let p' = mapAST arb_posn p
         parser = analyzeAST p'
-        res = eval (initParserState "") parser
+        res = evalParser (initParserState "") parser
     in case res of
         Right r -> mapAST posn r == p' -- check that semantic analysis only affects tags
         Left _  -> False)

@@ -6,11 +6,13 @@ module Parser.ParserM (ExceptState, Parser,
                        Error, throwError, throwAtPosn, stackTrace,
                        throwInternalError,
                        throwParsingError, throwSemanticError,
-                       run, parseString, eval,
+                       run, runParser, eval, evalParser, parseString,
                        lexerWrap) where
 
-import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE, catchE, runExceptT, withExceptT)
-import Control.Monad.Trans.State (State, evalState, runState, state)
+import Control.Monad.Trans.Class (MonadTrans(lift))
+import Control.Monad.Trans.Except (ExceptT, throwE, catchE, runExceptT, withExceptT)
+import Control.Monad.Trans.State (StateT(runStateT), get, put, evalStateT)
+import Data.Functor.Identity (Identity (..))
 
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
       alexMonadScan, tokenPosnOfAlexState, printPosn)
@@ -36,17 +38,15 @@ instance Show Error where
   show (ParsingError s)   = "Parser Error: " ++ s
   show (SemanticError s)  = "Semantic Error: " ++ s
 
--- The monad definition
-type ExceptState e s a = ExceptT e (State s) a
+-- The monad transformation definition
+type ExceptState e s m a = ExceptT e (StateT s m) a
 
-type Parser a = ExceptState Error ParserState a
+-- The monad definition
+type Parser a = ExceptState Error ParserState Identity a
 
 -- Monad utils
-get :: ExceptState e s s
-get = ExceptT $ state $ \s -> (Right s, s)
-
 getAlexState :: Parser AlexState
-getAlexState = alex_state <$> get
+getAlexState = alex_state <$> lift get
 
 getAlexPos :: Parser AlexPosn
 getAlexPos = alex_pos <$> getAlexState
@@ -55,39 +55,42 @@ getTokenPosn :: Parser AlexPosn
 getTokenPosn = tokenPosnOfAlexState <$> getAlexState
 
 getSymbols :: Parser SymbolTable
-getSymbols = symbols <$> get
+getSymbols = symbols <$> lift get
 
 getSemState :: Parser SemanticState
-getSemState = sem_state <$> get
-
-put :: s -> ExceptState e s ()
-put s = ExceptT $ state $ const (Right (), s)
+getSemState = sem_state <$> lift get
 
 putAlexState :: AlexState -> Parser ()
-putAlexState s = do
+putAlexState s = lift $ do
   ps <- get
   put ps{alex_state = s}
 
 putSymbols :: SymbolTable -> Parser ()
-putSymbols s = do
+putSymbols s = lift $ do
   ps <- get
   put ps{symbols = s}
 
 putSemState :: SemanticState -> Parser ()
-putSemState s = do
+putSemState s = lift $ do
   ps <- get
   put ps{sem_state = s}
 
 -- Utils for running a Parser
-eval :: s -> ExceptState e s a -> Either e a
-eval s p = evalState (runExceptT p) s
+eval :: Monad m => s -> ExceptState e s m a -> m (Either e a)
+eval s p = evalStateT (runExceptT p) s
 
-run :: s -> ExceptState e s a -> (Either e a, s)
-run s p = runState (runExceptT p) s
+run :: s -> ExceptState e s m a -> m (Either e a, s)
+run s p = runStateT (runExceptT p) s
+
+evalParser :: ParserState -> Parser a -> Either Error a
+evalParser s = runIdentity . eval s
+
+runParser :: ParserState -> Parser a -> (Either Error a, ParserState)
+runParser s = runIdentity . run s
 
 -- Util that initilizes a parser state and runs a parser monad
 parseString :: Parser a -> String -> (Either Error a, ParserState)
-parseString m s = run initState m where
+parseString m s = runParser initState m where
   initState :: ParserState
   initState = initParserState s
 

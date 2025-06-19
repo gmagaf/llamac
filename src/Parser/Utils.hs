@@ -1,4 +1,6 @@
-module Parser.Utils (parse, analyze, parseAndAnalyze, readFileB, parseFile, debug, debugRepl) where
+module Parser.Utils (parse, analyze, parseAndAnalyze,
+                     readFileB, safeReadFile, parseFile,
+                     debug, debugRepl) where
 
 import qualified Data.ByteString    as B
 import qualified Data.Text          as T
@@ -12,6 +14,7 @@ import Parser.ParserM (Error, parseString)
 import Parser.ParserState (ParserState(..))
 import Semantics.Utils (SemanticTag)
 import Semantics.Semantics (analyzeAST)
+import Control.Exception (IOException, handle)
 
 -- The parsing function
 parse :: String -> Either Error (AST AlexPosn)
@@ -47,6 +50,11 @@ readFileB :: String -> IO String
 readFileB fileName = do
   bts <- B.readFile fileName
   return (T.unpack . T.decodeUtf8 $ bts)
+
+safeReadFile :: String -> IO (Either String String)
+safeReadFile fileName = handle handleEx (Right <$> readFileB fileName)
+  where handleEx :: IOException -> IO (Either String String)
+        handleEx e = return (Left (show e))
 
 parseFile :: FilePath -> IO ()
 parseFile f = do

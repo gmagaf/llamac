@@ -1,6 +1,6 @@
 module Parser.ParserM (ExceptState, Parser,
                        get, put,
-                       getAlexPos, getTokenPosn,
+                       getAlexPos, getTokenPosn, putAlexState,
                        getSymbols, putSymbols,
                        getSemState, putSemState,
                        Error, throwError, throwAtPosn, stackTrace,

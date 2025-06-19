@@ -45,7 +45,7 @@ data SemanticState = SemanticState
                                 -- result for each type in scope should be
                                 -- a type in scope.
   , constraints  :: Constraints -- a map to hold all the constraints for each type var
-  , freeTVars :: S.Set Int      -- a set of all free type variables at current scope
+  , freeTVars    :: S.Set Int   -- a set of all free type variables at current scope
   }
 
 instance Show SemanticState where

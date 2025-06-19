@@ -1,5 +1,5 @@
 {
-module Parser.Parser (calc) where
+module Parser.Parser (calc, calcRepl) where
 
 import Lexer.Lexer (AlexPosn)
 import Common.Token (Token(..))
@@ -7,7 +7,8 @@ import Common.AST
 import Parser.ParserM (Parser, lexerWrap, getAlexPos, getTokenPosn, throwAtPosn, throwParsingError)
 }
 
-%name calc
+%name calc AST
+%name calcRepl REPL
 %tokentype { Token }
 %monad { Parser }
 %lexer { lexerWrap } { T_eof }
@@ -113,6 +114,12 @@ AST_ :: { [Either (LetDef AlexPosn) (TypeDef AlexPosn)] }
 
 P :: { AlexPosn }
   : {- empty -}                     {% getTokenPosn }
+
+REPL :: { ProgramOrExpr AlexPosn }
+  :  {- empty -}                    { Program [] }
+  | LetDef AST                      { Program (Left $1 : $2) }
+  | TypeDef AST                     { Program (Right $1 : $2) }
+  | Expr                            { Expression $1 }
 
 LetDef :: { LetDef AlexPosn }
   : P LetDef_                       { $2 $1 }

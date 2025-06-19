@@ -1,5 +1,5 @@
 module Parser.ParserState (ParserState(..), SemanticState(..), Unifier,
-                          initParserState) where
+                          initAlexState, initParserState) where
 
 import Common.SymbolType (TypeScheme(MonoType), constTypeToSymbolType)
 import Common.SymbolTable (SymbolTable (..), TableEntry (FunEntry), NameSpace,
@@ -23,16 +23,18 @@ instance Show ParserState where
     ++ ", " ++ "symbols = " ++ show (symbols s)
     ++ "}"
 
-initParserState :: String -> ParserState
-initParserState input =
-    let initAlexState = AlexState {alex_pos = alexStartPos,
+initAlexState :: String -> AlexState
+initAlexState input = AlexState {alex_pos = alexStartPos,
                         alex_inp = input,
                         alex_chr = '\n',
                         alex_bytes = [],
                         alex_ust = alexInitUserState,
                         alex_scd = 0}
-    in ParserState
-       { alex_state = initAlexState
+
+initParserState :: String -> ParserState
+initParserState input =
+    ParserState
+       { alex_state = initAlexState input
        , sem_state  = initSemanticState
        , symbols    = initSymbolTable
        }

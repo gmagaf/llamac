@@ -20,6 +20,11 @@ class Node n => NameDef n where
 
 type AST t = [Either (LetDef t) (TypeDef t)]
 
+-- This is useful for repl
+data ProgramOrExpr t = Program (AST t)
+                     | Expression (Expr t)
+  deriving (Eq, Show)
+
 -- Definitions
 data LetDef b = Let [Def b] b
               | LetRec [Def b] b

@@ -3,7 +3,8 @@ module Common.PrintAST (Pretty,
                         prettyPrec,
                         showPretty,
                         prettyAST,
-                        debugPrint) where
+                        debugPrint,
+                        prettyPrecSepList) where
 
 import Text.Pretty.Simple (CheckColorTty(CheckColorTty),
                           OutputOptions(outputOptionsIndentAmount),

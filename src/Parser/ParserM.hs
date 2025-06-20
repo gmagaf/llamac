@@ -1,4 +1,4 @@
-module Parser.ParserM (ExceptState, Parser,
+module Parser.ParserM (ParserT, Parser,
                        get, put,
                        getAlexPos, getTokenPosn, putAlexState,
                        getSymbols, putSymbols,
@@ -32,17 +32,17 @@ data Error = Error {msg :: String}
 
 instance Show Error where
   show (Error s)          = s
-  show (InternalError s)  = "Internal Compiler Error" ++ s ++
+  show (InternalError s)  = "Internal Compiler Error: " ++ s ++
     ". If you see this error please contact the maintainers"
   show (LexicalError s)   = "Lexical Error: " ++ s
   show (ParsingError s)   = "Parser Error: " ++ s
   show (SemanticError s)  = "Semantic Error: " ++ s
 
 -- The monad transformation definition
-type ExceptState e s m a = ExceptT e (StateT s m) a
+type ParserT e s m a = ExceptT e (StateT s m) a
 
 -- The monad definition
-type Parser a = ExceptState Error ParserState Identity a
+type Parser a = ParserT Error ParserState Identity a
 
 -- Monad utils
 getAlexState :: Parser AlexState
@@ -76,10 +76,10 @@ putSemState s = lift $ do
   put ps{sem_state = s}
 
 -- Utils for running a Parser
-eval :: Monad m => s -> ExceptState e s m a -> m (Either e a)
+eval :: Monad m => s -> ParserT e s m a -> m (Either e a)
 eval s p = evalStateT (runExceptT p) s
 
-run :: s -> ExceptState e s m a -> m (Either e a, s)
+run :: s -> ParserT e s m a -> m (Either e a, s)
 run s p = runStateT (runExceptT p) s
 
 evalParser :: ParserState -> Parser a -> Either Error a

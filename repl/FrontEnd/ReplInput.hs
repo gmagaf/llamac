@@ -1,4 +1,4 @@
-module FrontEnd.ReplInput (ReplInput(..), ReplPreInput(..), DebugCmdOptions(..)) where
+module FrontEnd.ReplInput (ReplInput(..), ReplPreInput(..), DebugCmdOptions(..), helpMsg) where
 
 import Control.Monad (unless)
 import Prelude hiding (all)
@@ -12,6 +12,31 @@ import Lexer.Lexer (AlexPosn)
 -- This module defines the command line
 -- input data types. Also, it implements
 -- the read function for ReplPreInput
+
+helpMsg :: String
+helpMsg = " Commands available from the prompt:\n\
+\\n\
+\   <statement>                 evaluate/run <statement>\n\
+\   :help, :?                   display this list of commands\n\
+\   :quit                       exit interpreter\n\
+\\n\
+\ -- Commands for inspecting names and epxressions:\n\
+\\n\
+\   :info <name>                display information about the given name\n\
+\   :type <expr>                show the type of <expr>\n\
+\\n\
+\ -- Commands for loading files:\n\
+\\n\
+\   :load <module>              load module\n\
+\   :reload                     reload the current module set\n\
+\   :script <file>              run the script <file>\n\
+\\n\
+\ -- Commands for debugging:\n\
+\\n\
+\   :debug symbols              show the symbol table\n\
+\          semState             show the semantic state\n\
+\          file, code           show the current loaded file\n\
+\          runtime, stack       show the current runtime stack\n"
 
 data ReplInput = Program (AST AlexPosn)
                | Expression (Expr AlexPosn)
@@ -27,12 +52,17 @@ data ReplInput = Program (AST AlexPosn)
     deriving Show
 
 -- TODO: add more debug choices
-data DebugCmdOptions = Symbols
+data DebugCmdOptions = Symbols | SemState | FileInput | RunTime
     deriving Show
 
 instance Read DebugCmdOptions where
-    readPrec = lift
-                (string "symbols" >> return Symbols)
+    readPrec = lift $
+                (string "symbols" >> return Symbols) <++
+                (string "semState" >> return SemState) <++
+                (string "file" >> return FileInput) <++
+                (string "code" >> return FileInput) <++
+                (string "runtime" >> return RunTime) <++
+                (string "stack" >> return RunTime)
 
 data ReplPreInput = LlamaPreInput String
                   | HelpCmd

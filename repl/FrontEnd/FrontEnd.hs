@@ -10,7 +10,7 @@ import qualified Common.AST as AST
 import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calcRepl, calc)
 import Parser.ParserState (initAlexState, initParserState)
-import Parser.ParserM (putAlexState, getSymbols, throwInternalError)
+import Parser.ParserM (putAlexState, getSymbols, throwInternalError, getSemState)
 import Parser.Utils (safeReadFile)
 import Semantics.Utils (findName, getNodeType)
 import Semantics.Semantics (analyzeAST, Analyzable (sem), TypeAble (infer))
@@ -18,7 +18,7 @@ import Semantics.Semantics (analyzeAST, Analyzable (sem), TypeAble (infer))
 import Common.Utils (initInterpreterState)
 import Common.Interpreter
 import BackEnd.Evaluation (runAST, evalExpr)
-import FrontEnd.ReplInput (ReplPreInput (..), ReplInput (..), DebugCmdOptions (..))
+import FrontEnd.ReplInput (ReplPreInput (..), ReplInput (..), DebugCmdOptions (..), helpMsg)
 
 -- This module contains the frontEnd of the repl
 
@@ -113,10 +113,20 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
             _    -> loop
     evaluate input = case input of
         Help -> do
-            print' "HELP" -- TODO: write help message
+            print' helpMsg
         Debug Symbols -> do
             s <- liftParser getSymbols
             print' (pretty s)
+        Debug SemState -> do
+            s <- liftParser getSemState
+            print' (show s)
+        Debug FileInput -> do
+            fopt <- getCodeFile
+            let msg = maybe "No file loaded" ("Loaded file: " ++) fopt
+            print' msg
+        Debug RunTime -> do
+            run <- getRunTime
+            print' (show run)
         Failed err -> do
             print' (show err)
         Program p -> do
@@ -165,5 +175,4 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
                     case m of
                         AST.Expression e -> evaluate (Expression e)
                         _ -> liftParser (throwInternalError "Unexpected behaviour while running main")
-        Quit -> return ()      
-        
+        Quit -> return ()

@@ -35,7 +35,7 @@ data Value = UnitVal
            | FloatVal FloatConstant
            | CharVal CharConstant
            | BoolVal Bool
-           | FunVal Identifier FunBody
+           | FunVal Identifier [Identifier] FunBody
            | ConstrVal ConstrIdentifier [Value]
            -- TODO: Add values for arrays and refs
     deriving Show
@@ -45,9 +45,9 @@ instance Pretty Value where
     prettyPrec d (IntVal n)       = prettyPrec d (T_const_int n)
     prettyPrec d (FloatVal f)     = prettyPrec d (T_const_float f)
     prettyPrec d (CharVal c)      = prettyPrec d (T_const_char c)
-    prettyPrec _ (BoolVal True)   = shows "true"
-    prettyPrec _ (BoolVal False)  = shows "false"
-    prettyPrec d (FunVal f _)     = prettyPrec d (T_id f)
+    prettyPrec d (BoolVal True)   = prettyPrec d T_true
+    prettyPrec d (BoolVal False)  = prettyPrec d T_false
+    prettyPrec d (FunVal f _ _)   = prettyPrec d (T_id f)
     prettyPrec d (ConstrVal i as) = showParen (d > app_prec && not (null as)) $
         prettyPrec d (T_id_constr i) .
         showString sep . prettyPrecSepList (app_prec + 1) " " as

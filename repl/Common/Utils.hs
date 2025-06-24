@@ -5,7 +5,6 @@ import qualified Data.Map as M
 import Parser.ParserState (ParserState)
 
 import Common.Interpreter
-import Common.Value
 import BackEnd.RunTimeLib
 
 -- Interpeter Utils module
@@ -14,9 +13,10 @@ import BackEnd.RunTimeLib
 initInterpreterState :: ParserState -> Maybe String -> InterpreterState
 initInterpreterState p f =
     let global_frame = Activation
-                    { return_val = Nothing
+                    { offset = 0
+                    , return_val = Nothing
                     , params = M.empty
-                    , locals = M.fromList [("print_int", FunVal "print_int" (RunTimeFun printInt))]
+                    , locals = M.fromList runTimeLib
                     , control_link = Nothing
                     , access_link = Nothing }
     in InterpreterState

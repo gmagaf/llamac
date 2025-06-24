@@ -12,7 +12,7 @@ import Parser.Parser (calcRepl, calc)
 import Parser.ParserState (initAlexState, initParserState)
 import Parser.ParserM (putAlexState, getSymbols, throwInternalError, getSemState)
 import Parser.Utils (safeReadFile)
-import Semantics.Utils (findName, getNodeType)
+import Semantics.Utils (findName, getNodeType, resolveType)
 import Semantics.Semantics (analyzeAST, Analyzable (sem), TypeAble (infer))
 
 import Common.Utils (initInterpreterState)
@@ -126,7 +126,7 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
             print' msg
         Debug RunTime -> do
             run <- getRunTime
-            print' (show run)
+            print' (pretty run)
         Failed err -> do
             print' (show err)
         Program p -> do
@@ -135,10 +135,10 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
         Expression e -> do
             semE <- liftParser (sem e)
             v <- evalExpr semE
-            t <- liftParser (getNodeType semE)
+            t <- liftParser (getNodeType semE >>= resolveType)
             print' (pretty v ++ " : " ++ pretty t)
         InferType e -> do
-            semT <- liftParser (infer e)
+            semT <- liftParser (infer e >>= resolveType)
             print' (pretty semT)
         Info n -> do
             entry <- liftParser (findName n)

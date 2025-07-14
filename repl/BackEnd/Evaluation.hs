@@ -9,6 +9,7 @@ import Semantics.Utils (SemanticTag (..))
 
 import Common.Value
 import Common.Interpreter
+import Control.Monad
 
 -- This module contains all the logic
 -- for the interpretation of Llama into Haskell
@@ -21,6 +22,7 @@ import Common.Interpreter
     3. access_link contains the frame of the static scope containing current scope
     4. runLet pushes one frame
     5. evalExpr leaves the stack untouched
+    6. consts are only computed during a let (rec), in other cases it is just retrieved from the stack
 -}
 
 runAST :: AST SemanticTag -> Interpreter ()
@@ -30,9 +32,9 @@ runAST (Right _:ast)   = runAST ast
 
 runLet :: LetDef SemanticTag -> Interpreter ()
 runLet (Let defs _) = do
-    r <- getFramePointer
-    local_vals <- mapM runDef defs
+    local_vals <- mapM (runDef >=> computeConst) defs
     let localDefs = M.fromList $ zipWith (\d v -> (ide d, v)) defs local_vals
+    r <- getFramePointer
     let record = Activation { offset = 1 + offset r
                             , return_val = Nothing
                             , params = M.empty
@@ -41,9 +43,9 @@ runLet (Let defs _) = do
                             , access_link = Just r }
     putFramePointer record
 runLet (LetRec defs _) = do
-    r <- getFramePointer
     local_vals <- mapM runDef defs
     let local_defs = M.fromList $ zipWith (\d v -> (ide d, v)) defs local_vals
+    r <- getFramePointer
     let record = RecActivation { offset = 1 + offset r
                             , return_val = Nothing
                             , params = M.empty
@@ -51,6 +53,15 @@ runLet (LetRec defs _) = do
                             , control_link = Just r
                             , access_link = Just r }
     putFramePointer record
+    vals <- mapM computeConst local_vals
+    let local_defs' = M.fromList $ zipWith (\d v -> (ide d, v)) defs vals
+    putFramePointer record{ locals = local_defs' }
+
+computeConst :: Value -> Interpreter Value
+computeConst c = case c of
+    FunVal _ [] (LlamaFun body)  -> evalExpr body >>= computeConst
+    FunVal _ [] (RunTimeFun run) -> evalRunTimeLib run []
+    v -> return v
 
 -- TODO: define all cases
 runDef :: Def SemanticTag -> Interpreter Value
@@ -76,10 +87,13 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
     FunAppExpr i es      -> do
         vals <- mapM evalExpr es
         evalFunCall i vals
-    ConstConstrExpr i    -> return (ConstrVal i [])
+    ConstConstrExpr i    -> do
+        ha <- getAndIncrHeapAddress
+        return (ConstrVal i ha [])
     ConstrAppExpr i args -> do
         vals <- mapM evalExpr args
-        return (ConstrVal i vals)
+        ha <- getAndIncrHeapAddress
+        return (ConstrVal i ha vals)
     UnOpExpr op e1       -> evalUnOpExpr op e1
     BinOpExpr op e1 e2   -> evalBinOpExpr op e1 e2
     IfThenElseExpr cond e1 e2 -> do
@@ -177,7 +191,7 @@ matchPattern = auxMatch [] where
         (BoolVal True, TruePattern) -> return (True, acc)
         (BoolVal False, FalsePattern) -> return (True, acc)
         (_, IdPattern x) -> return (True, (x, v) : acc)
-        (ConstrVal i1 vs, ConstrPattern i2 ps) | i1 == i2 -> aux acc vs ps where
+        (ConstrVal i1 _ vs, ConstrPattern i2 ps) | i1 == i2 -> aux acc vs ps where
             aux acc' [] []         = return (True, acc')
             aux acc' (_:_) []      = return (False, acc')
             aux acc' [] (_:_)      = return (False, acc')
@@ -216,22 +230,7 @@ getFunStaticContext ar@(RecActivation {}) = Just ar
 evalConst :: Identifier -> Interpreter Value
 evalConst i = do
     fp <- getFramePointer
-    let cont c access_record = case c of
-            FunVal _ [] (LlamaFun body) -> do
-                let record = Activation
-                            { offset = 1 + offset fp
-                            , return_val = Nothing
-                            , params = M.empty
-                            , locals = M.empty
-                            , control_link = Just fp
-                            , access_link = getFunStaticContext access_record
-                            }
-                putFramePointer record
-                res <- evalExpr body
-                putFramePointer fp
-                return res
-            FunVal _ [] (RunTimeFun run) -> evalRunTimeLib run []
-            v -> return v
+    let cont c = return . const c
     findNameCont i fp cont
 
 evalFunCall :: Identifier -> [Value] -> Interpreter Value
@@ -331,7 +330,7 @@ structEq (FloatVal v1) (FloatVal v2) = return (v1 == v2)
 structEq (CharVal v1) (CharVal v2) = return (v1 == v2)
 structEq (BoolVal v1) (BoolVal v2) = return (v1 == v2)
 structEq UnitVal UnitVal = return True
-structEq (ConstrVal i1 args1) (ConstrVal i2 args2) = do
+structEq (ConstrVal i1 _ args1) (ConstrVal i2 _ args2) = do
     (&& (i1 == i2)) <$> eqArgs args1 args2 where
         eqArgs [] [] = return True
         eqArgs (_:_) [] = return False
@@ -341,7 +340,12 @@ structEq (FunVal i _ _) _ = throwRunTime ("Cannot perform structural equality on
 structEq _ (FunVal i _ _) = throwRunTime ("Cannot perform structural equality on function: " ++ i)
 
 natEq :: Expr SemanticTag -> Expr SemanticTag -> Interpreter Bool
-natEq = undefined -- TODO: Define this
+natEq e1 e2 = do
+    v1 <- evalExpr e1
+    v2 <- evalExpr e2
+    case (v1, v2) of
+        (ConstrVal _ ha1 _, ConstrVal _ ha2 _) -> return (ha1 == ha2)
+        _ -> structEq v1 v2
 
 ordVal :: Value -> Value -> Interpreter Ordering
 ordVal (IntVal v1) (IntVal v2) = return (compare v1 v2)

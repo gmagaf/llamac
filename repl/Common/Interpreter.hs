@@ -34,7 +34,8 @@ data ActivationRecord =
     , access_link :: Maybe ActivationRecord
     } deriving Show
 
-newtype RunTimeEnv = RunTimeEnv { frame_pointer :: ActivationRecord }
+data RunTimeEnv = RunTimeEnv { frame_pointer :: ActivationRecord
+                             , heap_address :: Int }
     deriving Show
 
 type Interpreter a = ParserT RunTimeError InterpreterState IO a
@@ -50,6 +51,13 @@ getRunTime = run_time_env <$> lift get
 
 getFramePointer :: Interpreter ActivationRecord
 getFramePointer = frame_pointer <$> getRunTime
+
+getAndIncrHeapAddress :: Interpreter Int
+getAndIncrHeapAddress = do
+    rt <- getRunTime
+    let ha = heap_address rt
+    putRunTime rt{ heap_address = ha + 1}
+    return ha
 
 getCodeFile :: Interpreter (Maybe String)
 getCodeFile = code_file <$> lift get
@@ -95,7 +103,7 @@ instance Pretty ActivationRecord where
             prettyNestedAr nar = show (offset nar)
         in "|return_val: " ++ prettyMaybe pretty (return_val ar)
            ++ " | params: " ++ show (map (Data.Bifunctor.second pretty) $ M.toList (params ar))
-           ++ " | locals: " ++ show (map (Data.Bifunctor.second pretty) $ M.toList (locals ar))
+           ++ " | locals: " ++ show (map (Data.Bifunctor.second show) $ M.toList (locals ar))
            ++ " | control_link: " ++ prettyMaybe prettyNestedAr (control_link ar)
            ++ " | access_link: " ++ prettyMaybe prettyNestedAr (access_link ar)
            ++ "|"

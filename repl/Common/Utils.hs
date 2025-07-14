@@ -21,6 +21,6 @@ initInterpreterState p f =
                     , access_link = Nothing }
     in InterpreterState
     { parser_state = p
-    , run_time_env = RunTimeEnv { frame_pointer = global_frame }
+    , run_time_env = RunTimeEnv { frame_pointer = global_frame, heap_address = 0 }
     , code_file = f
     }

@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Common.Value (module Common.Value) where
 
 import Common.Token (ConstrIdentifier,
@@ -9,6 +10,8 @@ import Common.Token (ConstrIdentifier,
 import Common.AST (Expr)
 import Common.PrintAST (prettyPrecSepList, Pretty(prettyPrec))
 import Semantics.Utils (SemanticTag)
+import GHC.IORef
+import GHC.Arr
 
 -- This module contains the definitions
 -- for the values of all data types
@@ -37,8 +40,13 @@ data Value = UnitVal
            | BoolVal Bool
            | FunVal Identifier [Identifier] FunBody
            | ConstrVal ConstrIdentifier Int [Value]
-           -- TODO: Add values for arrays and refs
+           -- TODO: Add values for arrays
+           | RefVal Int (IORef Value)
+           | Undefined
     deriving Show
+
+instance Show a => Show (IORef a) where
+    show _ = "IORef"
 
 instance Pretty Value where
     prettyPrec d UnitVal             = prettyPrec d T_lparen . prettyPrec d T_rparen
@@ -53,3 +61,5 @@ instance Pretty Value where
         showString sep . prettyPrecSepList (app_prec + 1) " " as
         where app_prec = 5
               sep = if null as then "" else " "
+    prettyPrec d (RefVal ha r)       = prettyPrec d (T_const_int ha) . prettyPrec d (T_id "@") . showsPrec d r
+    prettyPrec _ Undefined           = shows "Undefined"

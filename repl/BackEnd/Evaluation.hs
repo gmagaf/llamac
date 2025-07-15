@@ -10,6 +10,7 @@ import Semantics.Utils (SemanticTag (..))
 import Common.Value
 import Common.Interpreter
 import Control.Monad
+import GHC.IORef
 
 -- This module contains all the logic
 -- for the interpretation of Llama into Haskell
@@ -65,6 +66,14 @@ computeConst c = case c of
 
 -- TODO: define all cases
 runDef :: Def SemanticTag -> Interpreter Value
+runDef (VarDef _ _)             = do
+        x <- liftIO (newIORef Undefined)
+        ha <- getAndIncrHeapAddress
+        return (RefVal ha x)
+runDef (VarDefTyped {})         = do
+        x <- liftIO (newIORef Undefined)
+        ha <- getAndIncrHeapAddress
+        return (RefVal ha x)
 runDef (FunDef i ps e _)        = return (FunVal i (map ide ps) (LlamaFun e))
 runDef (FunDefTyped i ps _ e _) = return (FunVal i (map ide ps) (LlamaFun e))
 
@@ -152,6 +161,7 @@ evalExpr (LetIn l e _) = finallyStack $ do
 evalExpr (MatchExpr e cs _) = finallyStack $ do
         v <- evalExpr e
         matchPatterns v cs
+evalExpr e@(NewType {}) = uncurry RefVal <$> evalRefExpr e
 
 matchPatterns :: Value -> [Clause SemanticTag] -> Interpreter Value
 matchPatterns _ [] = throwRunTime "Exhausted all patterns and found none to match"
@@ -261,7 +271,9 @@ evalUnOpExpr op e = case op of
     PlusFloatUnOp -> FloatVal <$> evalFloatExpr e
     MinusFloatUnOp -> FloatVal . (0-) <$> evalFloatExpr e
     NotOp -> BoolVal . not <$> evalBoolExpr e
-    -- TODO: Add BangOp
+    BangOp -> do
+        (_, r) <- evalRefExpr e
+        liftIO (readIORef r)
 
 evalBinOpExpr :: BinOp -> Expr SemanticTag -> Expr SemanticTag -> Interpreter Value
 evalBinOpExpr op e1 e2 = case op of
@@ -322,7 +334,11 @@ evalBinOpExpr op e1 e2 = case op of
     SemicolonOp -> do
         evalUnitExpr e1
         evalExpr e2
-    -- TODO: Add :=
+    AssignMutableOp -> do
+        (_, r) <- evalRefExpr e1
+        v <- evalExpr e2
+        liftIO (writeIORef r v)
+        return UnitVal
 
 structEq :: Value -> Value -> Interpreter Bool
 structEq (IntVal v1) (IntVal v2) = return (v1 == v2)
@@ -336,6 +352,7 @@ structEq (ConstrVal i1 _ args1) (ConstrVal i2 _ args2) = do
         eqArgs (_:_) [] = return False
         eqArgs [] (_:_) = return False
         eqArgs (x:xs) (y:ys) = (&&) <$> structEq x y <*> eqArgs xs ys
+structEq (RefVal ha1 _) (RefVal ha2 _) = return (ha1 == ha2)
 structEq (FunVal i _ _) _ = throwRunTime ("Cannot perform structural equality on function: " ++ i)
 structEq _ (FunVal i _ _) = throwRunTime ("Cannot perform structural equality on function: " ++ i)
 
@@ -393,3 +410,14 @@ evalCharExpr e = do
     case v of
         CharVal c -> return c
         _ -> throwRunTime ("Expected char value while evaluating expr: " ++ show e)
+
+evalRefExpr :: Expr SemanticTag -> Interpreter (Int, IORef Value)
+evalRefExpr (NewType _ _) = do
+    ha <- getAndIncrHeapAddress
+    r <- liftIO (newIORef Undefined)
+    return (ha, r)
+evalRefExpr e = do
+    v <- evalExpr e
+    case v of
+        RefVal ha r -> return (ha, r)
+        _ -> throwRunTime ("Expected ref value while evaluating expr: " ++ show e)

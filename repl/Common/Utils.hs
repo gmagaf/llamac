@@ -1,6 +1,7 @@
 module Common.Utils (module Common.Utils) where
 
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 import Parser.ParserState (ParserState)
 
@@ -21,6 +22,6 @@ initInterpreterState p f =
                     , access_link = Nothing }
     in InterpreterState
     { parser_state = p
-    , run_time_env = RunTimeEnv { frame_pointer = global_frame, heap_address = 0 }
+    , run_time_env = RunTimeEnv { frame_pointer = global_frame, heap_address = 0, alloc_addresses = S.empty }
     , code_file = f
     }

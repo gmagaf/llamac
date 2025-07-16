@@ -1,6 +1,7 @@
 module Common.Interpreter (module Common.Interpreter) where
 
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.Bifunctor
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Control.Monad.Trans.Except (ExceptT(ExceptT), runExceptT, throwE, catchE)
@@ -35,7 +36,9 @@ data ActivationRecord =
     } deriving Show
 
 data RunTimeEnv = RunTimeEnv { frame_pointer :: ActivationRecord
-                             , heap_address :: Int }
+                             , heap_address :: Int
+                             , alloc_addresses :: S.Set Int
+                             }
     deriving Show
 
 type Interpreter a = ParserT RunTimeError InterpreterState IO a
@@ -59,6 +62,11 @@ getAndIncrHeapAddress = do
     putRunTime rt{ heap_address = ha + 1}
     return ha
 
+isAllocated :: Int -> Interpreter Bool
+isAllocated ha = do
+    allocated <- alloc_addresses <$> getRunTime
+    return (S.member ha allocated)
+
 getCodeFile :: Interpreter (Maybe String)
 getCodeFile = code_file <$> lift get
 
@@ -76,6 +84,16 @@ putCodeFile :: Maybe String -> Interpreter ()
 putCodeFile f = lift $ do
     s <- get
     put s{code_file = f}
+
+allocate :: Int -> Interpreter ()
+allocate ha = do
+    rt <- getRunTime
+    putRunTime rt{ alloc_addresses = S.insert ha (alloc_addresses rt) }
+
+deallocate :: Int -> Interpreter ()
+deallocate ha = do
+    rt <- getRunTime
+    putRunTime rt{ alloc_addresses = S.delete ha (alloc_addresses rt) }
 
 liftParser :: Parser a -> Interpreter a
 liftParser p = ExceptT (state f) where

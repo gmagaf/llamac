@@ -103,7 +103,7 @@ initRepl f = do
 
 -- The actual repl implementation
 repl :: Interpreter ()
-repl = catchRunTimeError loop (\e -> print' (show e) >> loop) where
+repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
     print' s = liftIO (putStrLn s)
     loop = do
         input <- getReplInput

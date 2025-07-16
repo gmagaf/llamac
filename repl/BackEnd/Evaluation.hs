@@ -67,13 +67,13 @@ computeConst c = case c of
 -- TODO: define all cases
 runDef :: Def SemanticTag -> Interpreter Value
 runDef (VarDef _ _)             = do
-        x <- liftIO (newIORef Undefined)
-        ha <- getAndIncrHeapAddress
-        return (RefVal ha x)
+    x <- liftIO (newIORef Undefined)
+    ha <- getAndIncrHeapAddress
+    return (RefVal ha x)
 runDef (VarDefTyped {})         = do
-        x <- liftIO (newIORef Undefined)
-        ha <- getAndIncrHeapAddress
-        return (RefVal ha x)
+    x <- liftIO (newIORef Undefined)
+    ha <- getAndIncrHeapAddress
+    return (RefVal ha x)
 runDef (FunDef i ps e _)        = return (FunVal i (map ide ps) (LlamaFun e))
 runDef (FunDefTyped i ps _ e _) = return (FunVal i (map ide ps) (LlamaFun e))
 
@@ -152,6 +152,10 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
             forLoop index l body =
                 if index >= l then body index >> forLoop (index - 1) l body
                 else return UnitVal
+    DeleteExpr u         -> do
+        (ha, _) <- evalRefExpr u
+        deallocate ha
+        return UnitVal
 evalExpr (LetIn l e _) = finallyStack $ do
     fp <- getFramePointer
     runLet l
@@ -272,8 +276,10 @@ evalUnOpExpr op e = case op of
     MinusFloatUnOp -> FloatVal . (0-) <$> evalFloatExpr e
     NotOp -> BoolVal . not <$> evalBoolExpr e
     BangOp -> do
-        (_, r) <- evalRefExpr e
-        liftIO (readIORef r)
+        (ha, r) <- evalRefExpr e
+        al <- isAllocated ha
+        if al then liftIO (readIORef r)
+        else throwRunTime "Unallocated memory access (read) attempt"
 
 evalBinOpExpr :: BinOp -> Expr SemanticTag -> Expr SemanticTag -> Interpreter Value
 evalBinOpExpr op e1 e2 = case op of
@@ -335,10 +341,13 @@ evalBinOpExpr op e1 e2 = case op of
         evalUnitExpr e1
         evalExpr e2
     AssignMutableOp -> do
-        (_, r) <- evalRefExpr e1
-        v <- evalExpr e2
-        liftIO (writeIORef r v)
-        return UnitVal
+        (ha, r) <- evalRefExpr e1
+        al <- isAllocated ha
+        if al then do
+            v <- evalExpr e2
+            liftIO (writeIORef r v)
+            return UnitVal
+        else throwRunTime "Unallocated memory access (write) attempt"
 
 structEq :: Value -> Value -> Interpreter Bool
 structEq (IntVal v1) (IntVal v2) = return (v1 == v2)
@@ -414,6 +423,7 @@ evalCharExpr e = do
 evalRefExpr :: Expr SemanticTag -> Interpreter (Int, IORef Value)
 evalRefExpr (NewType _ _) = do
     ha <- getAndIncrHeapAddress
+    allocate ha
     r <- liftIO (newIORef Undefined)
     return (ha, r)
 evalRefExpr e = do

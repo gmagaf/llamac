@@ -119,39 +119,41 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
     ForExpr i l u e1     -> do
         lv <- evalIntExpr l
         uv <- evalIntExpr u
-        let body index = do
-                fp <- getFramePointer
-                let record = Activation { offset = 1 + offset fp
-                                    , return_val = Nothing
-                                    , params = M.empty
-                                    , locals = M.fromList [(i, IntVal index)]
-                                    , control_link = Just fp
-                                    , access_link = Just fp }
-                putFramePointer record
-                evalUnitExpr e1
-                putFramePointer fp
-        forLoop lv uv body where
-            forLoop index u body =
-                if index <= u then body index >> forLoop (index + 1) u body
+        let forLoop index =
+                if index <= uv
+                then do
+                    fp <- getFramePointer
+                    let record = Activation { offset = 1 + offset fp
+                                            , return_val = Nothing
+                                            , params = M.empty
+                                            , locals = M.fromList [(i, IntVal index)]
+                                            , control_link = Just fp
+                                            , access_link = Just fp }
+                    putFramePointer record
+                    evalUnitExpr e1
+                    putFramePointer fp
+                    forLoop (index + 1)
                 else return UnitVal
+        forLoop lv
     ForDownExpr i u l e1 -> do
         uv <- evalIntExpr u
         lv <- evalIntExpr l
-        let body index = do
-                fp <- getFramePointer
-                let record = Activation { offset = 1 + offset fp
-                                        , return_val = Nothing
-                                        , params = M.empty
-                                        , locals = M.fromList [(i, IntVal index)]
-                                        , control_link = Just fp
-                                        , access_link = Just fp }
-                putFramePointer record
-                evalUnitExpr e1
-                putFramePointer fp
-        forLoop uv lv body where
-            forLoop index l body =
-                if index >= l then body index >> forLoop (index - 1) l body
+        let forLoop index =
+                if index >= lv
+                then do
+                    fp <- getFramePointer
+                    let record = Activation { offset = 1 + offset fp
+                                            , return_val = Nothing
+                                            , params = M.empty
+                                            , locals = M.fromList [(i, IntVal index)]
+                                            , control_link = Just fp
+                                            , access_link = Just fp }
+                    putFramePointer record
+                    evalUnitExpr e1
+                    putFramePointer fp
+                    forLoop (index - 1)
                 else return UnitVal
+        forLoop uv
     DeleteExpr u         -> do
         (ha, _) <- evalRefExpr u
         deallocate ha

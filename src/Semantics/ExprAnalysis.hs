@@ -466,6 +466,10 @@ semArrayDim i dim = findName i >>= run where
     run (ParamEntry t _) = do
         checkConstraint t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
         retE (ArrayDim i dim) (SymType IntType)
+    run (FunEntry sch []) = do
+        t <- inst sch
+        checkConstraint t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
+        retE (ArrayDim i dim) (SymType IntType)
     run (PatternEntry t) = do
         checkConstraint t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
         retE (ArrayDim i dim) (SymType IntType)
@@ -566,6 +570,16 @@ semArrayAccess i es = do
         ParamEntry t _ -> do
             ts <- mapM getNodeType es
             mapM_ (\et -> unify (SymType IntType, et)) ts
+            v <- freshTVar
+            let inf = SymType (ArrayType (length es) v)
+            unify (t, inf)
+            res <- mapM resolveNodeType es
+            rv <- resolveType v
+            retE (ArrayAccess i res) (SymType (RefType rv))
+        FunEntry s []  -> do
+            ts <- mapM getNodeType es
+            mapM_ (\et -> unify (SymType IntType, et)) ts
+            t <- inst s
             v <- freshTVar
             let inf = SymType (ArrayType (length es) v)
             unify (t, inf)

@@ -24,7 +24,7 @@ checkConstraint (SymType (ArrayType _ _)) (NotAllowedArrayType s) =
 checkConstraint (SymType _) (NotAllowedArrayType _) = return ()
 checkConstraint (SymType (ArrayType d _)) (ArrayOfAtLeastDim l s) =
     when (d < l) $ throwSem $ "Type constraint failed: " ++ s
-checkConstraint (SymType _) (ArrayOfAtLeastDim _ _) = return ()
+checkConstraint (SymType _) (ArrayOfAtLeastDim _ s) = throwSem $ "Type constraint failed: " ++ s
 checkConstraint t@(SymType _) (AllowedTypes ts s) =
     let eqTypes = any (\ct -> t == constTypeToSymbolType ct) ts
     in unless eqTypes . throwSem $ "Type constraint failed for type " ++ pretty t ++ ": " ++ s

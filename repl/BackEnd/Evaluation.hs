@@ -1,7 +1,9 @@
 module BackEnd.Evaluation (runAST, evalExpr) where
 
+import GHC.IORef (newIORef, readIORef, writeIORef, IORef)
 import qualified Data.Map as M
 import Control.Monad.IO.Class (MonadIO(liftIO))
+import Control.Monad ((>=>), unless, foldM)
 
 import Common.Token (Identifier, CharConstant)
 import Common.AST
@@ -9,8 +11,6 @@ import Semantics.Utils (SemanticTag (..))
 
 import Common.Value
 import Common.Interpreter
-import Control.Monad
-import GHC.IORef
 
 -- This module contains all the logic
 -- for the interpretation of Llama into Haskell
@@ -64,7 +64,9 @@ computeConst c = case c of
     FunVal _ [] (RunTimeFun run) -> evalRunTimeLib run []
     v -> return v
 
--- TODO: define all cases
+-- TODO: In case of let rec - understand
+-- the operational semantics of the computation
+-- of array dimensions
 runDef :: Def SemanticTag -> Interpreter Value
 runDef (VarDef _ _)             = do
     x <- liftIO (newIORef Undefined)
@@ -74,6 +76,26 @@ runDef (VarDefTyped {})         = do
     x <- liftIO (newIORef Undefined)
     ha <- getAndIncrHeapAddress
     return (RefVal ha x)
+runDef (ArrayDef _ ds _)        = do
+    vDims <- mapM evalIntExpr ds
+    let size = product vDims
+    let alloc _ = do
+          ha <- getAndIncrHeapAddress
+          allocate ha
+          x  <- liftIO (newIORef Undefined)
+          return (ha, x)
+    ar <- mapM alloc [1..size]
+    return (ArrayVal vDims (M.fromList ar))
+runDef (ArrayDefTyped _ ds _ _) = do
+    vDims <- mapM evalIntExpr ds
+    let size = product vDims
+    let alloc _ = do
+          ha <- getAndIncrHeapAddress
+          allocate ha
+          x  <- liftIO (newIORef Undefined)
+          return (ha, x)
+    ar <- mapM alloc [1..size]
+    return (ArrayVal vDims (M.fromList ar))
 runDef (FunDef i ps e _)        = return (FunVal i (map ide ps) (LlamaFun e))
 runDef (FunDefTyped i ps _ e _) = return (FunVal i (map ide ps) (LlamaFun e))
 
@@ -83,7 +105,6 @@ finallyStack run = do
     let finally err = putFramePointer fp >> throwRunTimeError err
     catchRunTimeError run finally
 
--- TODO: define all cases
 evalExpr :: Expr SemanticTag -> Interpreter Value
 evalExpr e@(Expr ef _) = finallyStack $ case ef of
     IntCExpr _           -> IntVal <$> evalIntExpr e
@@ -158,6 +179,28 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
         (ha, _) <- evalRefExpr u
         deallocate ha
         return UnitVal
+    StringCExpr s        -> do
+        let l = length s
+        let aux acc c = do
+              a <- getAndIncrHeapAddress
+              allocate a
+              r <- liftIO (newIORef (CharVal [c]))
+              return ((a, r):acc)
+        chars <- foldM aux [] s
+        ha <- getAndIncrHeapAddress
+        allocate ha
+        nullC <- liftIO (newIORef (CharVal "\0"))
+        return (ArrayVal [l + 1] (M.fromList $ (ha, nullC):chars))
+    ArrayAccess {}       -> uncurry RefVal <$> evalRefExpr e
+    ArrayDim ar dim      -> do
+        let cont (ArrayVal ds _) _ = aux ds dim
+            cont _ _               = throwRunTime "Cannot compute the dimension of something that is not an array"
+        fp <- getFramePointer
+        findNameCont ar fp cont where
+            aux _ n | n < 1 = throwRunTime "Cannot compute the dimension that is less than 1"
+            aux [] _        = throwRunTime $ "Array " ++ ar ++ " has less dimensions than " ++ show dim
+            aux [x] 1       = return (IntVal x)
+            aux (_:ds) n    = aux ds (n - 1)
 evalExpr (LetIn l e _) = finallyStack $ do
     fp <- getFramePointer
     runLet l
@@ -366,6 +409,11 @@ structEq (ConstrVal i1 _ args1) (ConstrVal i2 _ args2) = do
 structEq (RefVal ha1 _) (RefVal ha2 _) = return (ha1 == ha2)
 structEq (FunVal i _ _) _ = throwRunTime ("Cannot perform structural equality on function: " ++ i)
 structEq _ (FunVal i _ _) = throwRunTime ("Cannot perform structural equality on function: " ++ i)
+structEq (ArrayVal _ _) _ = throwRunTime "Cannot perform structural equality on array"
+structEq _ (ArrayVal _ _) = throwRunTime "Cannot perform structural equality on array"
+structEq Undefined _ = throwRunTime "Cannot compare an undefined value"
+structEq _ Undefined = throwRunTime "Cannot compare an undefined value"
+structEq _ _ = throwRunTime "Cannot compare values of different types"
 
 natEq :: Expr SemanticTag -> Expr SemanticTag -> Interpreter Bool
 natEq e1 e2 = do
@@ -428,6 +476,29 @@ evalRefExpr (NewType _ _) = do
     allocate ha
     r <- liftIO (newIORef Undefined)
     return (ha, r)
+evalRefExpr (Expr (ArrayAccess i dims) _) = do
+    vDims <- mapM evalIntExpr dims
+    let cont (ArrayVal ds ar) _ = do
+            unless (validDims ds vDims) $
+                throwRunTime ("Out of bounds access dimensions for array " ++ i)
+            memOffset <- convertOffset ds vDims
+            case M.lookup memOffset ar of
+                Just x  -> return (memOffset, x)
+                Nothing -> throwRunTime ("Unable to access offset " ++ show memOffset ++ " of array " ++ i)
+        cont _ _                = throwRunTime "Cannot array-access something that is not an array"
+    fp <- getFramePointer
+    findNameCont i fp cont where
+        validDims [] []         = True
+        validDims [] _          = False
+        validDims _ []          = False
+        validDims (d:ds) (v:vs) = (0 <= v) && (v < d) && validDims ds vs
+        -- m0,m1,.. are dimensions
+        -- A(i,j,k,...) -> A0[i + j*m0 + k*m0*m1 + ...]
+        convertOffset :: [Int] -> [Int] -> Interpreter Int
+        convertOffset = aux (1 :: Int) where
+            aux _ _ [] = return 0
+            aux m (d:ds) (v:vs) = (v * m +) <$> aux (m * d) ds vs
+            aux _ [] (_:_) = throwRunTime "Failed to convert multi-dim offset to memory offset"
 evalRefExpr e = do
     v <- evalExpr e
     case v of

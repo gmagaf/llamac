@@ -35,7 +35,7 @@ printInt [IntVal n] = do
 printInt args = returnErr ("Incorrect argument list " ++ show args ++ "  passed for print_int")
 
 printChar :: RunTimeLibComputation
-printChar [CharVal c] = putStr c >>  return (Right UnitVal)
+printChar [CharVal c] = putChar c >>  return (Right UnitVal)
 printChar args = returnErr ("Incorrect argument list " ++ show args ++ "  passed for print_char")
 
 
@@ -43,7 +43,7 @@ printString :: RunTimeLibComputation
 printString [ArrayVal _ _ m] = do
     let charRefs = map snd $ M.toAscList m
     chars <- mapM readIORef charRefs
-    let aux (CharVal "\0") = return ()
+    let aux (CharVal '\0') = return ()
         aux c = void (printChar [c])
     mapM_ aux chars
     return (Right UnitVal)

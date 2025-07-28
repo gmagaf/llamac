@@ -201,8 +201,7 @@ removeFromTail a (x:xs) = (x:) <$> removeFromTail a xs
 stringAction :: AlexAction Token
 stringAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
-      noQuotes = removeFromHead '"' lexeme >>= removeFromTail '"'
-  in case noQuotes of
+  in case readMaybe lexeme :: Maybe String of
     Just str -> do
       setTokenPosn posn
       return (T_const_string str)
@@ -211,12 +210,11 @@ stringAction (posn, _, _, current_string) len =
 charAction :: AlexAction Token
 charAction (posn, _, _, current_string) len =
   let lexeme = (take len current_string)
-      noQuotes = removeFromHead '\'' lexeme >>= removeFromTail '\''
-  in case noQuotes of
+  in case readMaybe lexeme :: Maybe Char of
     Just ch -> do
       setTokenPosn posn
       return (T_const_char ch)
-    Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char")
+    _ -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char")
 
 -- Comments utils
 beginComment :: AlexAction Token

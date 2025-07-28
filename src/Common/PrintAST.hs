@@ -43,7 +43,7 @@ instance Pretty Token where
     T_id_constr v    -> v
     T_const_int v    -> show v
     T_const_float v  -> show v
-    T_const_char v   -> "'" ++ v ++ "'"
+    T_const_char v   -> '\'' : v : "\'"
     T_const_string v -> "\"" ++ v ++ "\""
     keyword          -> show keyword
 

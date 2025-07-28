@@ -77,25 +77,25 @@ runDef (VarDefTyped {})         = do
     ha <- getAndIncrHeapAddress
     return (RefVal ha x)
 runDef (ArrayDef _ ds _)        = do
-    vDims <- mapM evalIntExpr ds
+    let checkDim n = if n < 0 then throwRunTime "Cannot create an array of negative dimension" else return n
+    vDims <- mapM (evalIntExpr >=> checkDim) ds
     let size = product vDims
-    let alloc _ = do
-          ha <- getAndIncrHeapAddress
-          allocate ha
+    ha <- getAndOffsetHeapAddress size
+    let alloc n = do
           x  <- liftIO (newIORef Undefined)
-          return (ha, x)
-    ar <- mapM alloc [1..size]
-    return (ArrayVal vDims (M.fromList ar))
+          return (n, x)
+    ar <- mapM alloc [0..(size - 1)]
+    return (ArrayVal vDims ha (M.fromList ar))
 runDef (ArrayDefTyped _ ds _ _) = do
-    vDims <- mapM evalIntExpr ds
+    let checkDim n = if n < 0 then throwRunTime "Cannot create an array of negative dimension" else return n
+    vDims <- mapM (evalIntExpr >=> checkDim) ds
     let size = product vDims
-    let alloc _ = do
-          ha <- getAndIncrHeapAddress
-          allocate ha
+    ha <- getAndOffsetHeapAddress size
+    let alloc n = do
           x  <- liftIO (newIORef Undefined)
-          return (ha, x)
-    ar <- mapM alloc [1..size]
-    return (ArrayVal vDims (M.fromList ar))
+          return (n, x)
+    ar <- mapM alloc [0..(size - 1)]
+    return (ArrayVal vDims ha (M.fromList ar))
 runDef (FunDef i ps e _)        = return (FunVal i (map ide ps) (LlamaFun e))
 runDef (FunDefTyped i ps _ e _) = return (FunVal i (map ide ps) (LlamaFun e))
 
@@ -126,7 +126,8 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
         return (ConstrVal i ha vals)
     UnOpExpr op e1       -> evalUnOpExpr op e1
     BinOpExpr op e1 e2   -> evalBinOpExpr op e1 e2
-    IfThenElseExpr cond e1 e2 -> do
+    IfThenElseExpr cond e1 e2
+                         -> do
         b <- evalBoolExpr cond
         if b then evalExpr e1 else evalExpr e2
     IfThenExpr cond e1   -> do
@@ -181,19 +182,16 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
         return UnitVal
     StringCExpr s        -> do
         let l = length s
-        let aux acc c = do
-              a <- getAndIncrHeapAddress
-              allocate a
+        ha <- getAndOffsetHeapAddress (l + 1)
+        let aux acc (a, c) = do
               r <- liftIO (newIORef (CharVal [c]))
               return ((a, r):acc)
-        chars <- foldM aux [] s
-        ha <- getAndIncrHeapAddress
-        allocate ha
+        chars <- foldM aux [] (zip [0..(l - 1)] s)
         nullC <- liftIO (newIORef (CharVal "\0"))
-        return (ArrayVal [l + 1] (M.fromList $ (ha, nullC):chars))
+        return (ArrayVal [l + 1] ha (M.fromList $ (l, nullC):chars))
     ArrayAccess {}       -> uncurry RefVal <$> evalRefExpr e
     ArrayDim ar dim      -> do
-        let cont (ArrayVal ds _) _ = aux ds dim
+        let cont (ArrayVal ds _ _) _ = aux ds dim
             cont _ _               = throwRunTime "Cannot compute the dimension of something that is not an array"
         fp <- getFramePointer
         findNameCont ar fp cont where
@@ -409,8 +407,8 @@ structEq (ConstrVal i1 _ args1) (ConstrVal i2 _ args2) = do
 structEq (RefVal ha1 _) (RefVal ha2 _) = return (ha1 == ha2)
 structEq (FunVal i _ _) _ = throwRunTime ("Cannot perform structural equality on function: " ++ i)
 structEq _ (FunVal i _ _) = throwRunTime ("Cannot perform structural equality on function: " ++ i)
-structEq (ArrayVal _ _) _ = throwRunTime "Cannot perform structural equality on array"
-structEq _ (ArrayVal _ _) = throwRunTime "Cannot perform structural equality on array"
+structEq (ArrayVal {}) _ = throwRunTime "Cannot perform structural equality on array"
+structEq _ (ArrayVal {}) = throwRunTime "Cannot perform structural equality on array"
 structEq Undefined _ = throwRunTime "Cannot compare an undefined value"
 structEq _ Undefined = throwRunTime "Cannot compare an undefined value"
 structEq _ _ = throwRunTime "Cannot compare values of different types"
@@ -478,12 +476,12 @@ evalRefExpr (NewType _ _) = do
     return (ha, r)
 evalRefExpr (Expr (ArrayAccess i dims) _) = do
     vDims <- mapM evalIntExpr dims
-    let cont (ArrayVal ds ar) _ = do
+    let cont (ArrayVal ds ha ar) _ = do
             unless (validDims ds vDims) $
                 throwRunTime ("Out of bounds access dimensions for array " ++ i)
             memOffset <- convertOffset ds vDims
             case M.lookup memOffset ar of
-                Just x  -> return (memOffset, x)
+                Just x  -> return (ha + memOffset, x)
                 Nothing -> throwRunTime ("Unable to access offset " ++ show memOffset ++ " of array " ++ i)
         cont _ _                = throwRunTime "Cannot array-access something that is not an array"
     fp <- getFramePointer

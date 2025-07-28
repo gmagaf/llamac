@@ -1,7 +1,7 @@
 module Common.Interpreter (module Common.Interpreter) where
 
 import qualified Data.Map as M
-import qualified Data.Set as S
+import Data.Maybe (fromMaybe)
 import Data.Bifunctor
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Control.Monad.Trans.Except (ExceptT(ExceptT), runExceptT, throwE, catchE)
@@ -37,7 +37,7 @@ data ActivationRecord =
 
 data RunTimeEnv = RunTimeEnv { frame_pointer :: ActivationRecord
                              , heap_address :: Int
-                             , alloc_addresses :: S.Set Int
+                             , user_mallocs :: M.Map Int Bool
                              }
     deriving Show
 
@@ -62,10 +62,18 @@ getAndIncrHeapAddress = do
     putRunTime rt{ heap_address = ha + 1}
     return ha
 
+getAndOffsetHeapAddress :: Int -> Interpreter Int
+getAndOffsetHeapAddress n = do
+    rt <- getRunTime
+    let ha = heap_address rt
+    putRunTime rt{ heap_address = ha + n}
+    return ha
+
 isAllocated :: Int -> Interpreter Bool
 isAllocated ha = do
-    allocated <- alloc_addresses <$> getRunTime
-    return (S.member ha allocated)
+    allocated <- user_mallocs <$> getRunTime
+    let alloc = M.lookup ha allocated
+    return (fromMaybe True alloc) -- if it is not allocated from the user we assume it is allocated by the system
 
 getCodeFile :: Interpreter (Maybe String)
 getCodeFile = code_file <$> lift get
@@ -88,12 +96,12 @@ putCodeFile f = lift $ do
 allocate :: Int -> Interpreter ()
 allocate ha = do
     rt <- getRunTime
-    putRunTime rt{ alloc_addresses = S.insert ha (alloc_addresses rt) }
+    putRunTime rt{ user_mallocs = M.insert ha True (user_mallocs rt) }
 
 deallocate :: Int -> Interpreter ()
 deallocate ha = do
     rt <- getRunTime
-    putRunTime rt{ alloc_addresses = S.delete ha (alloc_addresses rt) }
+    putRunTime rt{ user_mallocs = M.update (const (Just False)) ha (user_mallocs rt) }
 
 liftParser :: Parser a -> Interpreter a
 liftParser p = ExceptT (state f) where

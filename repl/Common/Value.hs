@@ -43,7 +43,7 @@ data Value = UnitVal
            | ConstrVal ConstrIdentifier Int [Value]
            | RefVal Int (IORef Value)
            | Undefined
-           | ArrayVal [Int] (M.Map Int (IORef Value))
+           | ArrayVal [Int] Int (M.Map Int (IORef Value))
     deriving Show
 
 instance Show a => Show (IORef a) where
@@ -64,6 +64,7 @@ instance Pretty Value where
               sep = if null as then "" else " "
     prettyPrec d (RefVal ha r)       = prettyPrec d (T_const_int ha) . prettyPrec d (T_id "@") . showsPrec d r
     prettyPrec d Undefined           = prettyPrec d (T_id "Undefined")
-    prettyPrec d (ArrayVal dims _)   = prettyPrec d (T_id "Array") . prettyDims
+    prettyPrec d (ArrayVal dims a _) = prettyPrec d (T_const_int a) . prettyPrec d (T_id "@") .
+        prettyPrec d (T_id "Array") . prettyDims
         where prettyDims = prettyPrec d T_lbracket .
                 prettyPrecSepList d ", " (map T_const_int dims) . prettyPrec d T_rbracket

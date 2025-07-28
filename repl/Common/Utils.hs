@@ -14,8 +14,6 @@ initInterpreterState :: ParserState -> Maybe String -> InterpreterState
 initInterpreterState p f =
     let global_frame = Activation
                     { offset = 0
-                    , return_val = Nothing
-                    , params = M.empty
                     , locals = M.fromList runTimeLib
                     , control_link = Nothing
                     , access_link = Nothing }

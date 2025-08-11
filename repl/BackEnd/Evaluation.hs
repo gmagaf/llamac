@@ -175,10 +175,10 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
         let l = length s
         ha <- getAndOffsetHeapAddress (l + 1)
         let aux acc (a, c) = do
-              r <- liftIO (newIORef (CharVal [c]))
+              r <- liftIO (newIORef (CharVal c))
               return ((a, r):acc)
         chars <- foldM aux [] (zip [0..(l - 1)] s)
-        nullC <- liftIO (newIORef (CharVal "\0"))
+        nullC <- liftIO (newIORef (CharVal '\0'))
         return (ArrayVal [l + 1] ha (M.fromList $ (l, nullC):chars))
     ArrayAccess {}       -> uncurry RefVal <$> evalRefExpr e
     ArrayDim ar dim      -> do

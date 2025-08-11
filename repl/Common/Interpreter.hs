@@ -2,6 +2,7 @@ module Common.Interpreter (module Common.Interpreter) where
 
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
+import Data.Bifunctor
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Control.Monad.Trans.Except (ExceptT(ExceptT), runExceptT, throwE, catchE)
 import Control.Monad.Trans.State (StateT(runStateT), get, put, runState, state, evalStateT)
@@ -19,12 +20,16 @@ import Common.PrintAST
 data ActivationRecord =
     Activation
     { offset :: Int -- This is only for debugging purposes
+    , return_val :: Maybe Value
+    , params :: M.Map Identifier Value
     , locals :: M.Map Identifier Value
     , control_link :: Maybe ActivationRecord
     , access_link :: Maybe ActivationRecord
     }
     | RecActivation
     { offset :: Int -- This is only for debugging purposes
+    , return_val :: Maybe Value
+    , params :: M.Map Identifier Value
     , locals :: M.Map Identifier Value
     , control_link :: Maybe ActivationRecord
     , access_link :: Maybe ActivationRecord
@@ -122,10 +127,12 @@ instance Pretty ActivationRecord where
     pretty ar =
         let prettyMaybe = maybe "null"
             prettyNestedAr nar = show (offset nar)
-        in "| locals: " ++ M.foldrWithKey (\i v a -> i ++ " = " ++ pretty v ++ if a == "" then "" else ", " ++ a) "" (locals ar)
+        in "|return_val: " ++ prettyMaybe pretty (return_val ar)
+           ++ " | params: " ++ show (map (Data.Bifunctor.second pretty) $ M.toList (params ar))
+           ++ " | locals: " ++ show (map (Data.Bifunctor.second show) $ M.toList (locals ar))
            ++ " | control_link: " ++ prettyMaybe prettyNestedAr (control_link ar)
            ++ " | access_link: " ++ prettyMaybe prettyNestedAr (access_link ar)
-           ++ " |"
+           ++ "|"
 
 instance Pretty RunTimeEnv where
     pretty rtenv =

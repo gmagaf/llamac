@@ -17,12 +17,13 @@ import Common.Interpreter
 
 {-
     Run time invariants:
-    1. Each frame corresponds to an activation of a scope, the names are visible in subsequent scopes
+    1. Either locals or params is empty for each AR
+    2. Each frame corresponds to an activation of a scope, the names are visible in subsequent scopes
        The names are also visible in the current scope if it is a RecActivation
-    2. access_link contains the frame of the static scope containing current scope
-    3. runLet pushes one frame
-    4. evalExpr leaves the stack untouched
-    5. consts are only computed during a let (rec), in other cases it is just retrieved from the stack
+    3. access_link contains the frame of the static scope containing current scope
+    4. runLet pushes one frame
+    5. evalExpr leaves the stack untouched
+    6. consts are only computed during a let (rec), in other cases it is just retrieved from the stack
 -}
 
 runAST :: AST SemanticTag -> Interpreter ()
@@ -36,6 +37,8 @@ runLet (Let defs _) = do
     let localDefs = M.fromList $ zipWith (\d v -> (ide d, v)) defs local_vals
     r <- getFramePointer
     let record = Activation { offset = 1 + offset r
+                            , return_val = Nothing
+                            , params = M.empty
                             , locals = localDefs
                             , control_link = Just r
                             , access_link = Just r }
@@ -45,6 +48,8 @@ runLet (LetRec defs _) = do
     let local_defs = M.fromList $ zipWith (\d v -> (ide d, v)) defs local_vals
     r <- getFramePointer
     let record = RecActivation { offset = 1 + offset r
+                            , return_val = Nothing
+                            , params = M.empty
                             , locals = local_defs
                             , control_link = Just r
                             , access_link = Just r }
@@ -141,6 +146,8 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
                 then do
                     fp <- getFramePointer
                     let record = Activation { offset = 1 + offset fp
+                                            , return_val = Nothing
+                                            , params = M.empty
                                             , locals = M.fromList [(i, IntVal index)]
                                             , control_link = Just fp
                                             , access_link = Just fp }
@@ -158,6 +165,8 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
                 then do
                     fp <- getFramePointer
                     let record = Activation { offset = 1 + offset fp
+                                            , return_val = Nothing
+                                            , params = M.empty
                                             , locals = M.fromList [(i, IntVal index)]
                                             , control_link = Just fp
                                             , access_link = Just fp }
@@ -208,6 +217,8 @@ matchPatterns v (Match pat e _:cs) = do
     if m then do
         fp <- getFramePointer
         let record = Activation { offset = 1 + offset fp
+                                , return_val = Nothing
+                                , params = M.empty
                                 , locals = M.fromList binds
                                 , control_link = Just fp
                                 , access_link = Just fp }
@@ -259,7 +270,8 @@ findNameCont :: Identifier
               -> ActivationRecord
               -> (Value -> ActivationRecord -> Interpreter a)
               -> Interpreter a
-findNameCont i r f = searchMap (locals r) f (nextFrame r) where
+findNameCont i r f = searchMap (params r) f searchLocals where
+    searchLocals = searchMap (locals r) f (nextFrame r)
     searchMap m found nFound =
         case M.lookup i m of
             Just v -> found v r
@@ -285,7 +297,9 @@ evalFunCall i vals = do
             FunVal _ ps (LlamaFun body) -> do
                 let record = Activation
                             { offset = 1 + offset fp
-                            , locals = M.fromList (zip ps vals)
+                            , return_val = Nothing
+                            , params = M.fromList (zip ps vals)
+                            , locals = M.empty
                             , control_link = Just fp
                             , access_link = getFunStaticContext access_record
                             }

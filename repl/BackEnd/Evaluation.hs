@@ -10,6 +10,7 @@ import Common.AST
 import Semantics.Utils (SemanticTag (..))
 
 import Common.Value
+import Common.RunTimeEnv
 import Common.Interpreter
 
 -- This module contains all the logic
@@ -249,11 +250,7 @@ matchPattern = auxMatch [] where
 
 
 evalRunTimeLib :: RunTimeLibComputation -> [(String, Value)] -> Interpreter Value
-evalRunTimeLib run args = do
-    res <- liftIO (run (map snd args))
-    case res of
-        Left err  -> throwRunTimeError err
-        Right ret -> return ret
+evalRunTimeLib run args = run (map snd args)
 
 findNameCont :: Identifier
               -> ActivationRecord

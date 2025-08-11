@@ -14,18 +14,12 @@ import Common.AST (Expr)
 import Common.PrintAST (prettyPrecSepList, Pretty(prettyPrec))
 import Semantics.Utils (SemanticTag)
 
+import Common.Interpreter
+
 -- This module contains the definitions
 -- for the values of all data types
--- It also defines the errors
 
-data RunTimeError = RunTimeError { msg :: String }
-                  | ParserError { msg :: String }
-
-instance Show RunTimeError where
-    show (RunTimeError err) = "RunTimeError: " ++ err
-    show (ParserError err)  = "CompileTimeError: " ++ err
-
-type RunTimeLibComputation = [Value] -> IO (Either RunTimeError Value)
+type RunTimeLibComputation = [Value] -> Interpreter Value
 
 data FunBody = LlamaFun (Expr SemanticTag)
              | RunTimeFun RunTimeLibComputation

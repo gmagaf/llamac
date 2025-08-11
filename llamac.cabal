@@ -87,6 +87,7 @@ executable repl
                       haskeline >= 0.8.1,
                       llamac
   other-modules:      Common.Value
+                      Common.RunTimeEnv
                       Common.Interpreter
                       Common.Utils
                       BackEnd.RunTimeLib

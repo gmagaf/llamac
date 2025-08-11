@@ -5,6 +5,7 @@ import qualified Data.Map as M
 import Parser.ParserState (ParserState)
 
 import Common.Interpreter
+import Common.RunTimeEnv
 import BackEnd.RunTimeLib
 
 -- Interpeter Utils module

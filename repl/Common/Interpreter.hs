@@ -6,37 +6,19 @@ import Control.Monad.Trans.Class (MonadTrans(lift))
 import Control.Monad.Trans.Except (ExceptT(ExceptT), runExceptT, throwE, catchE)
 import Control.Monad.Trans.State (StateT(runStateT), get, put, runState, state, evalStateT)
 
-import Common.Token (Identifier)
 import Parser.ParserM (Parser, ParserT)
 import Parser.ParserState (ParserState)
 
-import Common.Value
-import Common.PrintAST
+import Common.RunTimeEnv
+import {-# SOURCE #-} Common.Value (Value)
 
 -- This modules defines the most basic
 -- data types around the interpreter
-
-data ActivationRecord =
-    Activation
-    { offset :: Int -- This is only for debugging purposes
-    , locals :: M.Map Identifier Value
-    , control_link :: Maybe ActivationRecord
-    , access_link :: Maybe ActivationRecord
-    }
-    | RecActivation
-    { offset :: Int -- This is only for debugging purposes
-    , locals :: M.Map Identifier Value
-    , control_link :: Maybe ActivationRecord
-    , access_link :: Maybe ActivationRecord
-    } deriving Show
-
-data RunTimeEnv = RunTimeEnv { frame_pointer :: ActivationRecord
-                             , heap_address :: Int
-                             , user_mallocs :: M.Map Int Bool
-                             }
-    deriving Show
+-- and utility monadic functions
 
 type Interpreter a = ParserT RunTimeError InterpreterState IO a
+type RunTimeEnv = RunTimeEnvF Value
+type ActivationRecord = ActivationRecordF Value
 
 data InterpreterState = InterpreterState
     { parser_state :: ParserState
@@ -117,18 +99,3 @@ runInterpreter s i = runStateT (runExceptT i) s
 
 evalInterpreter :: InterpreterState -> Interpreter a -> IO (Either RunTimeError a)
 evalInterpreter s i = evalStateT (runExceptT i) s
-
-instance Pretty ActivationRecord where
-    pretty ar =
-        let prettyMaybe = maybe "null"
-            prettyNestedAr nar = show (offset nar)
-        in "| locals: " ++ M.foldrWithKey (\i v a -> i ++ " = " ++ pretty v ++ if a == "" then "" else ", " ++ a) "" (locals ar)
-           ++ " | control_link: " ++ prettyMaybe prettyNestedAr (control_link ar)
-           ++ " | access_link: " ++ prettyMaybe prettyNestedAr (access_link ar)
-           ++ " |"
-
-instance Pretty RunTimeEnv where
-    pretty rtenv =
-        let prettyAr ar = show (offset ar) ++ " * " ++ pretty ar
-            traverseStack ar = prettyAr ar ++ maybe "" (("\n" ++) . traverseStack) (control_link ar)
-        in traverseStack (frame_pointer rtenv)

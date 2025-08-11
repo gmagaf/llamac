@@ -11,7 +11,7 @@ type Identifier = String
 type ConstrIdentifier = String
 type IntConstant = Int
 type FloatConstant = Float
-type CharConstant = Char
+type CharConstant = String
 type StringConstant = String
 
 -- Definition of all the Llama tokens
@@ -136,7 +136,7 @@ instance Show Token where
     -- Constants
     T_const_int v       -> "intC:" ++ show v
     T_const_float v     -> "floatC:" ++ show v
-    T_const_char v      -> "charC:" ++ [v]
+    T_const_char v      -> "charC:" ++ v
     T_const_string v    -> "stringC:" ++ v
     -- Symbols
     T_arrow             -> "->"

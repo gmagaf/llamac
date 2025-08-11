@@ -27,7 +27,7 @@ arbitraryFloatConstant :: Gen FloatConstant
 arbitraryFloatConstant = elements [0.0, 2.56, 3.14, 0.420e+2, 42000.0e-3]
 
 arbitraryCharConstant :: Gen CharConstant
-arbitraryCharConstant = elements ['a', '7', '\n', '\"', '\xE9']
+arbitraryCharConstant = elements ["a", "7", "\\n", "\\\"", "\\xE9"]
 
 arbitraryStringConstant :: Gen StringConstant
 arbitraryStringConstant = elements ["foo", "bar", "Route66", "Name:\\t\\\"DouglasAdams\\\"\\nValue:\\t42\\n"]

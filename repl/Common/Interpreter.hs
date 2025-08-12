@@ -6,6 +6,7 @@ import Control.Monad.Trans.Class (MonadTrans(lift))
 import Control.Monad.Trans.Except (ExceptT(ExceptT), runExceptT, throwE, catchE)
 import Control.Monad.Trans.State (StateT(runStateT), get, put, runState, state, evalStateT)
 
+import Lexer.Lexer (AlexPosn, printPosn)
 import Parser.ParserM (Parser, ParserT)
 import Parser.ParserState (ParserState)
 
@@ -104,6 +105,9 @@ throwRunTimeError = throwE
 
 throwRunTime :: String -> Interpreter a
 throwRunTime = throwE . RunTimeError
+
+throwRunTimeAtPosn :: String -> AlexPosn -> Interpreter a
+throwRunTimeAtPosn s p = throwRunTime (s ++ " at " ++ printPosn p)
 
 catchRunTimeError :: Interpreter a -> (RunTimeError -> Interpreter a) -> Interpreter a
 catchRunTimeError = catchE

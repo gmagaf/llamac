@@ -7,7 +7,7 @@ import Control.Monad ((>=>), unless, foldM)
 
 import Common.Token (Identifier, CharConstant)
 import Common.AST
-import Lexer.Lexer (printPosn)
+import Lexer.Lexer (AlexPosn)
 import Semantics.Utils (SemanticTag (..))
 
 import Common.Value
@@ -73,8 +73,10 @@ runDef (VarDefTyped {})         = do
     x <- liftIO (newIORef Undefined)
     ha <- getAndIncrHeapAddress
     return (RefVal ha x)
-runDef (ArrayDef _ ds _)        = do
-    let checkDim n = if n < 0 then throwRunTime "Cannot create an array of negative dimension" else return n
+runDef (ArrayDef _ ds t)        = do
+    let checkDim n = if n < 0
+                     then throwRunTimeAtPosn "Cannot create an array of negative dimension" (posn t)
+                     else return n
     vDims <- mapM (evalIntExpr >=> checkDim) ds
     let size = product vDims
     ha <- getAndOffsetHeapAddress size
@@ -83,8 +85,10 @@ runDef (ArrayDef _ ds _)        = do
           return (n, x)
     ar <- mapM alloc [0..(size - 1)]
     return (ArrayVal vDims ha (M.fromList ar))
-runDef (ArrayDefTyped _ ds _ _) = do
-    let checkDim n = if n < 0 then throwRunTime "Cannot create an array of negative dimension" else return n
+runDef (ArrayDefTyped _ ds _ t) = do
+    let checkDim n = if n < 0
+                     then throwRunTimeAtPosn "Cannot create an array of negative dimension" (posn t)
+                     else return n
     vDims <- mapM (evalIntExpr >=> checkDim) ds
     let size = product vDims
     ha <- getAndOffsetHeapAddress size
@@ -121,8 +125,8 @@ evalExpr e@(Expr ef t) = finallyStack $ case ef of
         vals <- mapM evalExpr args
         ha <- getAndIncrHeapAddress
         return (ConstrVal i ha vals)
-    UnOpExpr op e1       -> evalUnOpExpr op e1
-    BinOpExpr op e1 e2   -> evalBinOpExpr op e1 e2
+    UnOpExpr op e1       -> evalUnOpExpr op e1 (posn t)
+    BinOpExpr op e1 e2   -> evalBinOpExpr op e1 e2 (posn t)
     IfThenElseExpr cond e1 e2
                          -> do
         b <- evalBoolExpr cond
@@ -181,11 +185,11 @@ evalExpr e@(Expr ef t) = finallyStack $ case ef of
     ArrayAccess {}       -> uncurry RefVal <$> evalRefExpr e
     ArrayDim ar dim      -> do
         let cont (ArrayVal ds _ _) _ = aux ds dim
-            cont _ _               = throwRunTime "Cannot compute the dimension of something that is not an array"
+            cont _ _               = throwRunTimeAtPosn "Cannot compute the dimension of something that is not an array" (posn t)
         fp <- getFramePointer
         findNameCont ar fp cont where
-            aux _ n | n < 1 = throwRunTime $ "Cannot compute the dimension that is less than 1 at " ++ printPosn (posn t)
-            aux [] _        = throwRunTime $ "Array " ++ ar ++ " has less dimensions than " ++ show dim
+            aux _ n | n < 1 = throwRunTimeAtPosn "Cannot compute the dimension that is less than 1" (posn t)
+            aux [] _        = throwRunTimeAtPosn ("Array " ++ ar ++ " has less dimensions than " ++ show dim) (posn t)
             aux (x:_) 1     = return (IntVal x)
             aux (_:ds) n    = aux ds (n - 1)
 evalExpr (LetIn l e _) = finallyStack $ do
@@ -194,14 +198,14 @@ evalExpr (LetIn l e _) = finallyStack $ do
     r <- evalExpr e
     putFramePointer fp
     return r
-evalExpr (MatchExpr e cs _) = finallyStack $ do
+evalExpr (MatchExpr e cs t) = finallyStack $ do
         v <- evalExpr e
-        matchPatterns v cs
+        matchPatterns v cs t
 evalExpr e@(NewType {}) = uncurry RefVal <$> evalRefExpr e
 
-matchPatterns :: Value -> [Clause SemanticTag] -> Interpreter Value
-matchPatterns _ [] = throwRunTime "Exhausted all patterns and found none to match"
-matchPatterns v (Match pat e _:cs) = do
+matchPatterns :: Value -> [Clause SemanticTag] -> SemanticTag -> Interpreter Value
+matchPatterns _ [] t = throwRunTimeAtPosn "Exhausted all patterns and found none to match" (posn t)
+matchPatterns v (Match pat e _:cs) t = do
     (m, binds) <- matchPattern v pat
     if m then do
         fp <- getFramePointer
@@ -213,7 +217,7 @@ matchPatterns v (Match pat e _:cs) = do
         res <- evalExpr e
         putFramePointer fp
         return res
-    else matchPatterns v cs
+    else matchPatterns v cs t
 
 matchPattern :: Value -> Pattern SemanticTag -> Interpreter (Bool, [(Identifier, Value)])
 matchPattern = auxMatch [] where
@@ -260,7 +264,7 @@ findNameCont i r f = searchMap (locals r) f (nextFrame r) where
             Nothing -> nFound
     nextFrame r' = case access_link r' of
                     Just al -> findNameCont i al f
-                    Nothing -> throwRunTimeError (RunTimeError $ "No activation found for name: " ++ i)
+                    Nothing -> throwRunTime ("No activation found for name: " ++ i)
 
 getFunStaticContext :: ActivationRecord -> Maybe ActivationRecord
 getFunStaticContext ar@(Activation {})    = access_link ar
@@ -291,8 +295,8 @@ evalFunCall i vals = do
             v -> throwRunTime ("Value: " ++ show v ++ " cannot be applied to args")
     findNameCont i fp cont
 
-evalUnOpExpr :: UnOp -> Expr SemanticTag -> Interpreter Value
-evalUnOpExpr op e = case op of
+evalUnOpExpr :: UnOp -> Expr SemanticTag -> AlexPosn -> Interpreter Value
+evalUnOpExpr op e p = case op of
     PlusUnOp -> IntVal <$> evalIntExpr e
     MinusUnOp -> IntVal . (0-) <$> evalIntExpr e
     PlusFloatUnOp -> FloatVal <$> evalFloatExpr e
@@ -302,22 +306,22 @@ evalUnOpExpr op e = case op of
         (ha, r) <- evalRefExpr e
         al <- isAllocated ha
         if al then liftIO (readIORef r)
-        else throwRunTime "Unallocated memory access (read) attempt"
+        else throwRunTimeAtPosn "Unallocated memory access (read) attempt" p
 
-evalBinOpExpr :: BinOp -> Expr SemanticTag -> Expr SemanticTag -> Interpreter Value
-evalBinOpExpr op e1 e2 = case op of
+evalBinOpExpr :: BinOp -> Expr SemanticTag -> Expr SemanticTag -> AlexPosn -> Interpreter Value
+evalBinOpExpr op e1 e2 p = case op of
     PlusOp  -> IntVal <$> ((+) <$> evalIntExpr e1 <*> evalIntExpr e2)
     MinusOp -> IntVal <$> ((-) <$> evalIntExpr e1 <*> evalIntExpr e2)
     TimesOp -> IntVal <$> ((*) <$> evalIntExpr e1 <*> evalIntExpr e2)
     DivOp   -> do
         nom <- evalIntExpr e1
         denom <- evalIntExpr e2
-        if denom == 0 then throwRunTime "Division by zero"
+        if denom == 0 then throwRunTimeAtPosn "Division by zero" p
         else return (IntVal (div nom denom))
     ModOp   -> do
         nom <- evalIntExpr e1
         denom <- evalIntExpr e2
-        if denom == 0 then throwRunTime "Modulo by zero"
+        if denom == 0 then throwRunTimeAtPosn "Modulo by zero" p
         else return (IntVal (mod nom denom))
     PlusFloatOp  -> FloatVal <$> ((+) <$> evalFloatExpr e1 <*> evalFloatExpr e2)
     MinusFloatOp -> FloatVal <$> ((-) <$> evalFloatExpr e1 <*> evalFloatExpr e2)
@@ -325,35 +329,35 @@ evalBinOpExpr op e1 e2 = case op of
     DivFloatOp   -> do
         nom <- evalFloatExpr e1
         denom <- evalFloatExpr e2
-        if denom == 0 then throwRunTime "Float division by zero"
+        if denom == 0 then throwRunTimeAtPosn "Float division by zero" p
         else return (FloatVal ((/) nom denom))
     ExpOp   -> FloatVal <$> ((**) <$> evalFloatExpr e1 <*> evalFloatExpr e2)
     EqOp -> do
         v1 <- evalExpr e1
         v2 <- evalExpr e2
-        BoolVal <$> structEq v1 v2
+        BoolVal <$> structEq v1 v2 p
     NotEqOp -> do
         v1 <- evalExpr e1
         v2 <- evalExpr e2
-        BoolVal . not <$> structEq v1 v2
-    NatEqOp -> BoolVal <$> natEq e1 e2
-    NotNatEqOp -> BoolVal . not <$> natEq e1 e2
+        BoolVal . not <$> structEq v1 v2 p
+    NatEqOp -> BoolVal <$> natEq e1 e2 p
+    NotNatEqOp -> BoolVal . not <$> natEq e1 e2 p
     LTOp -> do
         v1 <- evalExpr e1
         v2 <- evalExpr e2
-        BoolVal . (LT ==) <$> ordVal v1 v2
+        BoolVal . (LT ==) <$> ordVal v1 v2 p
     GTOp -> do
         v1 <- evalExpr e1
         v2 <- evalExpr e2
-        BoolVal . (GT ==) <$> ordVal v1 v2
+        BoolVal . (GT ==) <$> ordVal v1 v2 p
     LEqOp -> do
         v1 <- evalExpr e1
         v2 <- evalExpr e2
-        BoolVal . (GT /=) <$> ordVal v1 v2
+        BoolVal . (GT /=) <$> ordVal v1 v2 p
     GEqOp -> do
         v1 <- evalExpr e1
         v2 <- evalExpr e2
-        BoolVal . (LT /=) <$> ordVal v1 v2
+        BoolVal . (LT /=) <$> ordVal v1 v2 p
     AndOp -> do
         v1 <- evalBoolExpr e1
         if v1 then BoolVal <$> evalBoolExpr e2 else return (BoolVal False)
@@ -369,42 +373,42 @@ evalBinOpExpr op e1 e2 = case op of
             v <- evalExpr e2
             liftIO (writeIORef r v)
             return UnitVal
-        else throwRunTime "Unallocated memory access (write) attempt"
+        else throwRunTimeAtPosn "Unallocated memory access (write) attempt" p
 
-structEq :: Value -> Value -> Interpreter Bool
-structEq (IntVal v1) (IntVal v2) = return (v1 == v2)
-structEq (FloatVal v1) (FloatVal v2) = return (v1 == v2)
-structEq (CharVal v1) (CharVal v2) = return (v1 == v2)
-structEq (BoolVal v1) (BoolVal v2) = return (v1 == v2)
-structEq UnitVal UnitVal = return True
-structEq (ConstrVal i1 _ args1) (ConstrVal i2 _ args2) = do
+structEq :: Value -> Value -> AlexPosn -> Interpreter Bool
+structEq (IntVal v1) (IntVal v2) _       = return (v1 == v2)
+structEq (FloatVal v1) (FloatVal v2) _   = return (v1 == v2)
+structEq (CharVal v1) (CharVal v2) _     = return (v1 == v2)
+structEq (BoolVal v1) (BoolVal v2) _     = return (v1 == v2)
+structEq UnitVal UnitVal _               = return True
+structEq (ConstrVal i1 _ args1) (ConstrVal i2 _ args2) p = do
     (&& (i1 == i2)) <$> eqArgs args1 args2 where
         eqArgs [] [] = return True
         eqArgs (_:_) [] = return False
         eqArgs [] (_:_) = return False
-        eqArgs (x:xs) (y:ys) = (&&) <$> structEq x y <*> eqArgs xs ys
-structEq (RefVal ha1 _) (RefVal ha2 _) = return (ha1 == ha2)
-structEq (FunVal i _ _) _ = throwRunTime ("Cannot perform structural equality on function: " ++ i)
-structEq _ (FunVal i _ _) = throwRunTime ("Cannot perform structural equality on function: " ++ i)
-structEq (ArrayVal {}) _ = throwRunTime "Cannot perform structural equality on array"
-structEq _ (ArrayVal {}) = throwRunTime "Cannot perform structural equality on array"
-structEq Undefined _ = throwRunTime "Cannot compare an undefined value"
-structEq _ Undefined = throwRunTime "Cannot compare an undefined value"
-structEq _ _ = throwRunTime "Cannot compare values of different types"
+        eqArgs (x:xs) (y:ys) = (&&) <$> structEq x y p <*> eqArgs xs ys
+structEq (RefVal ha1 _) (RefVal ha2 _) _ = return (ha1 == ha2)
+structEq (FunVal i _ _) _ p              = throwRunTimeAtPosn ("Cannot perform structural equality on function: " ++ i) p
+structEq _ (FunVal i _ _) p              = throwRunTimeAtPosn ("Cannot perform structural equality on function: " ++ i) p
+structEq (ArrayVal {}) _ p               = throwRunTimeAtPosn "Cannot perform structural equality on array" p
+structEq _ (ArrayVal {}) p               = throwRunTimeAtPosn "Cannot perform structural equality on array" p
+structEq Undefined _ p                   = throwRunTimeAtPosn "Cannot compare an undefined value" p
+structEq _ Undefined p                   = throwRunTimeAtPosn "Cannot compare an undefined value" p
+structEq _ _ p                           = throwRunTimeAtPosn "Cannot compare values of different types" p
 
-natEq :: Expr SemanticTag -> Expr SemanticTag -> Interpreter Bool
-natEq e1 e2 = do
+natEq :: Expr SemanticTag -> Expr SemanticTag -> AlexPosn -> Interpreter Bool
+natEq e1 e2 p = do
     v1 <- evalExpr e1
     v2 <- evalExpr e2
     case (v1, v2) of
         (ConstrVal _ ha1 _, ConstrVal _ ha2 _) -> return (ha1 == ha2)
-        _ -> structEq v1 v2
+        _ -> structEq v1 v2 p
 
-ordVal :: Value -> Value -> Interpreter Ordering
-ordVal (IntVal v1) (IntVal v2) = return (compare v1 v2)
-ordVal (FloatVal v1) (FloatVal v2) = return (compare v1 v2)
-ordVal (CharVal v1) (CharVal v2) = return (compare v1 v2)
-ordVal _ _ = throwRunTime "Can only compare terms of type int, float of char"
+ordVal :: Value -> Value -> AlexPosn -> Interpreter Ordering
+ordVal (IntVal v1) (IntVal v2) _     = return (compare v1 v2)
+ordVal (FloatVal v1) (FloatVal v2) _ = return (compare v1 v2)
+ordVal (CharVal v1) (CharVal v2) _   = return (compare v1 v2)
+ordVal _ _ p                         = throwRunTimeAtPosn "Can only compare terms of type int, float of char" p
 
 evalIntExpr :: Expr SemanticTag -> Interpreter Int
 evalIntExpr (Expr (IntCExpr n) _) = return n
@@ -412,7 +416,7 @@ evalIntExpr e = do
     v <- evalExpr e
     case v of
         IntVal n -> return n
-        _ -> throwRunTime ("Expected int value while evaluating expr: " ++ show e)
+        _ -> throwRunTimeAtPosn ("Expected int value while evaluating expr: " ++ show e) (posn . tag $ e)
 
 evalFloatExpr :: Expr SemanticTag -> Interpreter Float
 evalFloatExpr (Expr (FloatCExpr f) _) = return f
@@ -420,7 +424,7 @@ evalFloatExpr e = do
     v <- evalExpr e
     case v of
         FloatVal f -> return f
-        _ -> throwRunTime ("Expected float value while evaluating expr: " ++ show e)
+        _ -> throwRunTimeAtPosn ("Expected float value while evaluating expr: " ++ show e) (posn . tag $ e)
 
 evalBoolExpr :: Expr SemanticTag -> Interpreter Bool
 evalBoolExpr (Expr TrueCExpr _) = return True
@@ -429,7 +433,7 @@ evalBoolExpr e = do
     v <- evalExpr e
     case v of
         BoolVal b -> return b
-        _ -> throwRunTime ("Expected bool value while evaluating expr: " ++ show e)
+        _ -> throwRunTimeAtPosn ("Expected bool value while evaluating expr: " ++ show e) (posn . tag $ e)
 
 evalUnitExprCont :: Expr SemanticTag -> Interpreter a -> Interpreter a
 evalUnitExprCont (Expr UnitCExpr _) cont = cont
@@ -437,7 +441,7 @@ evalUnitExprCont e cont = do
     v <- evalExpr e
     case v of
         UnitVal -> cont
-        _ -> throwRunTime ("Expected unit value while evaluating expr: " ++ show e)
+        _ -> throwRunTimeAtPosn ("Expected unit value while evaluating expr: " ++ show e) (posn . tag $ e)
 
 evalCharExpr :: Expr SemanticTag -> Interpreter CharConstant
 evalCharExpr (Expr (CharCExpr c) _) = return c
@@ -445,7 +449,7 @@ evalCharExpr e = do
     v <- evalExpr e
     case v of
         CharVal c -> return c
-        _ -> throwRunTime ("Expected char value while evaluating expr: " ++ show e)
+        _ -> throwRunTimeAtPosn ("Expected char value while evaluating expr: " ++ show e) (posn . tag $ e)
 
 evalRefExpr :: Expr SemanticTag -> Interpreter (Int, IORef Value)
 evalRefExpr (NewType _ _) = do
@@ -453,16 +457,16 @@ evalRefExpr (NewType _ _) = do
     allocate ha
     r <- liftIO (newIORef Undefined)
     return (ha, r)
-evalRefExpr (Expr (ArrayAccess i dims) _) = do
+evalRefExpr (Expr (ArrayAccess i dims) t) = do
     vDims <- mapM evalIntExpr dims
     let cont (ArrayVal ds ha ar) _ = do
             unless (validDims ds vDims) $
-                throwRunTime ("Out of bounds access dimensions for array " ++ i)
+                throwRunTimeAtPosn ("Out of bounds access dimensions for array " ++ i) (posn t)
             memOffset <- convertOffset ds vDims
             case M.lookup memOffset ar of
                 Just x  -> return (ha + memOffset, x)
-                Nothing -> throwRunTime ("Unable to access offset " ++ show memOffset ++ " of array " ++ i)
-        cont _ _                = throwRunTime "Cannot array-access something that is not an array"
+                Nothing -> throwRunTimeAtPosn ("Unable to access offset " ++ show memOffset ++ " of array " ++ i) (posn t)
+        cont _ _                = throwRunTimeAtPosn "Cannot array-access something that is not an array" (posn t)
     fp <- getFramePointer
     findNameCont i fp cont where
         validDims [] []         = True
@@ -475,9 +479,9 @@ evalRefExpr (Expr (ArrayAccess i dims) _) = do
         convertOffset = aux (1 :: Int) where
             aux _ _ [] = return 0
             aux m (d:ds) (v:vs) = (v * m +) <$> aux (m * d) ds vs
-            aux _ [] (_:_) = throwRunTime "Failed to convert multi-dim offset to memory offset"
+            aux _ [] (_:_) = throwRunTimeAtPosn "Failed to convert multi-dim offset to memory offset" (posn t)
 evalRefExpr e = do
     v <- evalExpr e
     case v of
         RefVal ha r -> return (ha, r)
-        _ -> throwRunTime ("Expected ref value while evaluating expr: " ++ show e)
+        _ -> throwRunTimeAtPosn ("Expected ref value while evaluating expr: " ++ show e) (posn . tag $ e)

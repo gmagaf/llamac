@@ -37,6 +37,7 @@ data ActivationRecordF v =
 data RunTimeEnvF v = RunTimeEnv { frame_pointer :: ActivationRecordF v
                                 , heap_address :: Int
                                 , user_mallocs :: M.Map Int Bool
+                                , inputBuffer :: String
                                 }
     deriving (Show, Functor)
 

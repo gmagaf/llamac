@@ -10,7 +10,6 @@ import BackEnd.RunTimeLib
 
 -- Interpeter Utils module
 
--- TODO: initialize with all runtime functions when defined
 initInterpreterState :: ParserState -> Maybe String -> InterpreterState
 initInterpreterState p f =
     let global_frame = Activation
@@ -20,6 +19,9 @@ initInterpreterState p f =
                     , access_link = Nothing }
     in InterpreterState
     { parser_state = p
-    , run_time_env = RunTimeEnv { frame_pointer = global_frame, heap_address = 0, user_mallocs = M.empty }
+    , run_time_env = RunTimeEnv { frame_pointer = global_frame
+                                , heap_address = 0
+                                , user_mallocs = M.empty
+                                , inputBuffer = "" }
     , code_file = f
     }

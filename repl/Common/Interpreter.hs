@@ -55,6 +55,14 @@ isAllocated ha = do
 getCodeFile :: Interpreter (Maybe String)
 getCodeFile = code_file <$> lift get
 
+readFromBuffer :: Int -> Interpreter String
+readFromBuffer n = do
+    rt <- getRunTime
+    let b = inputBuffer rt
+    let (res, b') = splitAt n b
+    putRunTime rt{ inputBuffer = b' }
+    return res
+
 putRunTime :: RunTimeEnv -> Interpreter ()
 putRunTime recs = lift $ do
     s <- get
@@ -79,6 +87,12 @@ deallocate :: Int -> Interpreter ()
 deallocate ha = do
     rt <- getRunTime
     putRunTime rt{ user_mallocs = M.update (const (Just False)) ha (user_mallocs rt) }
+
+writeToBuffer :: String -> Interpreter ()
+writeToBuffer s = do
+    rt <- getRunTime
+    let b = inputBuffer rt
+    putRunTime rt{ inputBuffer = b ++ s }
 
 liftParser :: Parser a -> Interpreter a
 liftParser p = ExceptT (state f) where

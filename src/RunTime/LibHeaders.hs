@@ -55,7 +55,7 @@ incrLibSigs =
     , ("decr", ConstType (FunType (ConstType (RefType intConstType)) unitConstType), ["arg0"])
     ]
     
--- Incr/Decr
+-- Conversions
 convertLibSigs :: [RunTimeLibSib]
 convertLibSigs = 
     [ ("float_of_int", ConstType (FunType intConstType floatConstType), ["arg0"])

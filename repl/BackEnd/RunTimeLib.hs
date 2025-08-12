@@ -82,7 +82,7 @@ printChar [CharVal c] = do
 printChar args = throwRunTime ("Incorrect argument list " ++ show args ++ " passed for print_char")
 
 printString :: RunTimeLibComputation
-printString [ArrayVal _ _ m] = do
+printString [ArrayVal [_] _ m] = do
     let charRefs = map snd $ M.toAscList m
     let aux [] = throwRunTime "Cannot print a non null-terminated string"
         aux (CharVal '\0':_) = return ()

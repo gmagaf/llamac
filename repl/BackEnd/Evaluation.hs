@@ -7,6 +7,7 @@ import Control.Monad ((>=>), unless, foldM)
 
 import Common.Token (Identifier, CharConstant)
 import Common.AST
+import Lexer.Lexer (printPosn)
 import Semantics.Utils (SemanticTag (..))
 
 import Common.Value
@@ -102,11 +103,11 @@ finallyStack run = do
     catchRunTimeError run finally
 
 evalExpr :: Expr SemanticTag -> Interpreter Value
-evalExpr e@(Expr ef _) = finallyStack $ case ef of
+evalExpr e@(Expr ef t) = finallyStack $ case ef of
     IntCExpr _           -> IntVal <$> evalIntExpr e
     FloatCExpr _         -> FloatVal <$> evalFloatExpr e
     CharCExpr _          -> CharVal <$> evalCharExpr e
-    UnitCExpr            -> evalUnitExpr e >> return UnitVal
+    UnitCExpr            -> evalUnitExprCont e (return UnitVal)
     TrueCExpr            -> BoolVal <$> evalBoolExpr e
     FalseCExpr           -> BoolVal <$> evalBoolExpr e
     ConstExpr i          -> evalConst i
@@ -133,7 +134,7 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
     WhileExpr cond e1    -> loop where
         loop = do
             b <- evalBoolExpr cond
-            if b then evalUnitExpr e1 >> loop else return UnitVal
+            if b then evalUnitExprCont e1 loop else return UnitVal
     ForExpr i l u e1     -> do
         lv <- evalIntExpr l
         uv <- evalIntExpr u
@@ -146,9 +147,7 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
                                             , control_link = Just fp
                                             , access_link = Just fp }
                     putFramePointer record
-                    evalUnitExpr e1
-                    putFramePointer fp
-                    forLoop (index + 1)
+                    evalUnitExprCont e1 (putFramePointer fp >> forLoop (index + 1))
                 else return UnitVal
         forLoop lv
     ForDownExpr i u l e1 -> do
@@ -163,9 +162,7 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
                                             , control_link = Just fp
                                             , access_link = Just fp }
                     putFramePointer record
-                    evalUnitExpr e1
-                    putFramePointer fp
-                    forLoop (index - 1)
+                    evalUnitExprCont e1 (putFramePointer fp >> forLoop (index - 1))
                 else return UnitVal
         forLoop uv
     DeleteExpr u         -> do
@@ -187,9 +184,9 @@ evalExpr e@(Expr ef _) = finallyStack $ case ef of
             cont _ _               = throwRunTime "Cannot compute the dimension of something that is not an array"
         fp <- getFramePointer
         findNameCont ar fp cont where
-            aux _ n | n < 1 = throwRunTime "Cannot compute the dimension that is less than 1"
+            aux _ n | n < 1 = throwRunTime $ "Cannot compute the dimension that is less than 1 at " ++ printPosn (posn t)
             aux [] _        = throwRunTime $ "Array " ++ ar ++ " has less dimensions than " ++ show dim
-            aux [x] 1       = return (IntVal x)
+            aux (x:_) 1     = return (IntVal x)
             aux (_:ds) n    = aux ds (n - 1)
 evalExpr (LetIn l e _) = finallyStack $ do
     fp <- getFramePointer
@@ -364,8 +361,7 @@ evalBinOpExpr op e1 e2 = case op of
         v1 <- evalBoolExpr e1
         if v1 then return (BoolVal True) else BoolVal <$> evalBoolExpr e2
     SemicolonOp -> do
-        evalUnitExpr e1
-        evalExpr e2
+        evalUnitExprCont e1 (evalExpr e2)
     AssignMutableOp -> do
         (ha, r) <- evalRefExpr e1
         al <- isAllocated ha
@@ -435,12 +431,12 @@ evalBoolExpr e = do
         BoolVal b -> return b
         _ -> throwRunTime ("Expected bool value while evaluating expr: " ++ show e)
 
-evalUnitExpr :: Expr SemanticTag -> Interpreter ()
-evalUnitExpr (Expr UnitCExpr _) = return ()
-evalUnitExpr e = do
+evalUnitExprCont :: Expr SemanticTag -> Interpreter a -> Interpreter a
+evalUnitExprCont (Expr UnitCExpr _) cont = cont
+evalUnitExprCont e cont = do
     v <- evalExpr e
     case v of
-        UnitVal -> return ()
+        UnitVal -> cont
         _ -> throwRunTime ("Expected unit value while evaluating expr: " ++ show e)
 
 evalCharExpr :: Expr SemanticTag -> Interpreter CharConstant

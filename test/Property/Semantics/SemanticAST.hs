@@ -9,8 +9,14 @@ import Common.Token
 import Common.AST
 import Common.SymbolType
 import Semantics.Utils (hasDuplicates)
+
 import Property.Utils
 import Property.Lexer.ArbitraryTokens
+    ( arbIdWithLength,
+      arbConstrIdWithLength,
+      arbitraryIntConstant,
+      arbitraryFloatConstant,
+      arbitraryCharConstant )
 
 type Scope = M.Map String ConstType
 type TypeScope = S.Set String

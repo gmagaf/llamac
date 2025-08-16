@@ -15,7 +15,7 @@ listGen = vectorOf
 checkForSize :: (Gen a -> Property) -> Gen a -> Int -> IO Result
 checkForSize prop gen size = quickCheckResult . prop $ resize size gen
 
-checkForSizes :: (Int -> IO Result) -> [Int] -> IO ()
+checkForSizes :: (a -> IO Result) -> [a] -> IO ()
 checkForSizes _ [] = return ()
 checkForSizes t (x:xs) = do
   res <- t x

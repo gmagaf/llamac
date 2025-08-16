@@ -1,7 +1,13 @@
-module Property.Lexer.ArbitraryTokens (module Property.Lexer.ArbitraryTokens) where
+module Property.Lexer.ArbitraryTokens (arbIdWithLength, arbConstrIdWithLength,
+      arbitraryIdentifier, arbitraryConstrIdentifier, arbitraryIntConstant,
+      arbitraryFloatConstant, arbitraryCharConstant, arbitraryStringConstant,
+      arbTokens) where
 
 import Test.QuickCheck
+import Text.Read (readMaybe)
+
 import Common.Token
+
 import Property.Utils
 
 arbIdWithLength :: Int -> Gen Identifier
@@ -11,6 +17,116 @@ arbIdWithLength l = (:) <$> elements ['a'..'z'] <*> listGen (l - 1) g where
 arbConstrIdWithLength :: Int -> Gen Identifier
 arbConstrIdWithLength l = (:) <$> elements ['A'..'Z'] <*> listGen (l - 1) g where
   g = elements ('_':['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
+
+arbIntWithLength :: Gen String
+arbIntWithLength = sized $ \l -> listGen (max l 1) g where
+  g = elements ['0'..'9']
+
+arbFloatWithLength :: Gen String
+arbFloatWithLength = sized $ \l -> do
+  i <- resize (div l 3) arbIntWithLength
+  d <- resize (div l 3) arbIntWithLength
+  e <- elements ["e", "E"]
+  s <- elements ["", "+", "-"]
+  ex <- resize (div l 3) arbIntWithLength
+  let f = i ++ "." ++ d
+  let e' = e ++ s ++ ex
+  elements [f, f ++ e']
+
+arbCharUnQuoted :: Gen String
+arbCharUnQuoted = do
+  c <- arbitraryCharConstant
+  hex <- listGen 2 $ elements $ ['a'..'f'] ++ ['A'..'F'] ++ ['0'..'9']
+  special <- elements ["\\n", "\\t", "\\r", "\\0", "\\\\", "\\\'", "\\\"", "\\x" ++ hex]
+  elements [[c], special]
+
+arbChar :: Gen String
+arbChar = do
+  res <- arbCharUnQuoted
+  return $ "\'" ++ res ++ "\'"
+
+arbString :: Gen String
+arbString = sized $ \l -> do
+  cs <- listGen l arbCharUnQuoted
+  return $ "\"" ++ concat cs ++ "\""
+
+arbWhite :: Gen String
+arbWhite = sized $ \l -> listGen l (elements [' ', '\t', '\r', '\n'])
+
+arbComment :: Gen String
+arbComment = sized $ \l -> do
+  comment <- suchThat (listGen l arbCharUnQuoted) (not . aux . concat)
+  let oneLine = "--" ++ concat comment ++ "\n"
+  multiline <- mline l (concat comment)
+  elements [oneLine, multiline] where
+    aux [] = False
+    aux ('(':'*':_) = True
+    aux ('*':')':_) = True
+    aux (_:cs) = aux cs
+    mline l c | l <= 1 = return ("(* " ++ c ++ " *)")
+    mline l c          = do
+      inner <- mline (l - 1) c
+      return ("(* " ++ c ++ " " ++ inner ++ " " ++ c ++ " *)")
+
+arbKeyword :: Gen Token
+arbKeyword = elements [T_and, T_array, T_begin, T_bool, T_char,
+  T_delete, T_dim, T_do, T_done, T_downto, T_else, T_end, T_false,
+  T_float, T_for, T_if, T_in, T_int, T_let, T_match, T_mod, T_mutable,
+  T_new, T_not, T_of, T_rec, T_ref, T_then, T_to, T_true, T_type, T_unit,
+  T_while, T_with]
+
+arbOperator :: Gen Token
+arbOperator = elements [T_arrow, T_equals, T_bar, T_plus, T_minus,
+  T_times, T_div, T_plus_float, T_minus_float, T_times_float, T_div_float,
+  T_exp, T_bang, T_semicolon, T_and_op, T_or_op, T_not_equals, T_less_than,
+  T_greater_than, T_less_than_eq, T_greater_than_eq, T_nat_eq_op,
+  T_not_nat_eq_op, T_assign_mutable]
+
+arbSeparator :: Gen Token
+arbSeparator = elements [T_lparen, T_rparen, T_lbracket, T_rbracket,
+  T_comma, T_colon]
+
+arbTokenLexeme :: Gen (Token, String)
+arbTokenLexeme = sized $ \l -> do
+  i <- arbIdWithLength l
+  let ip = (T_id i, i)
+  ci <- arbConstrIdWithLength l
+  let cip = (T_id_constr ci, ci)
+  n <- resize l arbIntWithLength
+  let np = case readMaybe n :: Maybe IntConstant of
+        Just nv -> (T_const_int nv, n)
+        _       -> error $ "Failed to parse int: " ++ n
+  f <- resize l arbFloatWithLength
+  let fp = case readMaybe f :: Maybe FloatConstant of
+        Just fv -> (T_const_float fv, f)
+        _       -> error $ "Failed to parse float: " ++ f
+  c <- resize l arbChar
+  let cp = case readMaybe c :: Maybe CharConstant of
+        Just cv -> (T_const_char cv, c)
+        _       -> error $ "Failed to parse char: " ++ c
+  s <- resize l arbString
+  let sp = case readMaybe s :: Maybe StringConstant of
+        Just sv -> (T_const_string sv, s)
+        _       -> error $ "Failed to parse string: " ++ s
+  k <- arbKeyword
+  let kp = (k, show k)
+  o <- arbOperator
+  let op = (o, show o)
+  sep <- arbSeparator
+  let sepp = (sep, show sep)
+  elements [ip, cip, np, fp, cp, sp, kp, op, sepp]
+
+arbTokens :: Int -> Gen ([Token], String)
+arbTokens l = do
+  (ts, s) <- aux ([T_eof], id) l
+  return (ts, s "") where
+    aux :: ([Token], String -> String) -> Int -> Gen ([Token], String -> String)
+    aux (acc, f) 0 = return (acc, f)
+    aux (acc, f) n = do
+      (t, lexeme) <- arbTokenLexeme
+      wh <- oneof [arbWhite, arbComment]
+      let sep = if last lexeme == '-' && head wh == '-' then " " else ""
+      aux (t:acc, showString lexeme . showString (sep ++ wh) . f) (n - 1)
 
 -- Some arbitrary names and constants from a predefined set
 
@@ -27,7 +143,7 @@ arbitraryFloatConstant :: Gen FloatConstant
 arbitraryFloatConstant = elements [0.0, 2.56, 3.14, 0.420e+2, 42000.0e-3]
 
 arbitraryCharConstant :: Gen CharConstant
-arbitraryCharConstant = elements ['a', '7', '\n', '\"', '\xE9']
+arbitraryCharConstant = elements [c | c <- ['!'..'~'], c /= '\"', c /= '\'', c /= '\\' ]
 
 arbitraryStringConstant :: Gen StringConstant
-arbitraryStringConstant = elements ["foo", "bar", "Route66", "Name:\\t\\\"DouglasAdams\\\"\\nValue:\\t42\\n"]
+arbitraryStringConstant = elements ["foo", "bar", "Route66"]

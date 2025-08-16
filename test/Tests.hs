@@ -2,7 +2,7 @@ module Main (main) where
 
 import Unit.Unit (testParserGuidedSuite, testParserSuite, testSemGuidedSuite, testSemSuite)
 import Property.Utils (checkForSizes)
-import Property.Property (checkParsedPrettyAST, checkSemTypesAST, checkSemScopesAST)
+import Property.Property (checkLexer, checkParsedPrettyAST, checkSemTypesAST, checkSemScopesAST)
 
 main :: IO ()
 main = do
@@ -14,6 +14,7 @@ main = do
   testParserGuidedSuite
   testSemGuidedSuite
   putStrLn "Starting property based testing using QuickCheck"
+  checkForSizes (uncurry checkLexer) [(s, floor (logBase (2 :: Double) (fromIntegral s)):: Int) | s <- sizes, s > 0, s < 1000]
   checkForSizes checkParsedPrettyAST sizes
   checkForSizes checkSemTypesAST sizes
   checkForSizes checkSemScopesAST sizes

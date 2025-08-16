@@ -1,10 +1,18 @@
 module Property.Parser.ArbitraryAST (arbitraryAST, ArbPosn(..)) where
 
+import Test.QuickCheck
+
 import Common.AST
 import Lexer.Lexer (AlexPosn(..))
-import Test.QuickCheck
+
 import Property.Utils
 import Property.Lexer.ArbitraryTokens
+    ( arbitraryIdentifier,
+      arbitraryConstrIdentifier,
+      arbitraryIntConstant,
+      arbitraryFloatConstant,
+      arbitraryCharConstant,
+      arbitraryStringConstant )
 
 -- This module defines a generator for syntactically correct
 -- programs.

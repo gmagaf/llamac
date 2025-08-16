@@ -1,4 +1,5 @@
-module Property.Property (checkParsedPrettyAST,
+module Property.Property (checkLexer,
+                          checkParsedPrettyAST,
                           checkSemTypesAST,
                           checkSemScopesAST) where
 
@@ -11,11 +12,29 @@ import Parser.ParserState (initParserState)
 import Parser.ParserM (evalParser)
 import Semantics.Utils (SemanticTag(..))
 import Semantics.Semantics (analyzeAST)
+
 import Property.Utils (checkForSize)
 import Property.Parser.ArbitraryAST (arbitraryAST, ArbPosn (arb_posn))
 import Property.Semantics.SemanticAST (semanticTypesAST, semanticScopesAST)
+import Common.Token (Token)
+import Lexer.Lexer (lexer)
+import Property.Lexer.ArbitraryTokens (arbTokens)
 
 -- This module defines the desired test properties and tests
+
+-- Lexer tests
+scannedTokensIsTokens :: Gen ([Token], String) -> Property
+scannedTokensIsTokens gen =
+  forAll gen (\(ts, input) ->
+    let res = lexer input
+    in case res of
+        Right resTs -> ts == resTs
+        Left  _     -> False)
+
+checkLexer :: Int -> Int -> IO Result
+checkLexer l n = do
+  putStrLn $ "Testing property (lexer . show Token == Token) for " ++ show l ++ " tokens of size: " ++ show n
+  checkForSize scannedTokensIsTokens (arbTokens l :: Gen ([Token], String)) n
 
 -- Parser tests
 removeASTtags :: AST b -> AST ()

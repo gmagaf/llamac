@@ -111,7 +111,7 @@ evalExpr e@(Expr ef t) = finallyStack $ case ef of
     IntCExpr _           -> IntVal <$> evalIntExpr e
     FloatCExpr _         -> FloatVal <$> evalFloatExpr e
     CharCExpr _          -> CharVal <$> evalCharExpr e
-    UnitCExpr            -> evalUnitExprCont e (return UnitVal)
+    UnitCExpr            -> evalUnitExpr e >> return UnitVal
     TrueCExpr            -> BoolVal <$> evalBoolExpr e
     FalseCExpr           -> BoolVal <$> evalBoolExpr e
     ConstExpr i          -> evalConst i
@@ -138,7 +138,7 @@ evalExpr e@(Expr ef t) = finallyStack $ case ef of
     WhileExpr cond e1    -> loop where
         loop = do
             b <- evalBoolExpr cond
-            if b then evalUnitExprCont e1 loop else return UnitVal
+            if b then evalUnitExpr e1 >> loop else return UnitVal
     ForExpr i l u e1     -> do
         lv <- evalIntExpr l
         uv <- evalIntExpr u
@@ -151,7 +151,9 @@ evalExpr e@(Expr ef t) = finallyStack $ case ef of
                                             , control_link = Just fp
                                             , access_link = Just fp }
                     putFramePointer record
-                    evalUnitExprCont e1 (putFramePointer fp >> forLoop (index + 1))
+                    evalUnitExpr e1
+                    putFramePointer fp
+                    forLoop (index + 1)
                 else return UnitVal
         forLoop lv
     ForDownExpr i u l e1 -> do
@@ -166,7 +168,9 @@ evalExpr e@(Expr ef t) = finallyStack $ case ef of
                                             , control_link = Just fp
                                             , access_link = Just fp }
                     putFramePointer record
-                    evalUnitExprCont e1 (putFramePointer fp >> forLoop (index - 1))
+                    evalUnitExpr e1
+                    putFramePointer fp
+                    forLoop (index - 1)
                 else return UnitVal
         forLoop uv
     DeleteExpr u         -> do
@@ -365,7 +369,8 @@ evalBinOpExpr op e1 e2 p = case op of
         v1 <- evalBoolExpr e1
         if v1 then return (BoolVal True) else BoolVal <$> evalBoolExpr e2
     SemicolonOp -> do
-        evalUnitExprCont e1 (evalExpr e2)
+        evalUnitExpr e1
+        evalExpr e2
     AssignMutableOp -> do
         (ha, r) <- evalRefExpr e1
         al <- isAllocated ha
@@ -435,12 +440,12 @@ evalBoolExpr e = do
         BoolVal b -> return b
         _ -> throwRunTimeAtPosn ("Expected bool value while evaluating expr: " ++ show e) (posn . tag $ e)
 
-evalUnitExprCont :: Expr SemanticTag -> Interpreter a -> Interpreter a
-evalUnitExprCont (Expr UnitCExpr _) cont = cont
-evalUnitExprCont e cont = do
+evalUnitExpr :: Expr SemanticTag -> Interpreter ()
+evalUnitExpr (Expr UnitCExpr _) = return ()
+evalUnitExpr e = do
     v <- evalExpr e
     case v of
-        UnitVal -> cont
+        UnitVal -> return ()
         _ -> throwRunTimeAtPosn ("Expected unit value while evaluating expr: " ++ show e) (posn . tag $ e)
 
 evalCharExpr :: Expr SemanticTag -> Interpreter CharConstant

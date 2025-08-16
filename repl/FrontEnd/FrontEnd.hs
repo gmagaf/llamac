@@ -98,8 +98,11 @@ initRepl f = do
     let initState = initInterpreterState (initParserState input) f
     let catchError err = liftIO (print err >> putStrLn "Failed to load file")
     let fileInterpeter = catchRunTimeError parseAnalyzeRun catchError
-    _ <- evalInterpreter initState (fileInterpeter >> repl)
-    return ()
+    res <- evalInterpreter initState (fileInterpeter >> repl)
+    case res of
+        Left err -> print err
+        _        -> return ()
+    putStrLn "Bye!"
 
 -- The actual repl implementation
 repl :: Interpreter ()

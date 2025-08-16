@@ -7,6 +7,7 @@ import qualified Data.Map as M
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Data.IORef (IORef, readIORef, writeIORef)
+import System.IO(hFlush, stdout)
 
 import RunTime.LibHeaders (libSigs)
 import Common.Token (IntConstant, CharConstant, FloatConstant, StringConstant)
@@ -59,6 +60,7 @@ implementions = [("print_int", printInt)
 printInt :: RunTimeLibComputation
 printInt [IntVal n] = do
     liftIO . putStr . show $ n
+    liftIO (hFlush stdout)
     return UnitVal
 printInt args = throwRunTime ("Incorrect argument list " ++ show args ++ " passed for print_int")
 
@@ -66,18 +68,21 @@ printBool :: RunTimeLibComputation
 printBool [BoolVal v] = do
     let s = if v then "true" else "false"
     liftIO (putStr s)
+    liftIO (hFlush stdout)
     return UnitVal
 printBool args = throwRunTime ("Incorrect argument list " ++ show args ++ " passed for print_bool")
 
 printFloat :: RunTimeLibComputation
 printFloat [FloatVal v] = do
     liftIO . putStr . show $ v
+    liftIO (hFlush stdout)
     return UnitVal
 printFloat args = throwRunTime ("Incorrect argument list " ++ show args ++ " passed for print_float")
 
 printChar :: RunTimeLibComputation
 printChar [CharVal c] = do
     liftIO (putChar c)
+    liftIO (hFlush stdout)
     return UnitVal
 printChar args = throwRunTime ("Incorrect argument list " ++ show args ++ " passed for print_char")
 
@@ -85,11 +90,15 @@ printString :: RunTimeLibComputation
 printString [ArrayVal [_] _ m] = do
     let charRefs = map snd $ M.toAscList m
     let aux [] = throwRunTime "Cannot print a non null-terminated string"
-        aux (CharVal '\0':_) = return ()
-        aux (c:cs) = printChar [c] >> aux cs
+        aux (CharVal '\0':_) = do
+            liftIO (hFlush stdout) 
+            return UnitVal
+        aux (CharVal c:cs) = do
+            v <- liftIO (putChar c)
+            seq v $ aux cs
+        aux (_:_) = throwRunTime "Incorrect non-char value in string"
     chars <- mapM (liftIO . readIORef) charRefs
     aux chars
-    return UnitVal
 printString args = throwRunTime ("Incorrect argument list " ++ show args ++ " passed for print_string")
 
 readInt :: RunTimeLibComputation

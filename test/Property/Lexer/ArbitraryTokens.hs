@@ -5,6 +5,7 @@ module Property.Lexer.ArbitraryTokens (arbIdWithLength, arbConstrIdWithLength,
 
 import Test.QuickCheck
 import Text.Read (readMaybe)
+import Data.Char (chr, isHexDigit, ord)
 
 import Common.Token
 
@@ -38,29 +39,54 @@ arbFloatWithLength = sized $ \l -> do
   let e' = e ++ s ++ ex
   elements [f, f ++ e']
 
-arbCharUnQuoted :: Gen String
+-- TODO: check what's up with "\xcaC36f"
+hexToInt :: Char -> Maybe Int
+hexToInt c = let o = ord c in case isHexDigit c of
+  False -> Nothing
+  True | 48 <= o && o <= 57  -> Just (o - 48)
+  True | 65 <= o && o <= 70  -> Just (o - 55)
+  True | 97 <= o && o <= 102 -> Just (o - 87)
+  _ -> Nothing
+
+parseHex :: String -> Maybe Int
+parseHex = aux (0 :: Integer) . reverse where
+  aux _ []  = Nothing
+  aux n [c] = ((16 ^ n) *) <$> hexToInt c
+  aux n (c:cs) = do
+    cv <- hexToInt c
+    csv <- aux (n + 1) cs
+    return ((16 ^ n) * cv + csv)
+
+arbCharUnQuoted :: Gen (Char, String)
 arbCharUnQuoted = do
   c <- arbitraryCharConstant
-  hex <- listGen 2 $ elements $ ['a'..'f'] ++ ['A'..'F'] ++ ['0'..'9']
-  special <- elements ["\\n", "\\t", "\\r", "\\0", "\\\\", "\\\'", "\\\"", "\\x" ++ hex]
-  elements [[c], special]
+  hex1 <- elements ['0'..'7']
+  hex0 <- elements $ ['a'..'f'] ++ ['A'..'F'] ++ ['0'..'9']
+  let hex = hex1:hex0:""
+  let hexV = case parseHex hex of
+        Just n -> n
+        _      -> error $ "Failed to generate char value for hex code: " ++ hex
+  special <- elements [('\n', "\\n"), ('\t', "\\t"), ('\r', "\\r"),
+    ('\0', "\\0"), ('\\', "\\\\"), ('\'', "\\\'"), ('\"', "\\\""), (chr hexV, "\\x" ++ hex)]
+  elements [(c, c:""), special]
 
-arbChar :: Gen String
+arbChar :: Gen (Char, String)
 arbChar = do
-  res <- arbCharUnQuoted
-  return $ "\'" ++ res ++ "\'"
+  (res, lexeme) <- arbCharUnQuoted
+  return (res, "\'" ++ lexeme ++ "\'")
 
-arbString :: Gen String
+arbString :: Gen (String, String)
 arbString = sized $ \l -> do
-  cs <- listGen l arbCharUnQuoted
-  return $ "\"" ++ concat cs ++ "\""
+  chars <- listGen l arbCharUnQuoted
+  let (res, lexeme) = foldl (\(cs, ls) (c, lx) -> (c:cs, lx++ls)) ("", []) chars
+  return (res, "\"" ++ lexeme ++ "\"")
 
 arbWhite :: Gen String
 arbWhite = sized $ \l -> listGen l (elements [' ', '\t', '\r', '\n'])
 
 arbComment :: Gen String
 arbComment = sized $ \l -> do
-  comment <- suchThat (listGen l arbCharUnQuoted) (not . aux . concat)
+  comment <- suchThat (map snd <$> listGen l arbCharUnQuoted) (not . aux . concat)
   let oneLine = "--" ++ concat comment ++ "\n"
   multiline <- mline l (concat comment)
   elements [oneLine, multiline] where
@@ -105,14 +131,10 @@ arbTokenLexeme = sized $ \l -> do
   let fp = case readMaybe f :: Maybe FloatConstant of
         Just fv -> (T_const_float fv, f)
         _       -> error $ "Failed to parse float: " ++ f
-  c <- resize l arbChar
-  let cp = case readMaybe c :: Maybe CharConstant of
-        Just cv -> (T_const_char cv, c)
-        _       -> error $ "Failed to parse char: " ++ c
-  s <- resize l arbString
-  let sp = case readMaybe s :: Maybe StringConstant of
-        Just sv -> (T_const_string sv, s)
-        _       -> error $ "Failed to parse string: " ++ s
+  (c, cLex) <- resize l arbChar
+  let cp = (T_const_char c, cLex)
+  (s, sLex) <- resize l arbString
+  let sp = (T_const_string s, sLex)
   k <- arbKeyword
   let kp = (k, show k)
   o <- arbOperator

@@ -5,9 +5,10 @@ module Property.Lexer.ArbitraryTokens (arbIdWithLength, arbConstrIdWithLength,
 
 import Test.QuickCheck
 import Text.Read (readMaybe)
-import Data.Char (chr, isHexDigit, ord)
+import Data.Char (chr)
 
 import Common.Token
+import Lexer.Lexer (parseHex)
 
 import Property.Utils
 
@@ -38,24 +39,6 @@ arbFloatWithLength = sized $ \l -> do
   let f = i ++ "." ++ d
   let e' = e ++ s ++ ex
   elements [f, f ++ e']
-
--- TODO: check what's up with "\xcaC36f"
-hexToInt :: Char -> Maybe Int
-hexToInt c = let o = ord c in case isHexDigit c of
-  False -> Nothing
-  True | 48 <= o && o <= 57  -> Just (o - 48)
-  True | 65 <= o && o <= 70  -> Just (o - 55)
-  True | 97 <= o && o <= 102 -> Just (o - 87)
-  _ -> Nothing
-
-parseHex :: String -> Maybe Int
-parseHex = aux (0 :: Integer) . reverse where
-  aux _ []  = Nothing
-  aux n [c] = ((16 ^ n) *) <$> hexToInt c
-  aux n (c:cs) = do
-    cv <- hexToInt c
-    csv <- aux (n + 1) cs
-    return ((16 ^ n) * cv + csv)
 
 arbCharUnQuoted :: Gen (Char, String)
 arbCharUnQuoted = do

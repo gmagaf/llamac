@@ -2,10 +2,11 @@
 module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
                     alexStartPos, alexInitUserState, alexMonadScan,
                     printPosn, tokenPosnOfAlexState,
-                    lexer, lexerLine, scanFile) where
+                    lexer, lexerLine, scanFile, parseHex) where
 
 import Common.Token (Token(..))
 import Text.Read (readMaybe)
+import Data.Char (chr, isHexDigit)
 import Control.Monad (when)
 -- import Debug.Trace (trace)
 }
@@ -93,7 +94,10 @@ rules :-
   <0> $digits+                                  { intAction }
   <0> $digits+\.$digits+([eE][\+\-]?$digits+)?  { floatAction }
   <0> \'([^\\\']|@escape)\'                     { charAction }
-  <0> \"([^\\\"]|@escape)*\"                    { stringAction }
+  -- <0> \"([^\\\"]|@escape)*\"                    { stringAction }
+  <0> \"                                        { beginString }
+  <stringCode> \"                               { endString }
+  <stringCode> ([^\\\"]|@escape)                { stringAction }
   <0> $white+                                   { skip }
   <0> \-\-.*                                    { skip }                           -- one line comment
   <0> "(*"                                      { beginComment }                   -- support for multiline nested comments
@@ -101,15 +105,19 @@ rules :-
   <comment> "*)"                                { endComment }
   <comment> "*"|\(|$white                       { skip }
   <comment> [^\*\($white]+                      { skip }
-  <0,comment> .                                 { unknownCharacter }               -- throw error when finding anything else
+  <0,stringCode,comment> .                      { unknownCharacter }               -- throw error when finding anything else
 
 {
 
--- User state to hold comment depth and the position of the read token
-data AlexUserState = AlexUserState {commentDepth :: Int, tokenPosn :: AlexPosn}
+-- User state to hold comment depth, scanned chars of
+-- a string and the position of the read token
+data AlexUserState = AlexUserState { commentDepth :: Int
+                                   , tokenPosn :: AlexPosn
+                                   , readChars :: [Char]
+                                   }
 
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState {commentDepth = 0, tokenPosn = AlexPn 0 0 0}
+alexInitUserState = AlexUserState {commentDepth = 0, tokenPosn = AlexPn 0 0 0, readChars = []}
 
 getCommentDepth :: Alex Int
 getCommentDepth = commentDepth <$> alexGetUserState
@@ -126,6 +134,19 @@ setTokenPosn :: AlexPosn -> Alex ()
 setTokenPosn p = do
   state <- alexGetUserState
   alexSetUserState $ state{tokenPosn = p}
+
+getReadChars :: Alex [Char]
+getReadChars = readChars <$> alexGetUserState
+
+setReadChars :: [Char] -> Alex ()
+setReadChars r = do
+  state <- alexGetUserState
+  alexSetUserState $ state{readChars = r}
+
+appendChar :: Char -> Alex ()
+appendChar c = do
+  state <- alexGetUserState
+  alexSetUserState $ state{readChars = c : readChars state}
 
 -- Utils for position
 getLineOfPosn :: AlexPosn -> Int
@@ -187,6 +208,49 @@ floatAction (posn, _, _, current_string) len =
       return (T_const_float v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a float")
 
+-- Char/String handling
+beginString :: AlexAction Token
+beginString input@(posn, _, _, _) len = do
+  code <- alexGetStartCode
+  case code of
+    0 -> do
+      alexSetStartCode stringCode
+      setReadChars ""
+      setTokenPosn posn
+    c -> lexicalError posn ("Unexpected startCode: " ++ show c ++ " in beginString")
+  skip input len
+
+endString :: AlexAction Token
+endString (posn, _, _, _) _ = do
+  code <- alexGetStartCode
+  case code of
+    2 -> do
+      alexSetStartCode 0
+      chars <- reverse <$> getReadChars
+      return (T_const_string chars)
+    c -> lexicalError posn ("Unexpected startCode: " ++ show c ++ " in endString")
+
+stringAction :: AlexAction Token
+stringAction input@(posn, _, _, current_string) len =
+  let lexeme = (take len current_string)
+      finalChar = parseCharLexeme lexeme
+  in case finalChar of
+      Just c  -> do
+        appendChar c
+        skip input len
+      Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char of a string")
+
+charAction :: AlexAction Token
+charAction (posn, _, _, current_string) len =
+  let lexeme = (take len current_string)
+      finalChar = removeFromHead '\'' lexeme >>= removeFromTail '\'' >>= parseCharLexeme
+  in case finalChar :: Maybe Char of
+    Just ch -> do
+      setTokenPosn posn
+      return (T_const_char ch)
+    _ -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char")
+
+-- Utils for chars
 removeFromHead :: (Eq a) => a -> [a] -> Maybe [a]
 removeFromHead _ [] = Nothing
 removeFromHead a (x:xs) | a == x    = Just xs
@@ -198,23 +262,37 @@ removeFromTail a (x:[]) | a == x    = Just []
                         | otherwise = Nothing
 removeFromTail a (x:xs) = (x:) <$> removeFromTail a xs
 
-stringAction :: AlexAction Token
-stringAction (posn, _, _, current_string) len =
-  let lexeme = (take len current_string)
-  in case readMaybe lexeme :: Maybe String of
-    Just str -> do
-      setTokenPosn posn
-      return (T_const_string str)
-    Nothing  -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a string")
+hexToInt :: Char -> Maybe Int
+hexToInt c =
+  let o = ord c
+  in case isHexDigit c of
+    False -> Nothing
+    True | ord '0' <= o && o <= ord '9' -> Just (o - ord '0')
+    True | ord 'A' <= o && o <= ord 'F' -> Just (o - ord 'A')
+    True | ord 'a' <= o && o <= ord 'f' -> Just (o - ord 'a')
+    _ -> Nothing
 
-charAction :: AlexAction Token
-charAction (posn, _, _, current_string) len =
-  let lexeme = (take len current_string)
-  in case readMaybe lexeme :: Maybe Char of
-    Just ch -> do
-      setTokenPosn posn
-      return (T_const_char ch)
-    _ -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char")
+parseHex :: String -> Maybe Int
+parseHex = aux (0 :: Integer) . reverse where
+  aux _ []     = Nothing
+  aux n [c]    = ((16 ^ n) *) <$> hexToInt c
+  aux n (c:cs) = do
+    cv <- hexToInt c
+    csv <- aux (n + 1) cs
+    return ((16 ^ n) * cv + csv)
+
+parseCharLexeme :: String -> Maybe Char
+parseCharLexeme s = case s of
+  [c]    -> Just c
+  "\\n"  -> Just '\n'
+  "\\t"  -> Just '\t'
+  "\\r"  -> Just '\r'
+  "\\0"  -> Just '\0'
+  "\\\\" -> Just '\\'
+  "\\\'" -> Just '\''
+  "\\\"" -> Just '\"'
+  '\\':'x':hex1:hex0:"" | ord '0' <= ord hex1 && ord hex1 <= ord '7' -> chr <$> parseHex (hex1:hex0:"")
+  _      -> Nothing
 
 -- Comments utils
 beginComment :: AlexAction Token

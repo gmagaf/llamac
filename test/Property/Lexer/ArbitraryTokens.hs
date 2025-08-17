@@ -11,8 +11,13 @@ import Common.Token
 import Property.Utils
 
 arbIdWithLength :: Int -> Gen Identifier
-arbIdWithLength l = (:) <$> elements ['a'..'z'] <*> listGen (l - 1) g where
+arbIdWithLength l = suchThat ((:) <$> elements ['a'..'z'] <*> listGen (l - 1) g) (`notElem` keywords) where
   g = elements ('_':['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
+  keywords = map show [T_and, T_array, T_begin, T_bool, T_char,
+    T_delete, T_dim, T_do, T_done, T_downto, T_else, T_end, T_false,
+    T_float, T_for, T_if, T_in, T_int, T_let, T_match, T_mod, T_mutable,
+    T_new, T_not, T_of, T_rec, T_ref, T_then, T_to, T_true, T_type, T_unit,
+    T_while, T_with]
 
 arbConstrIdWithLength :: Int -> Gen Identifier
 arbConstrIdWithLength l = (:) <$> elements ['A'..'Z'] <*> listGen (l - 1) g where

@@ -96,8 +96,8 @@ rules :-
   <0> \'([^\\\']|@escape)\'                     { charAction }
   -- <0> \"([^\\\"]|@escape)*\"                    { stringAction }
   <0> \"                                        { beginString }
-  <stringCode> \"                               { endString }
-  <stringCode> ([^\\\"]|@escape)                { stringAction }
+  <string> \"                                   { endString }
+  <string> ([^\\\"]|@escape)                    { stringAction }
   <0> $white+                                   { skip }
   <0> \-\-.*                                    { skip }                           -- one line comment
   <0> "(*"                                      { beginComment }                   -- support for multiline nested comments
@@ -105,7 +105,7 @@ rules :-
   <comment> "*)"                                { endComment }
   <comment> "*"|\(|$white                       { skip }
   <comment> [^\*\($white]+                      { skip }
-  <0,stringCode,comment> .                      { unknownCharacter }               -- throw error when finding anything else
+  <0,string,comment> .                          { unknownCharacter }               -- throw error when finding anything else
 
 {
 
@@ -214,7 +214,7 @@ beginString input@(posn, _, _, _) len = do
   code <- alexGetStartCode
   case code of
     0 -> do
-      alexSetStartCode stringCode
+      alexSetStartCode string
       setReadChars ""
       setTokenPosn posn
     c -> lexicalError posn ("Unexpected startCode: " ++ show c ++ " in beginString")
@@ -223,12 +223,12 @@ beginString input@(posn, _, _, _) len = do
 endString :: AlexAction Token
 endString (posn, _, _, _) _ = do
   code <- alexGetStartCode
-  case code of
-    2 -> do
+  if code == string
+    then do
       alexSetStartCode 0
       chars <- reverse <$> getReadChars
       return (T_const_string chars)
-    c -> lexicalError posn ("Unexpected startCode: " ++ show c ++ " in endString")
+    else lexicalError posn ("Unexpected startCode: " ++ show code ++ " in endString")
 
 stringAction :: AlexAction Token
 stringAction input@(posn, _, _, current_string) len =

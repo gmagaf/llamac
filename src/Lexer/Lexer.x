@@ -6,7 +6,7 @@ module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
 
 import Common.Token (Token(..))
 import Text.Read (readMaybe)
-import Data.Char (chr, isHexDigit)
+import Data.Char (chr, isHexDigit, ord)
 import Control.Monad (when)
 -- import Debug.Trace (trace)
 }

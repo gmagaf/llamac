@@ -2,12 +2,9 @@ module Common.Interpreter (module Common.Interpreter) where
 
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
-import Control.Monad.Trans.Class (MonadTrans(lift))
-import Control.Monad.Trans.Except (ExceptT(ExceptT), runExceptT, throwE, catchE)
-import Control.Monad.Trans.State (StateT(runStateT), get, put, runState, state, evalStateT)
 
 import Lexer.Lexer (AlexPosn, printPosn)
-import Parser.ParserM (Parser, ParserT)
+import Parser.ParserM (Parser, ParserT(..), pureParserT, get, put, runParser, run, eval, throw, catch)
 import Parser.ParserState (ParserState)
 
 import Common.RunTimeEnv
@@ -28,7 +25,7 @@ data InterpreterState = InterpreterState
     } deriving Show
 
 getRunTime :: Interpreter RunTimeEnv
-getRunTime = run_time_env <$> lift get
+getRunTime = run_time_env <$> get
 
 getFramePointer :: Interpreter ActivationRecord
 getFramePointer = frame_pointer <$> getRunTime
@@ -54,7 +51,7 @@ isAllocated ha = do
     return (fromMaybe True alloc) -- if it is not allocated from the user we assume it is allocated by the system
 
 getCodeFile :: Interpreter (Maybe String)
-getCodeFile = code_file <$> lift get
+getCodeFile = code_file <$> get
 
 readFromBuffer :: Int -> Interpreter String
 readFromBuffer n = do
@@ -65,7 +62,7 @@ readFromBuffer n = do
     return res
 
 putRunTime :: RunTimeEnv -> Interpreter ()
-putRunTime recs = lift $ do
+putRunTime recs = do
     s <- get
     put s{run_time_env = recs}
 
@@ -75,7 +72,7 @@ putFramePointer r = do
     putRunTime rt{frame_pointer = r}
 
 putCodeFile :: Maybe String -> Interpreter ()
-putCodeFile f = lift $ do
+putCodeFile f = do
     s <- get
     put s{code_file = f}
 
@@ -96,24 +93,24 @@ writeToBuffer s = do
     putRunTime rt{ inputBuffer = b ++ s }
 
 liftParser :: Parser a -> Interpreter a
-liftParser p = ExceptT (state f) where
-    f s = let (res, ps) = runState (runExceptT p) (parser_state s)
+liftParser p = pureParserT f where
+    f s = let (res, ps) = runParser (parser_state s) p
           in (either (Left . ParserError. show) Right res, s{parser_state = ps})
 
 throwRunTimeError :: RunTimeError -> Interpreter a
-throwRunTimeError = throwE
+throwRunTimeError = throw
 
 throwRunTime :: String -> Interpreter a
-throwRunTime = throwE . RunTimeError
+throwRunTime = throw . RunTimeError
 
 throwRunTimeAtPosn :: String -> AlexPosn -> Interpreter a
 throwRunTimeAtPosn s p = throwRunTime (s ++ " at " ++ printPosn p)
 
 catchRunTimeError :: Interpreter a -> (RunTimeError -> Interpreter a) -> Interpreter a
-catchRunTimeError = catchE
+catchRunTimeError i f = catch f i
 
 runInterpreter :: InterpreterState -> Interpreter a -> IO (Either RunTimeError a, InterpreterState)
-runInterpreter s i = runStateT (runExceptT i) s
+runInterpreter = run
 
 evalInterpreter :: InterpreterState -> Interpreter a -> IO (Either RunTimeError a)
-evalInterpreter s i = evalStateT (runExceptT i) s
+evalInterpreter = eval

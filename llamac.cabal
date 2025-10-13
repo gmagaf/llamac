@@ -43,6 +43,7 @@ library
                       RunTime.LibHeaders
   build-depends:      base >= 4.7 && < 5,
                       array >= 0.4 && < 0.6,
+                      mtl >= 2.2,
                       transformers >= 0.5,
                       containers >= 0.4,
                       bytestring >= 0.10 && < 0.11,

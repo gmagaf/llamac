@@ -17,7 +17,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-19.33
+resolver: ghc-9.0.2
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -42,18 +42,61 @@ packages:
 # extra-deps: []
 
 extra-deps:
+## LLVM related dependencies
 - llvm-hs-pure-9.0.0
+# needs the following
+- unordered-containers-0.2.17.0
+- hashable-1.3.5.0
+- attoparsec-0.14.4
+- scientific-0.3.7.0
+- integer-logarithms-1.0.3.1
+- primitive-0.7.3.0
+- fail-4.9.0.0
+# # llvm-hs-9.0.1.1 # TODO: May be useful later
+# - git: git@github.com:llvm-hs/llvm-hs.git
+#   subdirs:
+#   - llvm-hs
+#   commit: 47ed4d900aaa8ed2b74726cfc2eeeeb029a1f165
+# # needs the following
+# - utf8-string-1.0.2
 # llvm-hs-pretty-0.9.0.0 from gihub
 # We need the specific commit to be able to compile with latter versions of GHC
 - git: https://github.com/llvm-hs/llvm-hs-pretty.git
   commit: 'f6d5a752965bb0f72a9273cd09e7cf14bb1ab5de'
-- alex-3.5.4.0@sha256:38b3481bb0d5eb58c9dd6579e7904859372c3c0c82a8db86e58177649c289621,4546
-- pretty-simple-4.1.3.0@sha256:560989fdbbff12aa1c93d4c2b03bed06ee9b364088015c0ecd609106c71df109,3588
-- data-array-byte-0.1.0.1@sha256:0cf2a0543fb7003e0389c92840ee6326cadf762266da9cb13d67dff7c189ae1b,2044
-- hspec-2.11.14@sha256:3f64a271b4f00ee277cd34330881682441a45110b3184940384a00fd7a972af2,1766
-- hspec-core-2.11.14@sha256:2c1e937321c80682dbd7855bafd82fca64c62cb3a85687435fae2c575404db3e,7390
-- hspec-discover-2.11.14@sha256:d6567d74efc925ccb27763a22ea53fe4e04d45dd528e8e33e93e8f3b8a29e6c3,2171
-- hspec-expectations-0.8.4@sha256:4237f094a7931202ff57ac6475542b0b314b50a7024550e2b6eb87cfb0d4ff93,1702
+# needs the following
+- prettyprinter-1.7.1
+
+## alex and happy tools
+- alex-3.2.7.1
+- happy-1.20.0
+
+## pretty printing tools
+- pretty-simple-4.0.0.0
+# needs the following
+- cabal-doctest-1.0.9
+- prettyprinter-ansi-terminal-1.1.3
+- ansi-terminal-0.11.3
+- colour-2.3.6
+
+## testing tools
+- QuickCheck-2.14.2
+# needs the following
+- random-1.2.1.1
+- splitmix-0.1.0.4
+
+- generic-random-1.5.0.1
+
+- hspec-2.8.5
+# needs the following
+- hspec-core-2.8.5
+- hspec-discover-2.8.5
+- hspec-expectations-0.8.2
+- HUnit-1.6.2.0
+- call-stack-0.4.0
+- clock-0.8.3
+- quickcheck-io-0.2.0
+- setenv-0.1.1.3
+- tf-random-0.5
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

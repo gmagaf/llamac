@@ -45,12 +45,12 @@ library
                       array >= 0.4 && < 0.6,
                       transformers >= 0.5,
                       containers >= 0.4,
-                      bytestring >= 0.10,
-                      text >= 1.0 && < 2,
-                      pretty-simple >= 4.1,
+                      bytestring >= 0.10 && < 0.11,
+                      text >= 1.2 && < 2.0,
+                      pretty-simple >= 4.0,
                       llvm-hs-pure   >= 9.0 && < 9.1,
                       llvm-hs-pretty >= 0.9 && < 0.10
-  build-tool-depends: alex:alex >= 3.3,
+  build-tool-depends: alex:alex >= 3.2,
                       happy:happy >= 1.20
   ghc-options:        -Wall
                       -Wcompat
@@ -84,8 +84,8 @@ executable repl
   hs-source-dirs:     repl
   main-is:            Main.hs
   build-depends:      base >= 4.7 && < 5,
-                      containers >= 0.4,
                       transformers >= 0.5,
+                      containers >= 0.4,
                       haskeline >= 0.8.1,
                       llamac
   other-modules:      Common.Value
@@ -114,10 +114,9 @@ test-suite test
  build-depends:       base >= 4.7 && < 5,
                       array >= 0.4 && < 0.6,
                       containers >= 0.4,
-                      pretty-simple >= 4.1,
                       generic-random >=1.5,
                       QuickCheck >= 2.5,
-                      hspec >= 2.10,
+                      hspec >= 2.8,
                       llamac
  other-modules:       Unit.Unit
                       Unit.Parser.ExpectedASTs

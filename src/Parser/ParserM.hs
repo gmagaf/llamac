@@ -1,21 +1,13 @@
-{-# Language GeneralizedNewtypeDeriving #-}
-module Parser.ParserM (ParserT(..), Parser,
-                       parserT, pureParserT,
-                       get, put,
+module Parser.ParserM (Parser,
                        getAlexPos, getTokenPosn, putAlexState,
                        getSymbols, putSymbols,
                        getSemState, putSemState,
-                       throw, withExcept, catch,
                        Error, throwError, throwAtPosn, stackTrace,
                        throwInternalError,
                        throwParsingError, throwSemanticError,
                        run, runParser, eval, evalParser, parseString,
                        lexerWrap) where
 
-import Control.Monad.Trans.Class (MonadTrans(lift))
-import qualified Control.Monad.Trans.Except as Except (ExceptT(ExceptT), throwE, catchE, runExceptT, withExceptT)
-import qualified Control.Monad.Trans.State as State (StateT(StateT, runStateT), get, put, evalStateT)
-import Control.Monad.IO.Class (MonadIO)
 import Data.Functor.Identity (Identity (..))
 
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
@@ -23,6 +15,7 @@ import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
 import Common.Token (Token)
 import Common.SymbolTable (SymbolTable)
 import Parser.ParserState (ParserState(..), SemanticState, initParserState)
+import Parser.ParserT (ParserT, get, put, eval, run, throw, withExcept, catch)
 
 -- This module defines the Parser monad
 
@@ -42,32 +35,11 @@ instance Show Error where
   show (ParsingError s)   = "Parser Error: " ++ s
   show (SemanticError s)  = "Semantic Error: " ++ s
 
--- The monad transformation definition
-newtype ParserT e s m a = ParserT { getParserT :: Except.ExceptT e (State.StateT s m) a }
-  deriving
-    ( Applicative
-    , Functor
-    , Monad
-    , MonadIO
-    )
-
--- Constructors for our parser
-parserT :: (s -> m (Either e a, s)) -> ParserT e s m a
-parserT = ParserT . Except.ExceptT . State.StateT
-
-pureParserT :: Monad m => (s -> (Either e a, s)) -> ParserT e s m a
-pureParserT f = ParserT . Except.ExceptT . State.StateT $ (return . f)
 
 -- The monad definition
 type Parser a = ParserT Error ParserState Identity a
 
 -- Monad utils
-get :: Monad m => ParserT e s m s
-get = ParserT $ lift State.get
-
-put :: Monad m => s -> ParserT e s m ()
-put s = ParserT $ lift (State.put s)
-
 getAlexState :: Parser AlexState
 getAlexState = alex_state <$> get
 
@@ -99,12 +71,6 @@ putSemState s = do
   put ps{sem_state = s}
 
 -- Utils for running a Parser
-eval :: Monad m => s -> ParserT e s m a -> m (Either e a)
-eval s p = State.evalStateT (Except.runExceptT (getParserT p)) s
-
-run :: s -> ParserT e s m a -> m (Either e a, s)
-run s p = State.runStateT (Except.runExceptT (getParserT p)) s
-
 evalParser :: ParserState -> Parser a -> Either Error a
 evalParser s = runIdentity . eval s
 
@@ -118,15 +84,6 @@ parseString m s = runParser initState m where
   initState = initParserState s
 
 -- Utils for error handling
-throw :: Monad m => e -> ParserT e s m a
-throw = ParserT . Except.throwE
-
-withExcept :: Monad m => (e -> e') -> ParserT e s m a -> ParserT e' s m a
-withExcept f = ParserT . Except.withExceptT f . getParserT
-
-catch :: Monad m => (e -> ParserT e' s m a) -> ParserT e s m a -> ParserT e' s m a
-catch handle p = ParserT $ Except.catchE (getParserT p) (getParserT . handle)
-
 throwError :: String -> Parser a
 throwError = throw . Error
 
@@ -149,8 +106,8 @@ stackTrace :: String -> Parser a -> Parser a
 stackTrace s = catch (throw . \e -> e{msg = msg e ++ "\n\t\t" ++ s})
 
 -- Utils to facilitate the communication with the lexer
-changeMonad :: Alex a -> Parser a
-changeMonad (Alex f) = do
+liftAlex :: Alex a -> Parser a
+liftAlex (Alex f) = do
   aState <- getAlexState
   case f aState of
     Right (aState', a) -> do
@@ -158,10 +115,7 @@ changeMonad (Alex f) = do
       return a
     Left lexErr        -> throwLexicalError lexErr
 
-parserMonadScan :: Parser Token
-parserMonadScan = changeMonad alexMonadScan
-
 lexerWrap :: (Token -> Parser a) -> Parser a
 lexerWrap cont = do
-  a <- parserMonadScan
+  a <- liftAlex alexMonadScan
   cont a

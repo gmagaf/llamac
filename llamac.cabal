@@ -26,6 +26,7 @@ library
   hs-source-dirs:     src
   exposed-modules:    Lexer.Lexer
                       Parser.Parser
+                      Parser.ParserT
                       Parser.ParserM
                       Parser.ParserState
                       Parser.Utils

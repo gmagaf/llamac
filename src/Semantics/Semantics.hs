@@ -2,6 +2,8 @@ module Semantics.Semantics (Analyzable, sem, semTag,
                             TypeAble, infer, typeCheck,
                             analyzeAST) where
 
+import Data.Bitraversable (Bitraversable(bitraverse))
+
 import Common.AST (Expr, Type, TypeDef, LetDef, AST, Node(..))
 import Common.SymbolType (SymbolType)
 import Lexer.Lexer (AlexPosn)
@@ -33,15 +35,11 @@ class Analyzable f => TypeAble f where
 -- Functions for analyzing nodes
 analyzeAST :: AST AlexPosn -> Parser (AST SemanticTag)
 analyzeAST ast = do
-    semAst <- mapM auxSem ast
+    semAst <- mapM (bitraverse sem sem) ast
     n <- getNames
     rn <- mapM resolveTableEntry n
     putNames rn
-    mapM auxRes semAst where
-        auxSem (Left def)   = Left <$> sem def
-        auxSem (Right tdef) = Right <$> sem tdef
-        auxRes (Left def)   = Left <$> resolveNodeRec def
-        auxRes (Right tdef) = return (Right tdef)
+    mapM (bitraverse resolveNodeRec return) semAst
 
 instance Analyzable TypeDef where
     sem = analyzeTypeDef

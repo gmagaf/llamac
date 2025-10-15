@@ -7,6 +7,7 @@ import Common.SymbolTable (SymbolTable (..), TableEntry (FunEntry), NameSpace,
 import Lexer.Lexer (AlexState(..), alexStartPos, alexInitUserState)
 import Semantics.SemanticState (SemanticState(..), Unifier, initSemanticState)
 import RunTime.LibHeaders (RunTimeLibSib, libSigs)
+import IR.CodeGenState (CodeGenState, initCodeGenState)
 
 
 -- The state of the parser
@@ -14,12 +15,14 @@ data ParserState = ParserState
   { alex_state   :: AlexState     -- lexer's state
   , sem_state    :: SemanticState -- semantic analysis state
   , symbols      :: SymbolTable   -- compiler's symbol table
+  , cgen_state   :: CodeGenState  -- code generator's state
   }
 
 instance Show ParserState where
   show s = "ParserState {" ++
     "alex_state = _"
     ++ ", " ++ "sem_state = " ++ show (sem_state s)
+    ++ ", " ++ "cgen_state = " ++ show (cgen_state s)
     ++ ", " ++ "symbols = " ++ show (symbols s)
     ++ "}"
 
@@ -37,6 +40,7 @@ initParserState input =
        { alex_state = initAlexState input
        , sem_state  = initSemanticState
        , symbols    = initSymbolTable
+       , cgen_state = initCodeGenState
        }
 
 initSymbolTable :: SymbolTable

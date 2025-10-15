@@ -42,6 +42,7 @@ library
                       Semantics.Utils
                       Semantics.Unifier
                       RunTime.LibHeaders
+                      IR.CodeGenState
   build-depends:      base >= 4.7 && < 5,
                       array >= 0.4 && < 0.6,
                       mtl >= 2.2,

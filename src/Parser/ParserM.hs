@@ -37,7 +37,7 @@ instance Show Error where
 
 
 -- The monad definition
-type Parser a = ParserT Error ParserState Identity a
+type Parser = ParserT Error ParserState Identity
 
 -- Monad utils
 getAlexState :: Parser AlexState

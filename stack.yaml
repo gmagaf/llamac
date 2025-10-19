@@ -17,7 +17,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: ghc-9.0.2
+resolver: lts-19.33 # => ghc-9.0.2
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -44,39 +44,15 @@ packages:
 extra-deps:
 ## LLVM related dependencies
 - llvm-hs-pure-9.0.0
-# needs the following
-- unordered-containers-0.2.17.0
-- hashable-1.3.5.0
-- attoparsec-0.14.4
-- scientific-0.3.7.0
-- integer-logarithms-1.0.3.1
-- primitive-0.7.3.0
-- fail-4.9.0.0
 # # llvm-hs-9.0.1.1 # TODO: May be useful later
 # - git: git@github.com:llvm-hs/llvm-hs.git
 #   subdirs:
 #   - llvm-hs
 #   commit: 47ed4d900aaa8ed2b74726cfc2eeeeb029a1f165
-# # needs the following
-# - utf8-string-1.0.2
 # llvm-hs-pretty-0.9.0.0 from gihub
 # We need the specific commit to be able to compile with latter versions of GHC
 - git: https://github.com/llvm-hs/llvm-hs-pretty.git
   commit: 'f6d5a752965bb0f72a9273cd09e7cf14bb1ab5de'
-# needs the following
-- prettyprinter-1.7.1
-
-## alex and happy tools
-- alex-3.2.7.1
-- happy-1.20.0
-
-## pretty printing tools
-- pretty-simple-4.0.0.0
-# needs the following
-- cabal-doctest-1.0.9
-- prettyprinter-ansi-terminal-1.1.3
-- ansi-terminal-0.11.3
-- colour-2.3.6
 
 ## testing tools
 - QuickCheck-2.14.3

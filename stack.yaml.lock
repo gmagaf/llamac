@@ -12,55 +12,6 @@ packages:
   original:
     hackage: llvm-hs-pure-9.0.0
 - completed:
-    hackage: unordered-containers-0.2.17.0@sha256:50d72c7945df6389d0bb683dea1c7529b28b26f8c632de186437d1e866af8cf8,3302
-    pantry-tree:
-      sha256: b556ac42b7294152a7a6854689310ba70ad7fb1462f5cb0051a188b83433f45c
-      size: 1517
-  original:
-    hackage: unordered-containers-0.2.17.0
-- completed:
-    hackage: hashable-1.3.5.0@sha256:3a2beeafb220f9de706568a7e4a5b3c762cc4c9f25c94d7ef795b8c2d6a691d7,4240
-    pantry-tree:
-      sha256: 4df2f6b536a0fcc5f7d562cb29e373f27dc4a2747452ac5cc74c1599cab22fc5
-      size: 1248
-  original:
-    hackage: hashable-1.3.5.0
-- completed:
-    hackage: attoparsec-0.14.4@sha256:35129d0ab1741f000f1a7d2fc839544919ee6fbb8f2d6e7f0a629c41f91035f3,5914
-    pantry-tree:
-      sha256: 467033f4d538aaeb309c15632018f2621eeace79fe7286e9242c7e75b59ced82
-      size: 5039
-  original:
-    hackage: attoparsec-0.14.4
-- completed:
-    hackage: scientific-0.3.7.0@sha256:909755ab19b453169ff85281323da1488407776b2360bd9f7afdd219fd306ef2,4869
-    pantry-tree:
-      sha256: 00e74ee83063c8c5cf5c726d9ed079a7f67051f3ddd9e2ecbbe3c6ea06271061
-      size: 657
-  original:
-    hackage: scientific-0.3.7.0
-- completed:
-    hackage: integer-logarithms-1.0.3.1@sha256:0595a16d458c9c5caa425dc8ebbeb5d9adffb0c8daf4720c1d93dfcfc31dd690,3295
-    pantry-tree:
-      sha256: fbb007f314c82d96a33dda0dfb2c3fb010347809942feb08b26f47acdefcf256
-      size: 865
-  original:
-    hackage: integer-logarithms-1.0.3.1
-- completed:
-    hackage: primitive-0.7.3.0@sha256:ce9361b4d2ed296ef639380411b4cfc217a19e4b3cd4170e03e6fce52daa0176,3080
-    pantry-tree:
-      sha256: 021af7ee919dfa8533e501b9447d7bc399ebde9ed5b87596ecc2b156aa2390bb
-      size: 1655
-  original:
-    hackage: primitive-0.7.3.0
-- completed:
-    hackage: fail-4.9.0.0@sha256:35d1ee29364447c1b7d616bb1ee31f162b73e85fea91d7ca6441cf901398f572,1051
-    pantry-tree:
-      sha256: e4daa79eb6a4442ec85c86dfeb0eb4bf8624f8dcc5291a2216165120ecb77c13
-      size: 210
-  original:
-    hackage: fail-4.9.0.0
-- completed:
     commit: f6d5a752965bb0f72a9273cd09e7cf14bb1ab5de
     git: https://github.com/llvm-hs/llvm-hs-pretty.git
     name: llvm-hs-pretty
@@ -71,62 +22,6 @@ packages:
   original:
     commit: f6d5a752965bb0f72a9273cd09e7cf14bb1ab5de
     git: https://github.com/llvm-hs/llvm-hs-pretty.git
-- completed:
-    hackage: prettyprinter-1.7.1@sha256:9c43c9d8c3cd9f445596e5a2379574bba87f935a4d1fa41b5407ee3cf4edc743,6987
-    pantry-tree:
-      sha256: cd6f393bf7cba603a1958a139915fc343efd5488e36fd7b3b5c6956c002d04fa
-      size: 3460
-  original:
-    hackage: prettyprinter-1.7.1
-- completed:
-    hackage: alex-3.2.7.1@sha256:ab26a38cefae59403f746370e5a0c943b8d5bda098eb83f37052b2429ee780ce,3911
-    pantry-tree:
-      sha256: 56cc4bae15df1a6370f2d6fed6726937e3b2df1c6eba1e8be6a2bf3fe7c75310
-      size: 4880
-  original:
-    hackage: alex-3.2.7.1
-- completed:
-    hackage: happy-1.20.0@sha256:5d47dc221a9fe964e36aaaa2e1ab7e8f085a225fd6528d6eff310b92360bbe99,5732
-    pantry-tree:
-      sha256: ff2e7df7cfe8746eedc6f69c225fa8c899c26d28f1c4964eeb00a5d757d30351
-      size: 8749
-  original:
-    hackage: happy-1.20.0
-- completed:
-    hackage: pretty-simple-4.0.0.0@sha256:a65be4ef40734eae1da7a88c9b73dbf1848f5a60b634dc4776fae60cafc85386,4071
-    pantry-tree:
-      sha256: dee251957a221350624b0f0ebbc3598dffc69310b94156e7c81f231d98311a6c
-      size: 1229
-  original:
-    hackage: pretty-simple-4.0.0.0
-- completed:
-    hackage: cabal-doctest-1.0.9@sha256:6dea0dbd1457f43d96ce1cfb1bab8b9f55d4fb82940e2bfa5aad78e6e2260656,1517
-    pantry-tree:
-      sha256: 7b20510365348d423d769826a4524cddc9f9186d12df815de742ab0091d5d94d
-      size: 334
-  original:
-    hackage: cabal-doctest-1.0.9
-- completed:
-    hackage: prettyprinter-ansi-terminal-1.1.3@sha256:b00f727b964cf13adff7acf575a71fa7e405f5240aff50b07f10df76ab89f8d3,2574
-    pantry-tree:
-      sha256: b5d276267049502c72fdcd2f1d84c15b3598160d61de0482a2e5bb62c40bd4ea
-      size: 820
-  original:
-    hackage: prettyprinter-ansi-terminal-1.1.3
-- completed:
-    hackage: ansi-terminal-0.11.3@sha256:cc499d5f4c09a7213cd752ee69dbb5a5b8f3d1c777274e609eea4bca5c68ac8c,3321
-    pantry-tree:
-      sha256: 71d732f3f95c8ddcebaa7645ff743dd91e680b5b5063e8707ef53d2eaf94c94e
-      size: 1461
-  original:
-    hackage: ansi-terminal-0.11.3
-- completed:
-    hackage: colour-2.3.6@sha256:ebdcbf15023958838a527e381ab3c3b1e99ed12d1b25efeb7feaa4ad8c37664a,2378
-    pantry-tree:
-      sha256: 03f8e22f364deb86098dbfbe0bf83c896437b2355f139abdac0402658fb6ac7e
-      size: 1183
-  original:
-    hackage: colour-2.3.6
 - completed:
     hackage: QuickCheck-2.14.3@sha256:f03d2f404d5ba465453d0fbc1944832789a759fe7c4f9bf8616bc1378a02fde4,7847
     pantry-tree:
@@ -232,4 +127,9 @@ packages:
       size: 941
   original:
     hackage: tf-random-0.5
-snapshots: []
+snapshots:
+- completed:
+    sha256: 6d1532d40621957a25bad5195bfca7938e8a06d923c91bc52aa0f3c41181f2d4
+    size: 619204
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/33.yaml
+  original: lts-19.33

@@ -1,7 +1,7 @@
+{-# LANGUAGE GADTs #-}
 module Semantics.Unifier (checkConstraint, unify) where
 
 import Data.Maybe (isNothing)
-import qualified Data.Map as Map
 import Control.Monad (when, unless)
 import Data.Foldable (forM_)
 
@@ -12,10 +12,12 @@ import Parser.ParserM (Parser)
 import Semantics.Utils (throwSem, getUnifier, putUnifier,
                         getConstraints, putConstraints,
                         resolveType, copyConstraints)
-import Semantics.SemanticState (TypeConstraint (..), constraintsToList,
-                                addConstraints, fromConstraint)
+import Semantics.TypeConstraints (TypeConstraint(..), singletonSet,
+                                  traverse, union, lookupConstr,
+                                  insertConstrWith)
+import Prelude hiding (traverse)
 
-checkConstraint :: SymbolType -> TypeConstraint -> Parser ()
+checkConstraint :: SymbolType -> TypeConstraint t -> Parser ()
 checkConstraint (SymType (FunType _ _)) (NotAllowedFunType s) =
     throwSem $ "Type constraint failed: " ++ s
 checkConstraint (SymType _) (NotAllowedFunType _) = return ()
@@ -38,17 +40,16 @@ checkConstraint (TVar v) c = do
         throwSem ("Unable to add constraint: " ++ show c ++
                   " . Variable " ++ pretty tv ++ " has never been used before")
     cs <- getConstraints
-    let g = addConstraints
-    putConstraints $ Map.insertWith g v (fromConstraint c) cs
+    putConstraints $ insertConstrWith union v (singletonSet c) cs
 
 applyConstraints :: (SymbolType, SymbolType) -> Parser ()
 applyConstraints (TVar v, TVar u) = copyConstraints (TVar v, TVar u)
 applyConstraints (TVar v, t) = do
     c <- getConstraints
-    forM_ (Map.lookup v c) (mapM_ (checkConstraint t) . constraintsToList)
+    forM_ (lookupConstr v c) (traverse (\ _ -> checkConstraint t))
 applyConstraints (t, TVar v) = do
     c <- getConstraints
-    forM_ (Map.lookup v c) (mapM_ (checkConstraint t) . constraintsToList)
+    forM_ (lookupConstr v c) (traverse (\ _ -> checkConstraint t))
 applyConstraints _ = return ()
 
 -- This function is used to unify two types

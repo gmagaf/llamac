@@ -60,7 +60,7 @@ data TypeF t = UnitType | IntType | CharType | BoolType | FloatType
              | RefType t
              | ArrayType Int t
              | UserDefinedType Identifier
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 -- Expressions
 data Expr b = Expr (ExprF (Expr b)) b

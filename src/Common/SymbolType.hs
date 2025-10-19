@@ -9,7 +9,7 @@ import Common.PrintAST (Pretty(prettyPrec))
 
 -- Const types are types without type variables
 newtype ConstType = ConstType (TypeF ConstType)
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 instance Pretty ConstType where
     prettyPrec d (ConstType t) = prettyPrec d t

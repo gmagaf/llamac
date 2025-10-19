@@ -36,6 +36,7 @@ library
                       Common.SymbolType
                       Common.SymbolTable
                       Semantics.SemanticState
+                      Semantics.TypeConstraints
                       Semantics.Semantics
                       Semantics.TypeAnalysis
                       Semantics.ExprAnalysis
@@ -48,6 +49,10 @@ library
                       mtl >= 2.2,
                       transformers >= 0.5,
                       containers >= 0.4,
+                      dependent-map >= 0.4,
+                      dependent-sum >= 0.7.1,
+                      dependent-sum-template >= 0.1,
+                      constraints-extras >= 0.3,
                       bytestring >= 0.10 && < 0.11,
                       text >= 1.2 && < 2.0,
                       pretty-simple >= 4.0,

@@ -13,7 +13,7 @@ import Common.SymbolType (TypeScheme(..), SymbolType(..), ConstType(..),
                           funToArgs, stCoAlg, paramsToFun )
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser, stackTrace, throwInternalError)
-import Semantics.SemanticState (TypeConstraint(..))
+import Semantics.TypeConstraints (TypeConstraint(..), mkAllowedTypes)
 import Semantics.Utils
 import Semantics.Unifier (checkConstraint, unify)
 import Semantics.TypeAnalysis (analyzeType)
@@ -543,7 +543,7 @@ semBinOp op d e = do
             unify (s', t')
             unify (SymType BoolType, outT')
         unifyComp s' t' outT' = do
-            let c = AllowedTypes [ConstType IntType, ConstType FloatType, ConstType CharType]
+            let c = mkAllowedTypes [ConstType IntType, ConstType FloatType, ConstType CharType]
                     ("Operator " ++ pretty op ++ " can only be applied to int, float or char")
             checkConstraint s' c
             checkConstraint t' c

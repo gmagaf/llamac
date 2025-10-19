@@ -2,7 +2,6 @@ module Semantics.Utils (module Semantics.Utils) where
 
 import Data.Foldable (foldrM)
 import qualified Data.Set as S
-import qualified Data.Map as Map
 import Data.Maybe (isJust, isNothing)
 import Control.Monad ((>=>), when)
 
@@ -28,7 +27,7 @@ import Parser.ParserM (Parser,
     getSymbols, getSemState, putSymbols, putSemState,
     throwSemanticError, throwAtPosn)
 import Parser.ParserState (SemanticState(..), Unifier)
-import Semantics.SemanticState (Constraints, addConstraints)
+import Semantics.TypeConstraints (ConstraintsMap, union, lookupConstr, insertConstr, insertConstrWith)
 
 -- This module contains semantic analysis tools
 data TypeInfo = NotTypable
@@ -118,7 +117,7 @@ putUnifier v t = do
     s <- getSemState
     putSemState s{unifier = f >=> g}
 
-getConstraints :: Parser Constraints
+getConstraints :: Parser ConstraintsMap
 getConstraints = constraints <$> getSemState
 
 getFreeTVars :: Parser (S.Set Int)
@@ -135,7 +134,7 @@ addFreeTVars (TVar v) = do
     putFreeTVars (S.insert v vars)
 addFreeTVars (SymType tf) = mapM_ addFreeTVars tf
 
-putConstraints :: Constraints -> Parser ()
+putConstraints :: ConstraintsMap -> Parser ()
 putConstraints c = do
     s <- getSemState
     putSemState s{constraints = c}
@@ -143,13 +142,12 @@ putConstraints c = do
 copyConstraints :: (SymbolType, SymbolType) -> Parser ()
 copyConstraints (TVar v, TVar u) = do
     c <- getConstraints
-    let g = addConstraints
-    case (Map.lookup v c, Map.lookup u c) of
+    case (lookupConstr v c, lookupConstr u c) of
         (Nothing, Nothing) -> return ()
-        (Nothing, Just cs) -> putConstraints $ Map.insert v cs c
-        (Just cs, Nothing) -> putConstraints $ Map.insert u cs c
+        (Nothing, Just cs) -> putConstraints $ insertConstr v cs c
+        (Just cs, Nothing) -> putConstraints $ insertConstr u cs c
         (Just vc, Just uc) ->
-            let finalC = Map.insertWith g u vc (Map.insertWith g v uc c)
+            let finalC = insertConstrWith union u vc (insertConstrWith union v uc c)
             in putConstraints finalC
 copyConstraints _ = return ()
 

@@ -4,7 +4,7 @@ import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
 
 import Lexer.Lexer (AlexPosn, printPosn)
-import Parser.ParserT (ParserT(..), pureParserT, get, put, run, eval, throw, catch)
+import Parser.ParserT (ParserT(..), pureParserT, get, put, runParserT, evalParserT, throw, catch)
 import Parser.ParserM (Parser, runParser)
 import Parser.ParserState (ParserState)
 
@@ -111,7 +111,7 @@ catchRunTimeError :: Interpreter a -> (RunTimeError -> Interpreter a) -> Interpr
 catchRunTimeError = flip catch
 
 runInterpreter :: InterpreterState -> Interpreter a -> IO (Either RunTimeError a, InterpreterState)
-runInterpreter = run
+runInterpreter = flip runParserT
 
 evalInterpreter :: InterpreterState -> Interpreter a -> IO (Either RunTimeError a)
-evalInterpreter = eval
+evalInterpreter = flip evalParserT

@@ -5,7 +5,7 @@ module Parser.ParserM (Parser,
                        Error, throwError, throwAtPosn, stackTrace,
                        throwInternalError,
                        throwParsingError, throwSemanticError,
-                       run, runParser, eval, evalParser, parseString,
+                       runParser, evalParser, parseString,
                        lexerWrap) where
 
 import Data.Functor.Identity (Identity (..))
@@ -15,7 +15,7 @@ import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
 import Common.Token (Token)
 import Common.SymbolTable (SymbolTable)
 import Parser.ParserState (ParserState(..), SemanticState, initParserState)
-import Parser.ParserT (ParserT, get, put, eval, run, throw, withExcept, catch)
+import Parser.ParserT (ParserT, get, put, evalParserT, runParserT, throw, withExcept, catch, parserT)
 
 -- This module defines the Parser monad
 
@@ -72,10 +72,10 @@ putSemState s = do
 
 -- Utils for running a Parser
 evalParser :: ParserState -> Parser a -> Either Error a
-evalParser s = runIdentity . eval s
+evalParser s = runIdentity . (flip evalParserT) s
 
 runParser :: ParserState -> Parser a -> (Either Error a, ParserState)
-runParser s = runIdentity . run s
+runParser s = runIdentity . (flip runParserT) s
 
 -- Util that initilizes a parser state and runs a parser monad
 parseString :: Parser a -> String -> (Either Error a, ParserState)

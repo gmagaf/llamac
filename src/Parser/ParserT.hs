@@ -2,15 +2,14 @@
 {-# LANGUAGE InstanceSigs #-}
 module Parser.ParserT (ParserT(..),
                        parserT, pureParserT,
-                       get, put, eval, run,
+                       get, put, evalParserT, runParserT,
                        throw, withExcept, catch
                        ) where
 
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import qualified Control.Monad.Trans.Except as Except (ExceptT(ExceptT), throwE, catchE, runExceptT, withExceptT)
-import qualified Control.Monad.Trans.State as State (StateT(StateT, runStateT), get, put, evalStateT)
+import qualified Control.Monad.Trans.State as State (StateT(StateT), State, get, put, evalStateT)
 import qualified Control.Monad.Trans.State.Strict as S (State)
-import qualified Control.Monad.Trans.State.Lazy as LS (State)
 import Control.Monad.IO.Class (MonadIO)
 import LLVM.IRBuilder (MonadIRBuilder (liftIRState),
                        MonadModuleBuilder (liftModuleState), ModuleBuilderState,)
@@ -36,11 +35,11 @@ get = ParserT $ lift State.get
 put :: Monad m => s -> ParserT e s m ()
 put s = ParserT $ lift (State.put s)
 
-eval :: Monad m => s -> ParserT e s m a -> m (Either e a)
-eval s p = State.evalStateT (Except.runExceptT (getParserT p)) s
+evalParserT :: Monad m => ParserT e s m a -> s -> m (Either e a)
+evalParserT p = State.evalStateT (Except.runExceptT (getParserT p))
 
-run :: s -> ParserT e s m a -> m (Either e a, s)
-run s p = State.runStateT (Except.runExceptT (getParserT p)) s
+runParserT :: ParserT e s m a -> s -> m (Either e a, s)
+runParserT ~(ParserT (Except.ExceptT (State.StateT f))) = f
 
 -- Exception related
 throw :: Monad m => e -> ParserT e s m a
@@ -64,5 +63,5 @@ instance (MonadIRBuilder m) => MonadIRBuilder (ParserT e s m) where
   liftIRState = ParserT . liftIRState
 
 instance (MonadModuleBuilder m) => MonadModuleBuilder (ParserT e s m) where
-  liftModuleState :: LS.State ModuleBuilderState a -> ParserT e s m a
+  liftModuleState :: State.State ModuleBuilderState a -> ParserT e s m a
   liftModuleState = ParserT . liftModuleState

@@ -5,13 +5,14 @@ module Parser.Utils (parse, analyze, parseAndAnalyze,
 import qualified Data.ByteString    as B
 import qualified Data.Text          as T
 import qualified Data.Text.Encoding as T
+import Control.Lens (view)
 
 import Common.AST (AST)
 import Common.PrintAST (pretty, debugPrint)
 import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calc)
 import Parser.ParserM (Error, parseString)
-import Parser.ParserState (ParserState(..))
+import Parser.ParserState (ParserState, sem_state, symbols)
 import Semantics.Utils (SemanticTag)
 import Semantics.Semantics (analyzeAST)
 import Control.Exception (IOException, handle)
@@ -32,9 +33,9 @@ debug :: String -> IO ()
 debug s = do
   let (res, state) = parseAndAnalyze s
   putStrLn "Semantic State"
-  print (sem_state state)
+  print (view sem_state state)
   putStrLn "Symbol Table"
-  putStrLn $ pretty (symbols state)
+  putStrLn $ pretty (view symbols state)
   case res of
     Left err  -> print err
     Right ast -> debugPrint ast

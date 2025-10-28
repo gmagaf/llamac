@@ -4,6 +4,9 @@ import Data.Foldable (foldrM)
 import qualified Data.Set as S
 import Data.Maybe (isJust, isNothing)
 import Control.Monad ((>=>), when)
+import Control.Lens.Prism (_Just)
+import Control.Lens.Getter (view, use)
+import Control.Lens.Setter ((.=), (%=), (<~), (.~), over)
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST (Node(..), TypeF(..))
@@ -13,21 +16,23 @@ import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..),
 
 import Common.SymbolTable
      (closeScope,
-      insert,
+      partialInsert,
       openScope,
       query,
-      update,
-      SymbolTable(types, names),
+      partialUpdate,
+      types,
+      names,
       TableEntry(..),
       TypeTableEntry(..),
       NameSpace,
-      TypeSpace)
+      TypeSpace, mkBasicEntry, basicInfo)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
-    getSymbols, getSemState, putSymbols, putSemState,
+    getSemState, putSemState,
     throwSemanticError, throwAtPosn)
-import Parser.ParserState (SemanticState(..), Unifier)
+import Parser.ParserState (symbols)
 import Semantics.TypeConstraints (ConstraintsMap, union, lookupConstr, insertConstr, insertConstrWith)
+import Semantics.SemanticState (SemanticState(..), Unifier)
 
 -- This module contains semantic analysis tools
 data TypeInfo = NotTypable
@@ -60,20 +65,18 @@ getDefScheme n = case typeInfo (tag n) of
 
 -- Functions for dealing with the Semantic state of the parser
 getNames :: Parser NameSpace
-getNames = names <$> getSymbols
+getNames = use (symbols . names)
 
 getTypes :: Parser TypeSpace
-getTypes = types <$> getSymbols
+getTypes = use (symbols . types)
 
 putNames :: NameSpace -> Parser ()
 putNames ns = do
-    s <- getSymbols
-    putSymbols s{names = ns}
+    symbols . names .= ns
 
 putTypes :: TypeSpace -> Parser ()
 putTypes ts = do
-    s <- getSymbols
-    putSymbols s{types = ts}
+    symbols . types .= ts
 
 getSemPosn :: Parser AlexPosn
 getSemPosn = posnOfSem <$> getSemState
@@ -202,28 +205,26 @@ gen freeVars t =
 -- Parser symbol table utiles
 insertName :: String -> TableEntry -> Parser ()
 insertName k entry = do
-    symbols <- getNames
-    putNames $ insert k entry symbols
+    symbols . names %= partialInsert mkBasicEntry k entry
 
 insertType :: String -> TypeTableEntry -> Parser ()
 insertType k entry = do
-    symbols <- getTypes
-    putTypes $ insert k entry symbols
+    symbols . types %= partialInsert mkBasicEntry k entry
 
 -- Update symbol if exists else throw error
 updateName :: String -> TableEntry -> Parser ()
 updateName key entry = do
-    symbols <- getNames
-    case query key symbols of
-        Just _ -> putNames $ update key entry symbols
+    ns <- getNames
+    symbols . names <~ case query key ns of
+        Just _ -> return $ partialUpdate (basicInfo .~) key entry ns
         _ -> throwSem ("Cannot update symbol " ++ key ++ " as it is not in scope")
 
 -- Query for a symbol that may or may not be in scope
 queryName :: String -> Parser (Maybe TableEntry)
-queryName k = query k <$> getNames
+queryName k = over _Just (view basicInfo) . query k <$> getNames
 
 queryType :: String -> Parser (Maybe TypeTableEntry)
-queryType k = query k <$> getTypes
+queryType k = over _Just (view basicInfo) . query k <$> getTypes
 
 -- Resolution utils
 resolveFreeVars :: S.Set Int -> Parser (S.Set Int)
@@ -306,9 +307,9 @@ resolveTableEntry entry = case entry of
 findName :: String -> Parser TableEntry
 findName k = let
     aux k' = do
-        symbols <- getNames
-        case query k' symbols of
-            Just entry -> return entry
+        ns <- getNames
+        case query k' ns of
+            Just entry -> return (view basicInfo entry)
             _ -> throwSem ("Symbol " ++ k' ++ " is not in scope")
     in do
     entry <- aux k
@@ -351,8 +352,8 @@ findName k = let
 
 findType :: Identifier -> Parser [(ConstrIdentifier, [ConstType])]
 findType i = do
-    symbols <- getTypes
-    case query i symbols of
+    ts <- getTypes
+    case view basicInfo <$> query i ts of
         Just (TypeEntry constrs) -> return constrs
         _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
 
@@ -363,23 +364,19 @@ checkTypeInScope = findType >=> const (return ())
 -- Handle scopes
 openScopeInTypes :: Parser ()
 openScopeInTypes = do
-    symbols <- getTypes
-    putTypes $ openScope symbols
+    symbols . types %= openScope
 
 closeScopeInTypes :: Parser ()
 closeScopeInTypes = do
-    symbols <- getTypes
-    putTypes $ closeScope symbols
+    symbols . types %= closeScope
 
 openScopeInNames :: Parser ()
 openScopeInNames = do
-    symbols <- getNames
-    putNames $ openScope symbols
+    symbols . names %= openScope
 
 closeScopeInNames :: Parser ()
 closeScopeInNames = do
-    symbols <- getNames
-    putNames $ closeScope symbols
+    symbols . names %= closeScope
 
 -- Other util functions
 hasDuplicates :: (Ord a) => [a] -> Bool

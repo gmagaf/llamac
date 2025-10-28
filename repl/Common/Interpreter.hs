@@ -2,9 +2,10 @@ module Common.Interpreter (module Common.Interpreter) where
 
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
+import Control.Monad.State (MonadState (..))
 
 import Lexer.Lexer (AlexPosn, printPosn)
-import Parser.ParserT (ParserT(..), pureParserT, get, put, runParserT, evalParserT, throw, catch)
+import Parser.ParserT (ParserT(..), pureParserT, runParserT, evalParserT, throw, catch)
 import Parser.ParserM (Parser, runParser)
 import Parser.ParserState (ParserState)
 

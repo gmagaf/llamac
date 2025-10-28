@@ -9,13 +9,16 @@ module Parser.ParserM (Parser,
                        lexerWrap) where
 
 import Data.Functor.Identity (Identity (..))
+import Control.Lens.Setter ((.=))
+import Control.Lens.Getter (use)
 
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
       alexMonadScan, tokenPosnOfAlexState, printPosn)
 import Common.Token (Token)
 import Common.SymbolTable (SymbolTable)
-import Parser.ParserState (ParserState(..), SemanticState, initParserState)
-import Parser.ParserT (ParserT, get, put, evalParserT, runParserT, throw, withExcept, catch, parserT)
+import Parser.ParserState (ParserState, initParserState, alex_state, sem_state, symbols)
+import Parser.ParserT (ParserT, evalParserT, runParserT, throw, withExcept, catch)
+import Semantics.SemanticState (SemanticState)
 
 -- This module defines the Parser monad
 
@@ -41,7 +44,7 @@ type Parser = ParserT Error ParserState Identity
 
 -- Monad utils
 getAlexState :: Parser AlexState
-getAlexState = alex_state <$> get
+getAlexState = use alex_state
 
 getAlexPos :: Parser AlexPosn
 getAlexPos = alex_pos <$> getAlexState
@@ -50,32 +53,29 @@ getTokenPosn :: Parser AlexPosn
 getTokenPosn = tokenPosnOfAlexState <$> getAlexState
 
 getSymbols :: Parser SymbolTable
-getSymbols = symbols <$> get
+getSymbols = use symbols
 
 getSemState :: Parser SemanticState
-getSemState = sem_state <$> get
+getSemState = use sem_state
 
 putAlexState :: AlexState -> Parser ()
 putAlexState s = do
-  ps <- get
-  put ps{alex_state = s}
+  alex_state .= s
 
 putSymbols :: SymbolTable -> Parser ()
 putSymbols s = do
-  ps <- get
-  put ps{symbols = s}
+  symbols .= s
 
 putSemState :: SemanticState -> Parser ()
 putSemState s = do
-  ps <- get
-  put ps{sem_state = s}
+  sem_state .= s
 
 -- Utils for running a Parser
 evalParser :: ParserState -> Parser a -> Either Error a
-evalParser s = runIdentity . (flip evalParserT) s
+evalParser s = runIdentity . flip evalParserT s
 
 runParser :: ParserState -> Parser a -> (Either Error a, ParserState)
-runParser s = runIdentity . (flip runParserT) s
+runParser s = runIdentity . flip runParserT s
 
 -- Util that initilizes a parser state and runs a parser monad
 parseString :: Parser a -> String -> (Either Error a, ParserState)

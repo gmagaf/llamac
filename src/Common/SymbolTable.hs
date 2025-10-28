@@ -1,5 +1,15 @@
 {-# LANGUAGE DeriveTraversable #-}
-module Common.SymbolTable (SymbolTable(..),
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RankNTypes #-}
+module Common.SymbolTable (SymbolTable,
+                           names,
+                           types,
+                           FullTableEntry,
+                           mkBasicEntry,
+                           basicInfo,
+                           optInfo,
+                           generated,
                            NameSpace,
                            TypeSpace,
                            TableEntry(..),
@@ -7,12 +17,19 @@ module Common.SymbolTable (SymbolTable(..),
                            emptySymbolTable,
                            query,
                            insert,
+                           partialInsert,
                            update,
+                           partialUpdate,
                            openScope,
                            closeScope) where
 
 import qualified Data.Map as M
 import Data.List (intercalate)
+import Data.Bifunctor (bimap)
+
+import Control.Lens.Prism (Prism', prism')
+import Control.Lens (Lens', makeLenses, lens, view, preview)
+import LLVM.AST (Operand)
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (Pretty (pretty))
@@ -36,18 +53,24 @@ query k (Context (scope:scopes)) =
         Nothing -> query k (Context scopes)
         Just e  -> Just e
 
-insert :: Ord k => k -> e -> Context k e -> Context k e
-insert k e (Context scopes) = case scopes of
-    []   -> Context [M.insert k e M.empty]
+partialInsert :: Ord k => (e' -> e) -> k -> e' -> Context k e -> Context k e
+partialInsert mk k e (Context scopes) = case scopes of
+    []   -> Context [M.insert k (mk e) M.empty]
     s:tl -> Context $ updated:tl where
-        updated = M.insert k e s
+        updated = M.insert k (mk e) s
 
-update :: Ord k => k -> e -> Context k e -> Context k e
-update k e (Context s) = Context (aux s) where
+insert :: Ord k => k -> e -> Context k e -> Context k e
+insert = partialInsert id
+
+partialUpdate :: Ord k => (e' -> e -> e) -> k -> e' -> Context k e -> Context k e
+partialUpdate f k e' (Context s) = Context (aux s) where
     aux [] = []
     aux (scope:scopes) = if M.member k scope
-        then M.update (const $ Just e) k scope : scopes
+        then M.update (Just . f e') k scope : scopes
         else scope : aux scopes
+
+update :: Ord k => k -> e -> Context k e -> Context k e
+update = partialUpdate const
 
 openScope :: Context k e -> Context k e
 openScope (Context scopes) = Context $ M.empty:scopes
@@ -57,16 +80,22 @@ closeScope (Context scopes) = Context s where
     s = if null scopes then [] else tail scopes
 
 -- Definitions for symbol table and table entries
-type NameSpace = Context String TableEntry
-type TypeSpace = Context String TypeTableEntry
-data SymbolTable = SymbolTable {
-    names :: NameSpace,
-    types :: TypeSpace
-    }
-    deriving Show
+data FullTableEntry e g = FullTableEntry {
+    _basicInfo :: e,
+    _optInfo :: Maybe g
+    } deriving Show
 
-emptySymbolTable :: SymbolTable
-emptySymbolTable = SymbolTable {names = emptyContext, types = emptyContext}
+mkBasicEntry :: e -> FullTableEntry e g
+mkBasicEntry = flip FullTableEntry Nothing
+
+basicInfo :: Lens' (FullTableEntry e g) e
+basicInfo = lens _basicInfo (\e b -> e{_basicInfo = b})
+
+optInfo :: Lens' (FullTableEntry e g) (Maybe g)
+optInfo = lens _optInfo (\e g -> e{_optInfo = g})
+
+generated :: Prism' (FullTableEntry e g) (e, g)
+generated = prism' (\(e, g) -> FullTableEntry e (Just g)) (\(FullTableEntry e g) -> fmap (e,) g)
 
 data TableEntry
     = MutableEntry SymbolType                     -- Type of the mutable variable
@@ -80,6 +109,18 @@ data TableEntry
 newtype TypeTableEntry
     = TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
         deriving Show
+
+type NameSpace = Context String (FullTableEntry TableEntry Operand)
+type TypeSpace = Context String (FullTableEntry TypeTableEntry ())
+data SymbolTable = SymbolTable {
+    _names :: NameSpace,
+    _types :: TypeSpace
+    }
+    deriving Show
+makeLenses ''SymbolTable
+
+emptySymbolTable :: SymbolTable
+emptySymbolTable = SymbolTable emptyContext emptyContext
 
 -- Pretty printing of symbol table
 instance Pretty TableEntry where
@@ -104,6 +145,10 @@ instance Pretty TableEntry where
             " with type: " ++ pretty constrType ++
             " with params: (" ++ intercalate ", " (map pretty ts) ++ ")"
 
+instance (Pretty e, Show g) => Pretty (FullTableEntry e g) where
+    pretty entry = pretty (view basicInfo entry) ++
+                   maybe "" (\(_, i) -> " additional info: " ++ show i) (preview generated entry)
+
 instance Pretty TypeTableEntry where
     pretty entry = case entry of
         TypeEntry constrs ->
@@ -114,29 +159,33 @@ instance Pretty TypeTableEntry where
 
 instance (Show k, Pretty e) => Pretty (Context k e) where
     pretty (Context scopes) =
-        let addPadding v l = v ++ replicate (max 0 (l - length v)) ' '
-            toString (k, e) = (show k, pretty e)
-            toLengths (k, e) = (length k, length e)
-            toPaddings (ak, ek) (k, e) = (max ak k, max ek e)
-            scopeToString sc = map toString $ M.assocs sc
+        let -- Utils for each record
+            toString = bimap show pretty
+            toLengths = bimap length length
+            toPaddings (accK, accE) = bimap (max accK) (max accE)
+            addPadding v l = v ++ replicate (max 0 (l - length v)) ' '
+            -- Utils for each scope
+            scopeToString = M.foldMapWithKey (\k e -> [toString (k, e)])
             stringsToLengths = map toLengths
             lengthsToPaddings = foldr toPaddings (0, 0)
+            -- Compute values for all context
             strings = map scopeToString scopes
             lengths = map stringsToLengths strings
             paddings = map lengthsToPaddings lengths
+            -- Compute total lengths
             (lk', le') = lengthsToPaddings paddings
             (lk, le) = (max lk' $ length "Keys", max le' $ length "Entries")
             totalLength = 1 + 1 + lk + 1 + 1 + 1 + le + 1 + 1
             line = replicate totalLength '-' ++ "\n"
-            printLine acc (k, e) = acc ++ "| " ++ addPadding k lk ++ " | " ++ addPadding e le ++ " |\n"
-            printScope pdStrs = line ++ foldl printLine "" pdStrs
-            scopesTables = map printScope strings
-            scps = concat scopesTables
-        in printLine line ("Keys", "Entries") ++ scps ++ line
+            -- Utils for printing a line
+            printLine (k, e) acc = "| " ++ addPadding k lk ++ " | " ++ addPadding e le ++ " |\n" ++ acc
+            printScope scope acc = foldr printLine (line ++ acc) scope
+            scopesTables = foldr printScope "" strings
+        in line ++ printLine ("Keys", "Entries")  (line ++ scopesTables)
 
 instance Pretty SymbolTable where
-    pretty (SymbolTable {names = n, types = t}) =
+    pretty st =
         "Types Namespace\n" ++
-        pretty t ++
+        pretty (view types st) ++
         "Names Namespace\n" ++
-        pretty n
+        pretty (view names st)

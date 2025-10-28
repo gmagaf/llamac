@@ -3,6 +3,8 @@ module Semantics.Semantics (Analyzable, sem, semTag,
                             analyzeAST) where
 
 import Data.Bitraversable (Bitraversable(bitraverse))
+import Control.Lens.Getter (view)
+import Control.Lens.Setter (set)
 
 import Common.AST (Expr, Type, TypeDef, LetDef, AST, Node(..))
 import Common.SymbolType (SymbolType)
@@ -12,6 +14,7 @@ import Semantics.Utils (SemanticTag(..), TypeInfo (..), throwSemAtPosn,
     getNames, putNames, resolveTableEntry, resolveNodeRec)
 import Semantics.TypeAnalysis (analyzeTypeDef, analyzeType)
 import Semantics.ExprAnalysis (analyzeLet, analyzeExpr)
+import Common.SymbolTable (basicInfo)
 
 -- This module contains the semantic analysis of the nodes
 -- and decorates them with the semantic tag
@@ -37,7 +40,9 @@ analyzeAST :: AST AlexPosn -> Parser (AST SemanticTag)
 analyzeAST ast = do
     semAst <- mapM (bitraverse sem sem) ast
     n <- getNames
-    rn <- mapM resolveTableEntry n
+    rn <- mapM (\fullEntry -> do
+                e <- resolveTableEntry (view basicInfo fullEntry)
+                return (set basicInfo e fullEntry)) n
     putNames rn
     mapM (bitraverse resolveNodeRec return) semAst
 

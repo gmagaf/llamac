@@ -49,6 +49,7 @@ library
                       mtl >= 2.2,
                       transformers >= 0.5,
                       containers >= 0.4,
+                      lens >= 5.0,
                       dependent-map >= 0.4,
                       dependent-sum >= 0.7.1,
                       dependent-sum-template >= 0.1,
@@ -93,6 +94,7 @@ executable repl
   main-is:            Main.hs
   build-depends:      base >= 4.7 && < 5,
                       transformers >= 0.5,
+                      mtl >= 2.2,
                       containers >= 0.4,
                       haskeline >= 0.8.1,
                       llamac

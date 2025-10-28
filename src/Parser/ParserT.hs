@@ -1,12 +1,15 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Parser.ParserT (ParserT(..),
                        parserT, pureParserT,
-                       get, put, evalParserT, runParserT,
+                       evalParserT, runParserT,
                        throw, withExcept, catch
                        ) where
 
 import Control.Monad.Trans.Class (MonadTrans(lift))
+import Control.Monad.State (MonadState (..))
 import qualified Control.Monad.Trans.Except as Except (ExceptT(ExceptT), throwE, catchE, runExceptT, withExceptT)
 import qualified Control.Monad.Trans.State as State (StateT(StateT), State, get, put, evalStateT)
 import qualified Control.Monad.Trans.State.Strict as S (State)
@@ -29,12 +32,6 @@ pureParserT :: Monad m => (s -> (Either e a, s)) -> ParserT e s m a
 pureParserT f = ParserT . Except.ExceptT . State.StateT $ (return . f)
 
 -- State related
-get :: Monad m => ParserT e s m s
-get = ParserT $ lift State.get
-
-put :: Monad m => s -> ParserT e s m ()
-put s = ParserT $ lift (State.put s)
-
 evalParserT :: Monad m => ParserT e s m a -> s -> m (Either e a)
 evalParserT p = State.evalStateT (Except.runExceptT (getParserT p))
 
@@ -50,6 +47,12 @@ withExcept f = ParserT . Except.withExceptT f . getParserT
 
 catch :: Monad m => (e -> ParserT e' s m a) -> ParserT e s m a -> ParserT e' s m a
 catch handle p = ParserT $ Except.catchE (getParserT p) (getParserT . handle)
+
+instance Monad m => MonadState s (ParserT e s m) where
+  get :: ParserT e s m s
+  get = ParserT $ lift State.get
+  put :: s -> ParserT e s m ()
+  put s = ParserT $ lift (State.put s)
 
 instance MonadTrans (ParserT e s) where
   lift :: Monad m => m a -> ParserT e s m a

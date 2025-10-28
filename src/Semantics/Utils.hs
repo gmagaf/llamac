@@ -4,9 +4,8 @@ import Data.Foldable (foldrM)
 import qualified Data.Set as S
 import Data.Maybe (isJust, isNothing)
 import Control.Monad ((>=>), when)
-import Control.Lens.Prism (_Just)
-import Control.Lens.Getter (view, use)
-import Control.Lens.Setter ((.=), (%=), (<~), (.~), over)
+import Control.Lens.Getter (use)
+import Control.Lens.Setter ((.=), (%=), (<~), (.~))
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST (Node(..), TypeF(..))
@@ -16,16 +15,19 @@ import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..),
 
 import Common.SymbolTable
      (closeScope,
-      partialInsert,
       openScope,
-      query,
+      partialQuery,
+      partialInsert,
       partialUpdate,
       types,
       names,
+      Context,
       TableEntry(..),
       TypeTableEntry(..),
+      mkBasicEntry,
+      basicInfo,
       NameSpace,
-      TypeSpace, mkBasicEntry, basicInfo)
+      TypeSpace, FullTableEntry)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
     getSemState, putSemState,
@@ -203,28 +205,37 @@ gen freeVars t =
     in foldr AbsType (MonoType t) varsToBound
 
 -- Parser symbol table utiles
+query :: Ord k => k -> Context k (FullTableEntry e g) -> Maybe e
+query = partialQuery basicInfo
+
+insert :: Ord k => k -> e -> Context k (FullTableEntry e g) -> Context k (FullTableEntry e g)
+insert = partialInsert mkBasicEntry
+
+update :: Ord k => k -> e -> Context k (FullTableEntry e g) -> Context k (FullTableEntry e g)
+update = partialUpdate (basicInfo .~)
+
 insertName :: String -> TableEntry -> Parser ()
 insertName k entry = do
-    symbols . names %= partialInsert mkBasicEntry k entry
+    symbols . names %= insert k entry
 
 insertType :: String -> TypeTableEntry -> Parser ()
 insertType k entry = do
-    symbols . types %= partialInsert mkBasicEntry k entry
+    symbols . types %= insert k entry
 
 -- Update symbol if exists else throw error
 updateName :: String -> TableEntry -> Parser ()
 updateName key entry = do
     ns <- getNames
     symbols . names <~ case query key ns of
-        Just _ -> return $ partialUpdate (basicInfo .~) key entry ns
+        Just _ -> return $ update key entry ns
         _ -> throwSem ("Cannot update symbol " ++ key ++ " as it is not in scope")
 
 -- Query for a symbol that may or may not be in scope
 queryName :: String -> Parser (Maybe TableEntry)
-queryName k = over _Just (view basicInfo) . query k <$> getNames
+queryName k = query k <$> getNames
 
 queryType :: String -> Parser (Maybe TypeTableEntry)
-queryType k = over _Just (view basicInfo) . query k <$> getTypes
+queryType k = query k <$> getTypes
 
 -- Resolution utils
 resolveFreeVars :: S.Set Int -> Parser (S.Set Int)
@@ -309,7 +320,7 @@ findName k = let
     aux k' = do
         ns <- getNames
         case query k' ns of
-            Just entry -> return (view basicInfo entry)
+            Just entry -> return entry
             _ -> throwSem ("Symbol " ++ k' ++ " is not in scope")
     in do
     entry <- aux k
@@ -353,7 +364,7 @@ findName k = let
 findType :: Identifier -> Parser [(ConstrIdentifier, [ConstType])]
 findType i = do
     ts <- getTypes
-    case view basicInfo <$> query i ts of
+    case query i ts of
         Just (TypeEntry constrs) -> return constrs
         _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
 

@@ -2,7 +2,8 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes #-}
-module Common.SymbolTable (SymbolTable,
+module Common.SymbolTable (Context,
+                           SymbolTable,
                            names,
                            types,
                            FullTableEntry,
@@ -16,6 +17,7 @@ module Common.SymbolTable (SymbolTable,
                            TypeTableEntry(..),
                            emptySymbolTable,
                            query,
+                           partialQuery,
                            insert,
                            partialInsert,
                            update,
@@ -28,7 +30,8 @@ import Data.List (intercalate)
 import Data.Bifunctor (bimap)
 
 import Control.Lens.Prism (Prism', prism')
-import Control.Lens (Lens', makeLenses, lens, view, preview)
+import Control.Lens (Lens', makeLenses, lens, preview)
+import Control.Lens.Getter (Getter, to, view)
 import LLVM.AST (Operand)
 
 import Common.Token (Identifier, ConstrIdentifier)
@@ -46,12 +49,15 @@ newtype Context k e = Context [Scope k e]
 emptyContext :: Context k e
 emptyContext = Context []
 
-query :: Ord k => k -> Context k e -> Maybe e
-query _ (Context []) = Nothing
-query k (Context (scope:scopes)) =
+partialQuery :: Ord k => Getter e e' -> k -> Context k e -> Maybe e'
+partialQuery _ _ (Context []) = Nothing
+partialQuery l k (Context (scope:scopes)) =
     case M.lookup k scope of
-        Nothing -> query k (Context scopes)
-        Just e  -> Just e
+        Nothing -> partialQuery l k (Context scopes)
+        Just e  -> Just (view l e)
+
+query :: Ord k => k -> Context k e -> Maybe e
+query = partialQuery (to id)
 
 partialInsert :: Ord k => (e' -> e) -> k -> e' -> Context k e -> Context k e
 partialInsert mk k e (Context scopes) = case scopes of

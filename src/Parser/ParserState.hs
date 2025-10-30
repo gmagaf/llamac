@@ -4,15 +4,12 @@ module Parser.ParserState (ParserState,
                            symbols, cgen_state,
                            initAlexState, initParserState) where
 
-import Control.Lens (makeLenses, over)
+import Control.Lens (makeLenses)
 import Control.Lens.Getter (view)
 
-import Common.SymbolType (TypeScheme(MonoType), constTypeToSymbolType)
-import Common.SymbolTable (SymbolTable, TableEntry (FunEntry), NameSpace,
-                           emptySymbolTable, openScope, mkBasicEntry, names, partialInsert)
+import Common.SymbolTable (SymbolTable, emptySymbolTable)
 import Lexer.Lexer (AlexState(..), alexStartPos, alexInitUserState)
 import Semantics.SemanticState (SemanticState, initSemanticState)
-import RunTime.LibHeaders (RunTimeLibSib, libSigs)
 import IR.CodeGenState (CodeGenState, initCodeGenState)
 
 
@@ -46,12 +43,6 @@ initParserState input =
     ParserState
        { _alex_state = initAlexState input
        , _sem_state  = initSemanticState
-       , _symbols    = initSymbolTable
+       , _symbols    = emptySymbolTable
        , _cgen_state = initCodeGenState
        }
-
-initSymbolTable :: SymbolTable
-initSymbolTable =
-  let addRunTimeLibSib :: RunTimeLibSib -> NameSpace -> NameSpace
-      addRunTimeLibSib (i, t, ps) = partialInsert mkBasicEntry i (FunEntry (MonoType . constTypeToSymbolType $ t) ps)
-  in over names ((\ns -> foldr addRunTimeLibSib ns libSigs) . openScope) emptySymbolTable

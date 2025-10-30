@@ -11,12 +11,16 @@ module Parser.ParserT (ParserT(..),
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Control.Monad.State (MonadState (..))
 import qualified Control.Monad.Trans.Except as Except (ExceptT(ExceptT), throwE, catchE, runExceptT, withExceptT)
-import qualified Control.Monad.Trans.State as State (StateT(StateT), State, get, put, evalStateT)
-import qualified Control.Monad.Trans.State.Strict as S (State)
+import qualified Control.Monad.Trans.State as State (StateT(StateT), State, get, put, evalStateT, runState)
+import qualified Control.Monad.Trans.State.Strict as S (State, runState)
 import Control.Monad.IO.Class (MonadIO)
+import Control.Lens (use, (.=))
 import LLVM.IRBuilder (MonadIRBuilder (liftIRState),
                        MonadModuleBuilder (liftModuleState), ModuleBuilderState,)
 import LLVM.IRBuilder.Monad (IRBuilderState)
+
+import Parser.ParserState (ParserState, cgen_state)
+import IR.CodeGenState (moduleState, irState)
 
 -- This module defines the Parser monad transformer
 
@@ -61,10 +65,18 @@ instance MonadTrans (ParserT e s) where
       a <- ma
       return (Right a, s)
 
-instance (MonadIRBuilder m) => MonadIRBuilder (ParserT e s m) where
-  liftIRState :: S.State IRBuilderState a -> ParserT e s m a
-  liftIRState = ParserT . liftIRState
+instance (Monad m) => MonadIRBuilder (ParserT e ParserState m) where
+  liftIRState :: S.State IRBuilderState a -> ParserT e ParserState m a
+  liftIRState s = do
+    irs <- use (cgen_state . irState)
+    let (a, irs') = S.runState s irs
+    cgen_state . irState .= irs'
+    return a
 
-instance (MonadModuleBuilder m) => MonadModuleBuilder (ParserT e s m) where
-  liftModuleState :: State.State ModuleBuilderState a -> ParserT e s m a
-  liftModuleState = ParserT . liftModuleState
+instance Monad m => MonadModuleBuilder (ParserT e ParserState m) where
+  liftModuleState :: State.State ModuleBuilderState a -> ParserT e ParserState m a
+  liftModuleState s = do
+    ms <- use (cgen_state . moduleState)
+    let (a, ms') = State.runState s ms
+    cgen_state . moduleState .= ms'
+    return a

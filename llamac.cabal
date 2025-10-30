@@ -44,6 +44,7 @@ library
                       Semantics.Unifier
                       RunTime.LibHeaders
                       IR.CodeGenState
+                      IR.TypeUtils
   build-depends:      base >= 4.7 && < 5,
                       array >= 0.4 && < 0.6,
                       mtl >= 2.2,
@@ -58,7 +59,8 @@ library
                       text >= 1.2 && < 2.0,
                       pretty-simple >= 4.0,
                       llvm-hs-pure   >= 9.0 && < 9.1,
-                      llvm-hs-pretty >= 0.9 && < 0.10
+                      llvm-hs-pretty >= 0.9 && < 0.10,
+                      prettyprinter >= 1.7
   build-tool-depends: alex:alex >= 3.2,
                       happy:happy >= 1.20
   ghc-options:        -Wall

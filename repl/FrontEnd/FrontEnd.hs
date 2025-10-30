@@ -8,10 +8,10 @@ import System.Console.Haskeline
 import Common.PrintAST (pretty)
 import qualified Common.AST as AST
 import Lexer.Lexer (AlexPosn)
-import Parser.Parser (calcRepl, calc)
+import Parser.Parser (calcRepl)
 import Parser.ParserState (initAlexState, initParserState)
-import Parser.ParserM (putAlexState, getSymbols, throwInternalError, getSemState)
-import Parser.Utils (safeReadFile)
+import Parser.ParserM (putAlexState, getSymbols, throwInternalError, getSemState, getCGenState)
+import Parser.Utils (safeReadFile, initParseAnalyzeM, parseAnalyzeM)
 import Semantics.Utils (findName, getNodeType, resolveType)
 import Semantics.Semantics (analyzeAST, Analyzable (sem), TypeAble (infer))
 
@@ -28,8 +28,11 @@ loadProgramOrExpr s = liftParser $ do
     putAlexState (initAlexState s)
     calcRepl
 
+initSymbolsParseAnalyzeRun :: Interpreter ()
+initSymbolsParseAnalyzeRun = liftParser initParseAnalyzeM >>= runAST
+
 parseAnalyzeRun :: Interpreter ()
-parseAnalyzeRun = liftParser (calc >>= analyzeAST) >>= runAST
+parseAnalyzeRun = liftParser parseAnalyzeM >>= runAST
 
 -- IO
 getSafeCodeFromFile :: String -> IO (Maybe String)
@@ -97,7 +100,7 @@ initRepl f = do
         Nothing -> return ""
     let initState = initInterpreterState (initParserState input) f
     let catchError err = liftIO (print err >> putStrLn "Failed to load file")
-    let fileInterpeter = catchRunTimeError parseAnalyzeRun catchError
+    let fileInterpeter = catchRunTimeError initSymbolsParseAnalyzeRun catchError
     res <- evalInterpreter initState (fileInterpeter >> repl)
     case res of
         Left err -> print err
@@ -122,6 +125,9 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
             print' (pretty s)
         Debug SemState -> do
             s <- liftParser getSemState
+            print' (show s)
+        Debug CGenState -> do
+            s <- liftParser getCGenState
             print' (show s)
         Debug FileInput -> do
             fopt <- getCodeFile

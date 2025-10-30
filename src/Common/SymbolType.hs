@@ -8,7 +8,7 @@ import Common.PrintAST (Pretty(prettyPrec))
 -- A representation for semantic types
 
 -- Const types are types without type variables
-newtype ConstType = ConstType (TypeF ConstType)
+newtype ConstType = ConstType { unConstType :: TypeF ConstType }
     deriving (Show, Eq, Ord)
 
 instance Pretty ConstType where
@@ -63,6 +63,12 @@ bottomUp f v@(TVar _)  = f v
 -- bottomUpM :: Monad m => (SymbolType -> m SymbolType) -> SymbolType -> m SymbolType
 -- bottomUpM f (SymType t) = mapM (bottomUpM f) t >>= f . SymType
 -- bottomUpM f v@(TVar _)  = f v
+
+cataUn :: (t -> TypeF t) -> (TypeF a -> a) -> t -> a
+cataUn unT alg tf = alg (fmap (cataUn unT alg) (unT tf))
+
+cataUnM :: Monad m => (t -> TypeF t) -> (TypeF a -> m a) -> t -> m a
+cataUnM unT alg tf = mapM (cataUnM unT alg) (unT tf) >>= alg
 
 cata :: (TypeF a -> a, Int -> a) -> SymbolType -> a
 cata alg@(f, _) (SymType t) = f $ fmap (cata alg) t

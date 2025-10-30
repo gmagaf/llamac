@@ -1,4 +1,5 @@
-module Parser.Utils (parse, analyze, parseAndAnalyze,
+module Parser.Utils (parseAnalyzeM, initParseAnalyzeM, parseString,
+                     parse, analyze, parseAndAnalyze,
                      readFileB, safeReadFile, parseFile,
                      debug, debugRepl) where
 
@@ -11,13 +12,27 @@ import Common.AST (AST)
 import Common.PrintAST (pretty, debugPrint)
 import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calc)
-import Parser.ParserM (Error, parseString)
-import Parser.ParserState (ParserState, sem_state, symbols)
+import Parser.ParserM (Error, Parser, runParser)
+import Parser.ParserState (ParserState, sem_state, symbols, cgen_state, initParserState)
 import Semantics.Utils (SemanticTag)
 import Semantics.Semantics (analyzeAST)
 import Control.Exception (IOException, handle)
+import RunTime.LibHeaders (initSymbolTable)
 
--- The parsing function
+-- Various useful parsers
+parseAnalyzeM :: Parser (AST SemanticTag)
+parseAnalyzeM = calc >>= analyzeAST
+
+initParseAnalyzeM :: Parser (AST SemanticTag)
+initParseAnalyzeM = initSymbolTable >> calc >>= analyzeAST
+
+-- Util that initilizes a parser state and runs a parser monad
+parseString :: Parser a -> String -> (Either Error a, ParserState)
+parseString m s = runParser initState m where
+  initState :: ParserState
+  initState = initParserState s
+
+  -- The parsing function
 parse :: String -> Either Error (AST AlexPosn)
 parse = fst . parseString calc
 
@@ -26,7 +41,7 @@ analyze = fst . parseAndAnalyze
 
 -- The parsing and semantic analysis function
 parseAndAnalyze :: String -> (Either Error (AST SemanticTag), ParserState)
-parseAndAnalyze = parseString (calc >>= analyzeAST)
+parseAndAnalyze = parseString initParseAnalyzeM
 
 -- Util function for debugging end to end
 debug :: String -> IO ()
@@ -34,6 +49,8 @@ debug s = do
   let (res, state) = parseAndAnalyze s
   putStrLn "Semantic State"
   print (view sem_state state)
+  putStrLn "Code Gen State"
+  print (view cgen_state state)
   putStrLn "Symbol Table"
   putStrLn $ pretty (view symbols state)
   case res of

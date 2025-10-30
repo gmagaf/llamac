@@ -1,19 +1,28 @@
-module IR.CodeGenState (CodeGenState(..), initCodeGenState) where
+{-# LANGUAGE TemplateHaskell #-}
+module IR.CodeGenState (CodeGenState, moduleState, irState, initCodeGenState) where
 
-import LLVM.IRBuilder (ModuleBuilderState, IRBuilderState, emptyIRBuilder, emptyModuleBuilder)
+import Control.Lens (makeLenses)
+import LLVM.IRBuilder (ModuleBuilderState (..), IRBuilderState (..), emptyIRBuilder, emptyModuleBuilder)
+import LLVM.IRBuilder.Internal.SnocList (SnocList(unSnocList))
+import LLVM.Pretty (ppll)
 
 -- This module defines the state of the code generation
 
 data CodeGenState = CodeGenState
-    { moduleState  :: ModuleBuilderState
-    , irState      :: IRBuilderState
+    { _moduleState  :: ModuleBuilderState
+    , _irState      :: IRBuilderState
     }
+makeLenses ''CodeGenState
 
 instance Show CodeGenState where
-    show (CodeGenState {}) = "CodeGenState"
+    show (CodeGenState ms irs) = "CodeGenState {" ++
+        "moduleStateGlobals = " ++ (show . map ppll . unSnocList . builderDefs $ ms)
+        ++ ", " ++ "moduleStateTypes = " ++ show (fmap ppll . builderTypeDefs $ ms)
+        ++ ", " ++ "irBuilderStateBBs = " ++ (show . map ppll . unSnocList . builderBlocks $ irs)
+        ++ "}"
 
 initCodeGenState :: CodeGenState
 initCodeGenState = CodeGenState
-    { moduleState= emptyModuleBuilder
-    , irState    = emptyIRBuilder
+    { _moduleState= emptyModuleBuilder
+    , _irState    = emptyIRBuilder
     }

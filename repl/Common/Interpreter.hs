@@ -2,7 +2,7 @@ module Common.Interpreter (module Common.Interpreter) where
 
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
-import Control.Monad.State (MonadState (..))
+import Control.Monad.State (MonadState (..), gets)
 
 import Lexer.Lexer (AlexPosn, printPosn)
 import Parser.ParserT (ParserT(..), pureParserT, runParserT, evalParserT, throw, catch)
@@ -27,7 +27,7 @@ data InterpreterState = InterpreterState
     } deriving Show
 
 getRunTime :: Interpreter RunTimeEnv
-getRunTime = run_time_env <$> get
+getRunTime = gets run_time_env
 
 getFramePointer :: Interpreter ActivationRecord
 getFramePointer = frame_pointer <$> getRunTime
@@ -53,7 +53,7 @@ isAllocated ha = do
     return (fromMaybe True alloc) -- if it is not allocated from the user we assume it is allocated by the system
 
 getCodeFile :: Interpreter (Maybe String)
-getCodeFile = code_file <$> get
+getCodeFile = gets code_file
 
 readFromBuffer :: Int -> Interpreter String
 readFromBuffer n = do

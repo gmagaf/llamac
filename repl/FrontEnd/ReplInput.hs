@@ -35,6 +35,7 @@ helpMsg = " Commands available from the prompt:\n\
 \\n\
 \   :debug symbols              show the symbol table\n\
 \          semState             show the semantic state\n\
+\          cgenState            show the code generation state\n\
 \          file, code           show the current loaded file\n\
 \          runtime, stack       show the current runtime stack\n"
 
@@ -52,13 +53,14 @@ data ReplInput = Program (AST AlexPosn)
     deriving Show
 
 -- TODO: add more debug choices
-data DebugCmdOptions = Symbols | SemState | FileInput | RunTime
+data DebugCmdOptions = Symbols | SemState | CGenState | FileInput | RunTime
     deriving Show
 
 instance Read DebugCmdOptions where
     readPrec = lift $
                 (string "symbols" >> return Symbols) <++
                 (string "semState" >> return SemState) <++
+                (string "cgenState" >> return CGenState) <++
                 (string "file" >> return FileInput) <++
                 (string "code" >> return FileInput) <++
                 (string "runtime" >> return RunTime) <++

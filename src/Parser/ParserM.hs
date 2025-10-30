@@ -2,10 +2,11 @@ module Parser.ParserM (Parser,
                        getAlexPos, getTokenPosn, putAlexState,
                        getSymbols, putSymbols,
                        getSemState, putSemState,
+                       getCGenState, putCGenState,
                        Error, throwError, throwAtPosn, stackTrace,
                        throwInternalError,
-                       throwParsingError, throwSemanticError,
-                       runParser, evalParser, parseString,
+                       throwParsingError, throwSemanticError, throwCGenError,
+                       runParser, evalParser,
                        lexerWrap) where
 
 import Data.Functor.Identity (Identity (..))
@@ -16,9 +17,10 @@ import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
       alexMonadScan, tokenPosnOfAlexState, printPosn)
 import Common.Token (Token)
 import Common.SymbolTable (SymbolTable)
-import Parser.ParserState (ParserState, initParserState, alex_state, sem_state, symbols)
+import Parser.ParserState (ParserState, alex_state, sem_state, symbols, cgen_state)
 import Parser.ParserT (ParserT, evalParserT, runParserT, throw, withExcept, catch)
 import Semantics.SemanticState (SemanticState)
+import IR.CodeGenState (CodeGenState)
 
 -- This module defines the Parser monad
 
@@ -28,6 +30,7 @@ data Error = Error {msg :: String}
            | LexicalError {msg :: String}
            | ParsingError {msg :: String}
            | SemanticError {msg :: String}
+           | CodeGenError {msg :: String}
     deriving Eq
 
 instance Show Error where
@@ -37,6 +40,7 @@ instance Show Error where
   show (LexicalError s)   = "Lexical Error: " ++ s
   show (ParsingError s)   = "Parser Error: " ++ s
   show (SemanticError s)  = "Semantic Error: " ++ s
+  show (CodeGenError s)   = "Code Gen Error: " ++ s
 
 
 -- The monad definition
@@ -58,6 +62,9 @@ getSymbols = use symbols
 getSemState :: Parser SemanticState
 getSemState = use sem_state
 
+getCGenState :: Parser CodeGenState
+getCGenState = use cgen_state
+
 putAlexState :: AlexState -> Parser ()
 putAlexState s = do
   alex_state .= s
@@ -70,18 +77,16 @@ putSemState :: SemanticState -> Parser ()
 putSemState s = do
   sem_state .= s
 
+putCGenState :: CodeGenState -> Parser ()
+putCGenState s = do
+  cgen_state .= s
+
 -- Utils for running a Parser
 evalParser :: ParserState -> Parser a -> Either Error a
 evalParser s = runIdentity . flip evalParserT s
 
 runParser :: ParserState -> Parser a -> (Either Error a, ParserState)
 runParser s = runIdentity . flip runParserT s
-
--- Util that initilizes a parser state and runs a parser monad
-parseString :: Parser a -> String -> (Either Error a, ParserState)
-parseString m s = runParser initState m where
-  initState :: ParserState
-  initState = initParserState s
 
 -- Utils for error handling
 throwError :: String -> Parser a
@@ -101,6 +106,9 @@ throwParsingError = throw . ParsingError
 
 throwSemanticError :: String -> Parser a
 throwSemanticError = throw . SemanticError
+
+throwCGenError :: String -> Parser a
+throwCGenError = throw . CodeGenError
 
 stackTrace :: String -> Parser a -> Parser a
 stackTrace s = catch (throw . \e -> e{msg = msg e ++ "\n\t\t" ++ s})

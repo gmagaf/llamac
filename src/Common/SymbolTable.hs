@@ -7,6 +7,7 @@ module Common.SymbolTable (Context,
                            names,
                            types,
                            FullTableEntry,
+                           mkFullTableEntry,
                            mkBasicEntry,
                            basicInfo,
                            optInfo,
@@ -90,6 +91,9 @@ data FullTableEntry e g = FullTableEntry {
     _basicInfo :: e,
     _optInfo :: Maybe g
     } deriving Show
+
+mkFullTableEntry :: e -> Maybe g -> FullTableEntry e g
+mkFullTableEntry = FullTableEntry
 
 mkBasicEntry :: e -> FullTableEntry e g
 mkBasicEntry = flip FullTableEntry Nothing

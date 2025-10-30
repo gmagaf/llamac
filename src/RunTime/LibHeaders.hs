@@ -1,15 +1,16 @@
 module RunTime.LibHeaders (module RunTime.LibHeaders) where
 
+import Control.Lens ((%=))
+import LLVM.IRBuilder (extern)
+import LLVM.AST (mkName)
+
 import Common.Token (Identifier)
 import Common.AST (TypeF(FunType, RefType))
+import Common.SymbolTable (TableEntry(FunEntry), insert, openScope, names, mkFullTableEntry)
 import Common.SymbolType
-     (ConstType(..),
-      stringConstType,
-      intConstType,
-      floatConstType,
-      boolConstType,
-      charConstType,
-      unitConstType)
+import Parser.ParserState (symbols)
+import Parser.ParserM (Parser)
+import IR.TypeUtils (genConstType)
 
 -- This module contains the signatures of the run-time library
 
@@ -54,10 +55,10 @@ incrLibSigs =
     [ ("incr", ConstType (FunType (ConstType (RefType intConstType)) unitConstType), ["arg0"])
     , ("decr", ConstType (FunType (ConstType (RefType intConstType)) unitConstType), ["arg0"])
     ]
-    
+
 -- Conversions
 convertLibSigs :: [RunTimeLibSib]
-convertLibSigs = 
+convertLibSigs =
     [ ("float_of_int", ConstType (FunType intConstType floatConstType), ["arg0"])
     , ("int_of_float", ConstType (FunType floatConstType intConstType), ["arg0"])
     , ("round",        ConstType (FunType floatConstType intConstType), ["arg0"])
@@ -73,3 +74,15 @@ stringLibSigs =
     , ("strcpy", ConstType (FunType stringConstType (ConstType (FunType stringConstType unitConstType))), ["arg0", "arg1"])
     , ("strcat", ConstType (FunType stringConstType (ConstType (FunType stringConstType unitConstType))), ["arg0", "arg1"])
     ]
+
+initSymbolTable :: Parser ()
+initSymbolTable = do
+  symbols . names %= openScope
+  mapM_ f libSigs where
+    f :: RunTimeLibSib -> Parser ()
+    f (i, t, ps) = do
+        let scheme = MonoType (constTypeToSymbolType t)
+        argTs <- mapM genConstType (funToArgs ctCoAlg t)
+        outT  <- genConstType (outFunType ctCoAlg t)
+        fun   <- extern (mkName i) argTs outT
+        symbols . names %= insert i (mkFullTableEntry (FunEntry scheme ps) (Just fun))

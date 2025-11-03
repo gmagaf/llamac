@@ -33,7 +33,8 @@ import Data.Bifunctor (bimap)
 import Control.Lens.Prism (Prism', prism')
 import Control.Lens (Lens', makeLenses, lens, preview)
 import Control.Lens.Getter (Getter, to, view)
-import LLVM.AST (Operand)
+import qualified LLVM.AST as L (Operand)
+import qualified LLVM.AST.Type as L
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (Pretty (pretty))
@@ -120,8 +121,8 @@ newtype TypeTableEntry
     = TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
         deriving Show
 
-type NameSpace = Context String (FullTableEntry TableEntry Operand)
-type TypeSpace = Context String (FullTableEntry TypeTableEntry ())
+type NameSpace = Context String (FullTableEntry TableEntry L.Operand)
+type TypeSpace = Context String (FullTableEntry TypeTableEntry L.Type)
 data SymbolTable = SymbolTable {
     _names :: NameSpace,
     _types :: TypeSpace

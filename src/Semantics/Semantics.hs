@@ -11,10 +11,11 @@ import Common.SymbolType (SymbolType)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser)
 import Semantics.Utils (SemanticTag(..), TypeInfo (..), throwSemAtPosn,
-    getNames, putNames, resolveTableEntry, resolveNodeRec)
+    resolveTableEntry, resolveNodeRec)
 import Semantics.TypeAnalysis (analyzeTypeDef, analyzeType)
 import Semantics.ExprAnalysis (analyzeLet, analyzeExpr)
 import Common.SymbolTable (basicInfo)
+import Parser.SymbolTableUtils (overNamesM)
 
 -- This module contains the semantic analysis of the nodes
 -- and decorates them with the semantic tag
@@ -39,11 +40,9 @@ class Analyzable f => TypeAble f where
 analyzeAST :: AST AlexPosn -> Parser (AST SemanticTag)
 analyzeAST ast = do
     semAst <- mapM (bitraverse sem sem) ast
-    n <- getNames
-    rn <- mapM (\fullEntry -> do
+    overNamesM $ mapM (\fullEntry -> do
                 e <- resolveTableEntry (view basicInfo fullEntry)
-                return (set basicInfo e fullEntry)) n
-    putNames rn
+                return (set basicInfo e fullEntry))
     mapM (bitraverse resolveNodeRec return) semAst
 
 instance Analyzable TypeDef where

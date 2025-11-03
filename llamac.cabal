@@ -29,6 +29,7 @@ library
                       Parser.ParserT
                       Parser.ParserM
                       Parser.ParserState
+                      Parser.SymbolTableUtils
                       Parser.Utils
                       Common.Token
                       Common.AST

@@ -4,35 +4,20 @@ import Data.Foldable (foldrM)
 import qualified Data.Set as S
 import Data.Maybe (isJust, isNothing)
 import Control.Monad ((>=>), when)
-import Control.Lens.Getter (use)
-import Control.Lens.Setter ((.=), (%=), (<~), (.~))
+import Control.Lens.Setter ((<~))
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST (Node(..), TypeF(..))
 import Common.PrintAST
 import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..),
                           substScheme, cata, tvarsInType)
-
-import Common.SymbolTable
-     (closeScope,
-      openScope,
-      partialQuery,
-      partialInsert,
-      partialUpdate,
-      types,
-      names,
-      Context,
-      TableEntry(..),
-      TypeTableEntry(..),
-      mkBasicEntry,
-      basicInfo,
-      NameSpace,
-      TypeSpace, FullTableEntry)
+import Common.SymbolTable (Context, NameSpace, FullTableEntry, TableEntry(..), TypeTableEntry(..), names)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
     getSemState, putSemState,
     throwSemanticError, throwAtPosn)
 import Parser.ParserState (symbols)
+import Parser.SymbolTableUtils (getNames, getTypes, queryP, updateP)
 import Semantics.TypeConstraints (ConstraintsMap, union, lookupConstr, insertConstr, insertConstrWith)
 import Semantics.SemanticState (SemanticState(..), Unifier)
 
@@ -66,20 +51,6 @@ getDefScheme n = case typeInfo (tag n) of
         throwSemAtPosn "Unable to compute type scheme of node" p
 
 -- Functions for dealing with the Semantic state of the parser
-getNames :: Parser NameSpace
-getNames = use (symbols . names)
-
-getTypes :: Parser TypeSpace
-getTypes = use (symbols . types)
-
-putNames :: NameSpace -> Parser ()
-putNames ns = do
-    symbols . names .= ns
-
-putTypes :: TypeSpace -> Parser ()
-putTypes ts = do
-    symbols . types .= ts
-
 getSemPosn :: Parser AlexPosn
 getSemPosn = posnOfSem <$> getSemState
 
@@ -205,22 +176,12 @@ gen freeVars t =
     in foldr AbsType (MonoType t) varsToBound
 
 -- Parser symbol table utiles
+-- function aliases
 query :: Ord k => k -> Context k (FullTableEntry e g) -> Maybe e
-query = partialQuery basicInfo
+query = queryP
 
-insert :: Ord k => k -> e -> Context k (FullTableEntry e g) -> Context k (FullTableEntry e g)
-insert = partialInsert mkBasicEntry
-
-update :: Ord k => k -> e -> Context k (FullTableEntry e g) -> Context k (FullTableEntry e g)
-update = partialUpdate (basicInfo .~)
-
-insertName :: String -> TableEntry -> Parser ()
-insertName k entry = do
-    symbols . names %= insert k entry
-
-insertType :: String -> TypeTableEntry -> Parser ()
-insertType k entry = do
-    symbols . types %= insert k entry
+update :: String -> TableEntry -> NameSpace -> NameSpace
+update = updateP
 
 -- Update symbol if exists else throw error
 updateName :: String -> TableEntry -> Parser ()
@@ -229,13 +190,6 @@ updateName key entry = do
     symbols . names <~ case query key ns of
         Just _ -> return $ update key entry ns
         _ -> throwSem ("Cannot update symbol " ++ key ++ " as it is not in scope")
-
--- Query for a symbol that may or may not be in scope
-queryName :: String -> Parser (Maybe TableEntry)
-queryName k = query k <$> getNames
-
-queryType :: String -> Parser (Maybe TypeTableEntry)
-queryType k = query k <$> getTypes
 
 -- Resolution utils
 resolveFreeVars :: S.Set Int -> Parser (S.Set Int)
@@ -371,23 +325,6 @@ findType i = do
 -- Check that type is in scope else throw error
 checkTypeInScope :: Identifier -> Parser ()
 checkTypeInScope = findType >=> const (return ())
-
--- Handle scopes
-openScopeInTypes :: Parser ()
-openScopeInTypes = do
-    symbols . types %= openScope
-
-closeScopeInTypes :: Parser ()
-closeScopeInTypes = do
-    symbols . types %= closeScope
-
-openScopeInNames :: Parser ()
-openScopeInNames = do
-    symbols . names %= openScope
-
-closeScopeInNames :: Parser ()
-closeScopeInNames = do
-    symbols . names %= closeScope
 
 -- Other util functions
 hasDuplicates :: (Ord a) => [a] -> Bool

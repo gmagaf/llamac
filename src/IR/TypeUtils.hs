@@ -1,14 +1,14 @@
-module IR.TypeUtils (charStar, genConstType) where
+module IR.TypeUtils (charStar, genConstType, genType) where
 
 import qualified LLVM.AST.Type as L
 import LLVM.Prelude (Word64)
 
 import Common.Token (ConstrIdentifier)
 import Common.AST (TypeF(..))
-import Common.SymbolType (ConstType(..), cataUn, cataUnM)
+import Common.SymbolType (ConstType(..), SymbolType, cataM, cataUn, cataUnM)
 import Common.SymbolTable (TypeTableEntry(..))
 import Parser.ParserM (Parser, throwCGenError)
-import Semantics.Utils (queryType)
+import Parser.SymbolTableUtils (queryTypeP)
 
 {-
   This module contains helpful functions
@@ -39,6 +39,9 @@ sizeOfType tf = case tf of
 genConstType :: ConstType -> Parser L.Type
 genConstType = cataUnM unConstType genTypeF
 
+genType :: SymbolType -> Parser L.Type
+genType = cataM (genTypeF, \_ -> return charStar)
+
 genTypeF :: TypeF L.Type -> Parser L.Type
 genTypeF tf = case tf of
     UnitType                                -> return L.void
@@ -52,7 +55,7 @@ genTypeF tf = case tf of
     RefType t                               -> return (L.ptr t)
     ArrayType _ t                           -> return (L.ptr t)  -- TODO: Define this
     UserDefinedType i                       -> do
-        res <- queryType i
+        res <- queryTypeP i
         case res of
             Just (TypeEntry entry) -> do
                 -- res = map (\(ci, ct) -> (ci, map genConstType ct)) tentry

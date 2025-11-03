@@ -1,6 +1,5 @@
 module Parser.ParserM (Parser,
                        getAlexPos, getTokenPosn, putAlexState,
-                       getSymbols, putSymbols,
                        getSemState, putSemState,
                        getCGenState, putCGenState,
                        Error, throwError, throwAtPosn, stackTrace,
@@ -16,8 +15,7 @@ import Control.Lens.Getter (use)
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
       alexMonadScan, tokenPosnOfAlexState, printPosn)
 import Common.Token (Token)
-import Common.SymbolTable (SymbolTable)
-import Parser.ParserState (ParserState, alex_state, sem_state, symbols, cgen_state)
+import Parser.ParserState (ParserState, alex_state, sem_state, cgen_state)
 import Parser.ParserT (ParserT, evalParserT, runParserT, throw, withExcept, catch)
 import Semantics.SemanticState (SemanticState)
 import IR.CodeGenState (CodeGenState)
@@ -56,9 +54,6 @@ getAlexPos = alex_pos <$> getAlexState
 getTokenPosn :: Parser AlexPosn
 getTokenPosn = tokenPosnOfAlexState <$> getAlexState
 
-getSymbols :: Parser SymbolTable
-getSymbols = use symbols
-
 getSemState :: Parser SemanticState
 getSemState = use sem_state
 
@@ -68,10 +63,6 @@ getCGenState = use cgen_state
 putAlexState :: AlexState -> Parser ()
 putAlexState s = do
   alex_state .= s
-
-putSymbols :: SymbolTable -> Parser ()
-putSymbols s = do
-  symbols .= s
 
 putSemState :: SemanticState -> Parser ()
 putSemState s = do

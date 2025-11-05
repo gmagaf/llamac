@@ -82,12 +82,12 @@ instance Monad m => Monad (ParserT e s m) where
                 Left e  -> return (Left e, s')
                 Right a -> runParserT (f a) s'
 
-instance MonadFix m => MonadFix (ParserT e s m) where
+instance (MonadFix m, Show e) => MonadFix (ParserT e s m) where
   mfix :: forall a. (a -> ParserT e s m a) -> ParserT e s m a
   mfix f = parserT mf where
     mf :: s -> m (Either e a, s)
-    mf s = mfix (\ ~(ea, _) -> runParserT (f (either (const bomb) id ea)) s)
-    bomb = error "mfix (ParserT): recursive computation returned Left value"
+    mf s = mfix (\ ~(ea, _) -> runParserT (f (either bomb id ea)) s)
+    bomb = error . ("mfix (ParserT): recursive computation returned Left value: " ++) . show
 
 instance MonadIO m => MonadIO (ParserT e s m) where
   liftIO :: IO a -> ParserT e s m a

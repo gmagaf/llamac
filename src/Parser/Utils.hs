@@ -7,6 +7,7 @@ import qualified Data.ByteString    as B
 import qualified Data.Text          as T
 import qualified Data.Text.Encoding as T
 import Control.Lens (view)
+import Data.Text.Lazy (Text)
 
 import Common.AST (AST)
 import Common.PrintAST (pretty, debugPrint)
@@ -18,6 +19,8 @@ import Semantics.Utils (SemanticTag)
 import Semantics.Semantics (analyzeAST)
 import Control.Exception (IOException, handle)
 import RunTime.LibHeaders (initSymbolTable)
+import IR.CodeGen (genAST)
+import IR.Utils (codegenProgram)
 
 -- Various useful parsers
 parseAnalyzeM :: Parser (AST SemanticTag)
@@ -25,6 +28,9 @@ parseAnalyzeM = calc >>= analyzeAST
 
 initParseAnalyzeM :: Parser (AST SemanticTag)
 initParseAnalyzeM = initSymbolTable >> calc >>= analyzeAST
+
+initParseAnalyzeGenM :: String -> Parser Text
+initParseAnalyzeGenM s = initSymbolTable >> calc >>= analyzeAST >>= genAST >> codegenProgram s
 
 -- Util that initilizes a parser state and runs a parser monad
 parseString :: Parser a -> String -> (Either Error a, ParserState)
@@ -46,7 +52,7 @@ parseAndAnalyze = parseString initParseAnalyzeM
 -- Util function for debugging end to end
 debug :: String -> IO ()
 debug s = do
-  let (res, state) = parseAndAnalyze s
+  let (res, state) = parseString (initParseAnalyzeGenM "debug from ghci") s
   putStrLn "Semantic State"
   print (view sem_state state)
   putStrLn "Code Gen State"

@@ -1,11 +1,11 @@
-module IR.TypeUtils (charStar, genConstType, genType) where
+module IR.TypeUtils (charStar, genConstType, genType, getArgStTypes, getRetStType) where
 
 import qualified LLVM.AST.Type as L
 import LLVM.Prelude (Word64)
 
 import Common.Token (ConstrIdentifier)
 import Common.AST (TypeF(..))
-import Common.SymbolType (ConstType(..), SymbolType, cataM, cataUn, cataUnM)
+import Common.SymbolType (ConstType(..), SymbolType, cataM, cataUn, cataUnM, funToArgs, stCoAlg, outFunType)
 import Common.SymbolTable (TypeTableEntry(..))
 import Parser.ParserM (Parser, throwCGenError)
 import Parser.SymbolTableUtils (queryTypeP)
@@ -64,3 +64,10 @@ genTypeF tf = case tf of
                     size = foldr (\c acc -> max acc (sizeOfConstr c)) 0 entry
                 return $ L.StructureType True (L.i8:([L.ArrayType size L.i8 | size /= 0])) -- TODO: Define this
             Nothing -> throwCGenError ("Unable to find type: " ++ i ++ " to generate")
+
+
+getArgStTypes :: SymbolType -> [SymbolType]
+getArgStTypes = funToArgs stCoAlg
+
+getRetStType :: SymbolType -> SymbolType
+getRetStType = outFunType stCoAlg

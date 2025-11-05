@@ -23,6 +23,6 @@ instance Show CodeGenState where
 
 initCodeGenState :: CodeGenState
 initCodeGenState = CodeGenState
-    { _moduleState= emptyModuleBuilder
-    , _irState    = emptyIRBuilder
+    { _moduleState = emptyModuleBuilder
+    , _irState     = emptyIRBuilder
     }

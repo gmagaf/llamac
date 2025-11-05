@@ -1,8 +1,8 @@
 module RunTime.LibHeaders (module RunTime.LibHeaders) where
 
 import Control.Lens ((%=))
-import LLVM.IRBuilder (extern)
-import LLVM.AST (mkName)
+import qualified LLVM.IRBuilder as L (extern)
+import qualified LLVM.AST as L (mkName)
 
 import Common.Token (Identifier)
 import Common.AST (TypeF(FunType, RefType))
@@ -84,5 +84,5 @@ initSymbolTable = do
         let scheme = MonoType (constTypeToSymbolType t)
         argTs <- mapM genConstType (funToArgs ctCoAlg t)
         outT  <- genConstType (outFunType ctCoAlg t)
-        fun   <- extern (mkName i) argTs outT
+        fun   <- L.extern (L.mkName i) argTs outT
         symbols . names %= insert i (mkFullTableEntry (FunEntry scheme ps) (Just fun))

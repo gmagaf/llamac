@@ -11,84 +11,84 @@ import Parser.ParserM (Parser, lexerWrap, getAlexPos, getTokenPosn, throwAtPosn,
 %name calcRepl REPL
 %tokentype { Token }
 %monad { Parser }
-%lexer { lexerWrap } { T_eof }
+%lexer { lexerWrap } { EofT }
 %error { parseError }
 
 %token
   -- Keywords
-  and                   { T_and }
-  array                 { T_array }
-  begin                 { T_begin }
-  bool                  { T_bool }
-  char                  { T_char }
-  delete                { T_delete }
-  dim                   { T_dim }
-  do                    { T_do }
-  done                  { T_done }
-  downto                { T_downto }
-  else                  { T_else }
-  end                   { T_end }
-  false                 { T_false }
-  float                 { T_float }
-  for                   { T_for }
-  if                    { T_if }
-  in                    { T_in }
-  int                   { T_int }
-  let                   { T_let }
-  match                 { T_match }
-  mod                   { T_mod }
-  mutable               { T_mutable }
-  new                   { T_new }
-  not                   { T_not }
-  of                    { T_of }
-  rec                   { T_rec }
-  ref                   { T_ref }
-  then                  { T_then }
-  to                    { T_to }
-  true                  { T_true }
-  type                  { T_type }
-  unit                  { T_unit }
-  while                 { T_while }
-  with                  { T_with }
+  and                   { AndT }
+  array                 { ArrayT }
+  begin                 { BeginT }
+  bool                  { BoolT }
+  char                  { CharT }
+  delete                { DeleteT }
+  dim                   { DimT }
+  do                    { DoT }
+  done                  { DoneT }
+  downto                { DowntoT }
+  else                  { ElseT }
+  end                   { EndT }
+  false                 { FalseT }
+  float                 { FloatT }
+  for                   { ForT }
+  if                    { IfT }
+  in                    { InT }
+  int                   { IntT }
+  let                   { LetT }
+  match                 { MatchT }
+  mod                   { ModT }
+  mutable               { MutableT }
+  new                   { NewT }
+  not                   { NotT }
+  of                    { OfT }
+  rec                   { RecT }
+  ref                   { RefT }
+  then                  { ThenT }
+  to                    { ToT }
+  true                  { TrueT }
+  type                  { TypeT }
+  unit                  { UnitT }
+  while                 { WhileT }
+  with                  { WithT }
   -- Identifiers
-  id                    { T_id $$ }
-  id_constr             { T_id_constr $$ }
+  id                    { IdT $$ }
+  id_constr             { IdConstrT $$ }
   -- Constants
-  const_int             { T_const_int $$ }
-  const_float           { T_const_float $$ }
-  const_char            { T_const_char $$ }
-  const_string          { T_const_string $$ }
+  const_int             { ConstIntT $$ }
+  const_float           { ConstFloatT $$ }
+  const_char            { ConstCharT $$ }
+  const_string          { ConstStringT $$ }
   -- Symbols
-  '->'                  { T_arrow }
-  '='                   { T_equals }
-  '|'                   { T_bar }
-  '+'                   { T_plus }
-  '-'                   { T_minus }
-  '*'                   { T_times }
-  '/'                   { T_div }
-  '+.'                  { T_plus_float }
-  '-.'                  { T_minus_float }
-  '*.'                  { T_times_float }
-  '/.'                  { T_div_float }
-  '**'                  { T_exp }
-  '!'                   { T_bang }
-  ';'                   { T_semicolon }
-  '&&'                  { T_and_op }
-  '||'                  { T_or_op }
-  '<>'                  { T_not_equals }
-  '<'                   { T_less_than }
-  '>'                   { T_greater_than }
-  '<='                  { T_less_than_eq }
-  '>='                  { T_greater_than_eq }
-  '=='                  { T_nat_eq_op }
-  '!='                  { T_not_nat_eq_op }
-  ':='                  { T_assign_mutable }
-  '('                   { T_lparen }
-  ')'                   { T_rparen }
-  '['                   { T_lbracket }
-  ']'                   { T_rbracket }
-  ','                   { T_comma }
-  ':'                   { T_colon }
+  '->'                  { ArrowT }
+  '='                   { EqualsT }
+  '|'                   { BarT }
+  '+'                   { PlusT }
+  '-'                   { MinusT }
+  '*'                   { TimesT }
+  '/'                   { DivT }
+  '+.'                  { PlusFloatT }
+  '-.'                  { MinusFloatT }
+  '*.'                  { TimesFloatT }
+  '/.'                  { DivFloatT }
+  '**'                  { ExpT }
+  '!'                   { BangT }
+  ';'                   { SemicolonT }
+  '&&'                  { AndOpT }
+  '||'                  { OrOpT }
+  '<>'                  { NotEqualsT }
+  '<'                   { LessThanT }
+  '>'                   { GreaterThanT }
+  '<='                  { LessThanEqT }
+  '>='                  { GreaterThanEqT }
+  '=='                  { NatEqOpT }
+  '!='                  { NotNatEqOpT }
+  ':='                  { AssignMutableT }
+  '('                   { LParenT }
+  ')'                   { RParenT }
+  '['                   { LBracketT }
+  ']'                   { RBracketT }
+  ','                   { CommaT }
+  ':'                   { ColonT }
 
 %left ';'
 %nonassoc ':='

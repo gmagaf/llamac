@@ -44,21 +44,21 @@ instance Show a => Show (IORef a) where
     show _ = "IORef"
 
 instance Pretty Value where
-    prettyPrec d UnitVal             = prettyPrec d T_lparen . prettyPrec d T_rparen
-    prettyPrec d (IntVal n)          = prettyPrec d (T_const_int n)
-    prettyPrec d (FloatVal f)        = prettyPrec d (T_const_float f)
-    prettyPrec d (CharVal c)         = prettyPrec d (T_const_char c)
-    prettyPrec d (BoolVal True)      = prettyPrec d T_true
-    prettyPrec d (BoolVal False)     = prettyPrec d T_false
-    prettyPrec d (FunVal f _ _)      = prettyPrec d (T_id f)
+    prettyPrec d UnitVal             = prettyPrec d LParenT . prettyPrec d RParenT
+    prettyPrec d (IntVal n)          = prettyPrec d (ConstIntT n)
+    prettyPrec d (FloatVal f)        = prettyPrec d (ConstFloatT f)
+    prettyPrec d (CharVal c)         = prettyPrec d (ConstCharT c)
+    prettyPrec d (BoolVal True)      = prettyPrec d TrueT
+    prettyPrec d (BoolVal False)     = prettyPrec d FalseT
+    prettyPrec d (FunVal f _ _)      = prettyPrec d (IdT f)
     prettyPrec d (ConstrVal i _ as)  = showParen (d > app_prec && not (null as)) $
-        prettyPrec d (T_id_constr i) .
+        prettyPrec d (IdConstrT i) .
         showString sep . prettyPrecSepList (app_prec + 1) " " as
         where app_prec = 5
               sep = if null as then "" else " "
-    prettyPrec d (RefVal ha r)       = prettyPrec d (T_const_int ha) . prettyPrec d (T_id "@") . showsPrec d r
-    prettyPrec d Undefined           = prettyPrec d (T_id "Undefined")
-    prettyPrec d (ArrayVal dims a _) = prettyPrec d (T_const_int a) . prettyPrec d (T_id "@") .
-        prettyPrec d (T_id "Array") . prettyDims
-        where prettyDims = prettyPrec d T_lbracket .
-                prettyPrecSepList d ", " (map T_const_int dims) . prettyPrec d T_rbracket
+    prettyPrec d (RefVal ha r)       = prettyPrec d (ConstIntT ha) . prettyPrec d (IdT "@") . showsPrec d r
+    prettyPrec d Undefined           = prettyPrec d (IdT "Undefined")
+    prettyPrec d (ArrayVal dims a _) = prettyPrec d (ConstIntT a) . prettyPrec d (IdT "@") .
+        prettyPrec d (IdT "Array") . prettyDims
+        where prettyDims = prettyPrec d LBracketT .
+                prettyPrecSepList d ", " (map ConstIntT dims) . prettyPrec d RBracketT

@@ -15,11 +15,11 @@ import Property.Utils
 arbIdWithLength :: Int -> Gen Identifier
 arbIdWithLength l = suchThat ((:) <$> elements ['a'..'z'] <*> listGen (l - 1) g) (`notElem` keywords) where
   g = elements ('_':['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
-  keywords = map show [T_and, T_array, T_begin, T_bool, T_char,
-    T_delete, T_dim, T_do, T_done, T_downto, T_else, T_end, T_false,
-    T_float, T_for, T_if, T_in, T_int, T_let, T_match, T_mod, T_mutable,
-    T_new, T_not, T_of, T_rec, T_ref, T_then, T_to, T_true, T_type, T_unit,
-    T_while, T_with]
+  keywords = map show [AndT, ArrayT, BeginT, BoolT, CharT,
+    DeleteT, DimT, DoT, DoneT, DowntoT, ElseT, EndT, FalseT,
+    FloatT, ForT, IfT, InT, IntT, LetT, MatchT, ModT, MutableT,
+    NewT, NotT, OfT, RecT, RefT, ThenT, ToT, TrueT, TypeT, UnitT,
+    WhileT, WithT]
 
 arbConstrIdWithLength :: Int -> Gen Identifier
 arbConstrIdWithLength l = (:) <$> elements ['A'..'Z'] <*> listGen (l - 1) g where
@@ -83,41 +83,41 @@ arbComment = sized $ \l -> do
       return ("(* " ++ c ++ " " ++ inner ++ " " ++ c ++ " *)")
 
 arbKeyword :: Gen Token
-arbKeyword = elements [T_and, T_array, T_begin, T_bool, T_char,
-  T_delete, T_dim, T_do, T_done, T_downto, T_else, T_end, T_false,
-  T_float, T_for, T_if, T_in, T_int, T_let, T_match, T_mod, T_mutable,
-  T_new, T_not, T_of, T_rec, T_ref, T_then, T_to, T_true, T_type, T_unit,
-  T_while, T_with]
+arbKeyword = elements [AndT, ArrayT, BeginT, BoolT, CharT,
+  DeleteT, DimT, DoT, DoneT, DowntoT, ElseT, EndT, FalseT,
+  FloatT, ForT, IfT, InT, IntT, LetT, MatchT, ModT, MutableT,
+  NewT, NotT, OfT, RecT, RefT, ThenT, ToT, TrueT, TypeT, UnitT,
+  WhileT, WithT]
 
 arbOperator :: Gen Token
-arbOperator = elements [T_arrow, T_equals, T_bar, T_plus, T_minus,
-  T_times, T_div, T_plus_float, T_minus_float, T_times_float, T_div_float,
-  T_exp, T_bang, T_semicolon, T_and_op, T_or_op, T_not_equals, T_less_than,
-  T_greater_than, T_less_than_eq, T_greater_than_eq, T_nat_eq_op,
-  T_not_nat_eq_op, T_assign_mutable]
+arbOperator = elements [ArrowT, EqualsT, BarT, PlusT, MinusT,
+  TimesT, DivT, PlusFloatT, MinusFloatT, TimesFloatT, DivFloatT,
+  ExpT, BangT, SemicolonT, AndOpT, OrOpT, NotEqualsT, LessThanT,
+  GreaterThanT, LessThanEqT, GreaterThanEqT, NatEqOpT,
+  NotNatEqOpT, AssignMutableT]
 
 arbSeparator :: Gen Token
-arbSeparator = elements [T_lparen, T_rparen, T_lbracket, T_rbracket,
-  T_comma, T_colon]
+arbSeparator = elements [LParenT, RParenT, LBracketT, RBracketT,
+  CommaT, ColonT]
 
 arbTokenLexeme :: Gen (Token, String)
 arbTokenLexeme = sized $ \l -> do
   i <- arbIdWithLength l
-  let ip = (T_id i, i)
+  let ip = (IdT i, i)
   ci <- arbConstrIdWithLength l
-  let cip = (T_id_constr ci, ci)
+  let cip = (IdConstrT ci, ci)
   n <- resize l arbIntWithLength
   let np = case readMaybe n :: Maybe IntConstant of
-        Just nv -> (T_const_int nv, n)
+        Just nv -> (ConstIntT nv, n)
         _       -> error $ "Failed to parse int: " ++ n
   f <- resize l arbFloatWithLength
   let fp = case readMaybe f :: Maybe FloatConstant of
-        Just fv -> (T_const_float fv, f)
+        Just fv -> (ConstFloatT fv, f)
         _       -> error $ "Failed to parse float: " ++ f
   (c, cLex) <- resize l arbChar
-  let cp = (T_const_char c, cLex)
+  let cp = (ConstCharT c, cLex)
   (s, sLex) <- resize l arbString
-  let sp = (T_const_string s, sLex)
+  let sp = (ConstStringT s, sLex)
   k <- arbKeyword
   let kp = (k, show k)
   o <- arbOperator
@@ -128,7 +128,7 @@ arbTokenLexeme = sized $ \l -> do
 
 arbTokens :: Int -> Gen ([Token], String)
 arbTokens l = do
-  (ts, s) <- aux ([T_eof], id) l
+  (ts, s) <- aux ([EofT], id) l
   return (ts, s "") where
     aux :: ([Token], String -> String) -> Int -> Gen ([Token], String -> String)
     aux (acc, f) 0 = return (acc, f)

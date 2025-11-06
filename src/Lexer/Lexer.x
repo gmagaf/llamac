@@ -25,72 +25,72 @@ $white    = [\ \t\r\n]            -- white characters
 @escape   = \\n|\\t|\\r|\\0|\\\\|\\\'|\\\"|\\x$hex$hex -- escape sequences
 
 rules :-
-  <0> "and"                                     { keyword T_and }
-  <0> "array"                                   { keyword T_array }
-  <0> "begin"                                   { keyword T_begin }
-  <0> "bool"                                    { keyword T_bool }
-  <0> "char"                                    { keyword T_char }
-  <0> "delete"                                  { keyword T_delete }
-  <0> "dim"                                     { keyword T_dim }
-  <0> "do"                                      { keyword T_do }
-  <0> "done"                                    { keyword T_done }
-  <0> "downto"                                  { keyword T_downto }
-  <0> "else"                                    { keyword T_else }
-  <0> "end"                                     { keyword T_end }
-  <0> "false"                                   { keyword T_false }
-  <0> "float"                                   { keyword T_float }
-  <0> "for"                                     { keyword T_for }
-  <0> "if"                                      { keyword T_if }
-  <0> "in"                                      { keyword T_in }
-  <0> "int"                                     { keyword T_int }
-  <0> "let"                                     { keyword T_let }
-  <0> "match"                                   { keyword T_match }
-  <0> "mod"                                     { keyword T_mod }
-  <0> "mutable"                                 { keyword T_mutable }
-  <0> "new"                                     { keyword T_new }
-  <0> "not"                                     { keyword T_not }
-  <0> "of"                                      { keyword T_of }
-  <0> "rec"                                     { keyword T_rec }
-  <0> "ref"                                     { keyword T_ref }
-  <0> "then"                                    { keyword T_then }
-  <0> "to"                                      { keyword T_to }
-  <0> "true"                                    { keyword T_true }
-  <0> "type"                                    { keyword T_type }
-  <0> "unit"                                    { keyword T_unit }
-  <0> "while"                                   { keyword T_while }
-  <0> "with"                                    { keyword T_with }
-  <0> "->"                                      { keyword T_arrow }
-  <0> "="                                       { keyword T_equals }
-  <0> "|"                                       { keyword T_bar }
-  <0> "+"                                       { keyword T_plus }
-  <0> "-"                                       { keyword T_minus }
-  <0> "*"                                       { keyword T_times }
-  <0> "/"                                       { keyword T_div }
-  <0> "+."                                      { keyword T_plus_float }
-  <0> "-."                                      { keyword T_minus_float }
-  <0> "*."                                      { keyword T_times_float }
-  <0> "/."                                      { keyword T_div_float }
-  <0> "**"                                      { keyword T_exp }
-  <0> "!"                                       { keyword T_bang }
-  <0> ";"                                       { keyword T_semicolon }
-  <0> "&&"                                      { keyword T_and_op }
-  <0> "||"                                      { keyword T_or_op }
-  <0> "<>"                                      { keyword T_not_equals }
-  <0> "<"                                       { keyword T_less_than }
-  <0> ">"                                       { keyword T_greater_than }
-  <0> "<="                                      { keyword T_less_than_eq }
-  <0> ">="                                      { keyword T_greater_than_eq }
-  <0> "=="                                      { keyword T_nat_eq_op }
-  <0> "!="                                      { keyword T_not_nat_eq_op }
-  <0> ":="                                      { keyword T_assign_mutable }
-  <0> "("                                       { keyword T_lparen }
-  <0> ")"                                       { keyword T_rparen }
-  <0> "["                                       { keyword T_lbracket }
-  <0> "]"                                       { keyword T_rbracket }
-  <0> ","                                       { keyword T_comma }
-  <0> ":"                                       { keyword T_colon }
-  <0> $lls+($ls_ds|_)*                          { identifiersAction T_id }
-  <0> $uls+($ls_ds|_)*                          { identifiersAction T_id_constr }  -- identifiers for constructors
+  <0> "and"                                     { keyword AndT }
+  <0> "array"                                   { keyword ArrayT }
+  <0> "begin"                                   { keyword BeginT }
+  <0> "bool"                                    { keyword BoolT }
+  <0> "char"                                    { keyword CharT }
+  <0> "delete"                                  { keyword DeleteT }
+  <0> "dim"                                     { keyword DimT }
+  <0> "do"                                      { keyword DoT }
+  <0> "done"                                    { keyword DoneT }
+  <0> "downto"                                  { keyword DowntoT }
+  <0> "else"                                    { keyword ElseT }
+  <0> "end"                                     { keyword EndT }
+  <0> "false"                                   { keyword FalseT }
+  <0> "float"                                   { keyword FloatT }
+  <0> "for"                                     { keyword ForT }
+  <0> "if"                                      { keyword IfT }
+  <0> "in"                                      { keyword InT }
+  <0> "int"                                     { keyword IntT }
+  <0> "let"                                     { keyword LetT }
+  <0> "match"                                   { keyword MatchT }
+  <0> "mod"                                     { keyword ModT }
+  <0> "mutable"                                 { keyword MutableT }
+  <0> "new"                                     { keyword NewT }
+  <0> "not"                                     { keyword NotT }
+  <0> "of"                                      { keyword OfT }
+  <0> "rec"                                     { keyword RecT }
+  <0> "ref"                                     { keyword RefT }
+  <0> "then"                                    { keyword ThenT }
+  <0> "to"                                      { keyword ToT }
+  <0> "true"                                    { keyword TrueT }
+  <0> "type"                                    { keyword TypeT }
+  <0> "unit"                                    { keyword UnitT }
+  <0> "while"                                   { keyword WhileT }
+  <0> "with"                                    { keyword WithT }
+  <0> "->"                                      { keyword ArrowT }
+  <0> "="                                       { keyword EqualsT }
+  <0> "|"                                       { keyword BarT }
+  <0> "+"                                       { keyword PlusT }
+  <0> "-"                                       { keyword MinusT }
+  <0> "*"                                       { keyword TimesT }
+  <0> "/"                                       { keyword DivT }
+  <0> "+."                                      { keyword PlusFloatT }
+  <0> "-."                                      { keyword MinusFloatT }
+  <0> "*."                                      { keyword TimesFloatT }
+  <0> "/."                                      { keyword DivFloatT }
+  <0> "**"                                      { keyword ExpT }
+  <0> "!"                                       { keyword BangT }
+  <0> ";"                                       { keyword SemicolonT }
+  <0> "&&"                                      { keyword AndOpT }
+  <0> "||"                                      { keyword OrOpT }
+  <0> "<>"                                      { keyword NotEqualsT }
+  <0> "<"                                       { keyword LessThanT }
+  <0> ">"                                       { keyword GreaterThanT }
+  <0> "<="                                      { keyword LessThanEqT }
+  <0> ">="                                      { keyword GreaterThanEqT }
+  <0> "=="                                      { keyword NatEqOpT }
+  <0> "!="                                      { keyword NotNatEqOpT }
+  <0> ":="                                      { keyword AssignMutableT }
+  <0> "("                                       { keyword LParenT }
+  <0> ")"                                       { keyword RParenT }
+  <0> "["                                       { keyword LBracketT }
+  <0> "]"                                       { keyword RBracketT }
+  <0> ","                                       { keyword CommaT }
+  <0> ":"                                       { keyword ColonT }
+  <0> $lls+($ls_ds|_)*                          { identifiersAction IdT }
+  <0> $uls+($ls_ds|_)*                          { identifiersAction IdConstrT }  -- identifiers for constructors
   <0> $digits+                                  { intAction }
   <0> $digits+\.$digits+([eE][\+\-]?$digits+)?  { floatAction }
   <0> \'([^\\\']|@escape)\'                     { charAction }
@@ -176,7 +176,7 @@ alexEOF = do
   if code == comment
     then alexError "Reached end of file without closing all comments"
     else case code of
-      0 -> return T_eof
+      0 -> return EofT
       c -> alexError $ "Reached end of file in unsupported start code: " ++ show c
 
 -- Utils for handling tokens
@@ -196,7 +196,7 @@ intAction (posn, _, _, current_string) len =
   in case readMaybe lexeme :: Maybe Int of
     Just v  -> do
       setTokenPosn posn
-      return (T_const_int v)
+      return (ConstIntT v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into an int")
 
 floatAction :: AlexAction Token
@@ -205,7 +205,7 @@ floatAction (posn, _, _, current_string) len =
   in case readMaybe lexeme :: Maybe Float of
     Just v  -> do
       setTokenPosn posn
-      return (T_const_float v)
+      return (ConstFloatT v)
     Nothing -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a float")
 
 -- Char/String handling
@@ -227,7 +227,7 @@ endString (posn, _, _, _) _ = do
     then do
       alexSetStartCode 0
       chars <- reverse <$> getReadChars
-      return (T_const_string chars)
+      return (ConstStringT chars)
     else lexicalError posn ("Unexpected startCode: " ++ show code ++ " in endString")
 
 stringAction :: AlexAction Token
@@ -247,7 +247,7 @@ charAction (posn, _, _, current_string) len =
   in case finalChar :: Maybe Char of
     Just ch -> do
       setTokenPosn posn
-      return (T_const_char ch)
+      return (ConstCharT ch)
     _ -> lexicalError posn ("Unable to parse: " ++ lexeme ++ " into a char")
 
 -- Utils for chars
@@ -320,8 +320,8 @@ lexer s = runAlex s gather where
   gather = do
      t <- alexMonadScan
      case t of
-       T_eof -> return [t]
-       _     -> (t:) <$> gather
+       EofT -> return [t]
+       _    -> (t:) <$> gather
 
 -- Scan a file
 scanFile :: FilePath -> IO (Either String [Token])

@@ -113,10 +113,10 @@ instance Pretty t => Pretty (TypeF t) where
       showsStars s = showsStars (s - 1) .
         showPretty CommaT . showString " " . showPretty TimesT
     in case tf of
-      UnitType -> showPretty UnitT
-      IntType -> showPretty IntT
-      CharType -> showPretty CharT
-      BoolType -> showPretty BoolT
+      UnitType  -> showPretty UnitT
+      IntType   -> showPretty IntT
+      CharType  -> showPretty CharT
+      BoolType  -> showPretty BoolT
       FloatType -> showPretty FloatT
       UserDefinedType i -> prettyId i
       RefType u -> showParen (always || d > ref_prec) $

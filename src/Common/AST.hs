@@ -30,12 +30,9 @@ data LetDef b = Let [Def b] b
               | LetRec [Def b] b
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-data Def b = FunDef Identifier [Param b] (Expr b) b
-           | FunDefTyped Identifier [Param b] (Type b) (Expr b) b
-           | VarDef Identifier b
-           | VarDefTyped Identifier (Type b) b
-           | ArrayDef Identifier [Expr b] b
-           | ArrayDefTyped Identifier [Expr b] (Type b) b
+data Def b = FunDef Identifier [Param b] (Maybe (Type b)) (Expr b) b
+           | VarDef Identifier (Maybe (Type b)) b
+           | ArrayDef Identifier [Expr b] (Maybe (Type b)) b
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data Param b = Param Identifier b
@@ -139,18 +136,12 @@ instance Node LetDef where
   mapTag f (Let defs b)    = Let defs (f b)
   mapTag f (LetRec defs b) = LetRec defs (f b)
 instance Node Def where
-  tag (FunDef _ _ _ b)        = b
-  tag (FunDefTyped _ _ _ _ b) = b
-  tag (VarDef _ b)            = b
-  tag (VarDefTyped _ _ b)     = b
-  tag (ArrayDef _ _ b)        = b
-  tag (ArrayDefTyped _ _ _ b) = b
-  mapTag f (FunDef i p e b)        = FunDef i p e (f b)
-  mapTag f (FunDefTyped i p e t b) = FunDefTyped i p e t (f b)
-  mapTag f (VarDef i b)            = VarDef i (f b)
-  mapTag f (VarDefTyped i t b)     = VarDefTyped i t (f b)
-  mapTag f (ArrayDef i e b)        = ArrayDef i e (f b)
-  mapTag f (ArrayDefTyped i e t b) = ArrayDefTyped i e t (f b)
+  tag (FunDef _ _ _ _ b)  = b
+  tag (VarDef _ _ b)      = b
+  tag (ArrayDef _ _ _ b)  = b
+  mapTag f (FunDef i p e t b) = FunDef i p e t (f b)
+  mapTag f (VarDef i t b)     = VarDef i t (f b)
+  mapTag f (ArrayDef i e t b) = ArrayDef i e t (f b)
 instance Node Param where
   tag (Param _ b)        = b
   tag (TypedParam _ _ b) = b
@@ -186,12 +177,9 @@ instance Node Pattern where
   mapTag f (Pattern pf b) = Pattern pf (f b)
 
 instance NameDef Def where
-  ide (FunDef i _ _ _)        = i
-  ide (FunDefTyped i _ _ _ _) = i
-  ide (VarDef i _)            = i
-  ide (VarDefTyped i _ _)     = i
-  ide (ArrayDef i _ _)        = i
-  ide (ArrayDefTyped i _ _ _) = i
+  ide (FunDef i _ _ _ _) = i
+  ide (VarDef i _ _)     = i
+  ide (ArrayDef i _ _ _) = i
 instance NameDef Param where
   ide (Param i _)        = i
   ide (TypedParam i _ _) = i

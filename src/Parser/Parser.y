@@ -136,13 +136,13 @@ Def :: { Def AlexPosn }
   : P Def_                          { $2 $1 }
 
 Def_ :: { AlexPosn -> Def AlexPosn }
-  : id Params '=' Expr              { FunDef $1 (reverse $2) $4 }
-  | id Params ':' Type '=' Expr     { FunDefTyped $1 (reverse $2) $4 $6 }
-  | mutable id                      { VarDef $2 }
-  | mutable id ':' Type             { VarDefTyped $2 $4 }
-  | mutable id '[' ExprsComma ']'   { ArrayDef $2 (reverse $4) }
+  : id Params '=' Expr              { FunDef $1 (reverse $2) Nothing $4 }
+  | id Params ':' Type '=' Expr     { FunDef $1 (reverse $2) (Just $4) $6 }
+  | mutable id                      { VarDef $2 Nothing }
+  | mutable id ':' Type             { VarDef $2 (Just $4) }
+  | mutable id '[' ExprsComma ']'   { ArrayDef $2 (reverse $4) Nothing }
   | mutable id '[' ExprsComma ']' ':' Type
-                                    { ArrayDefTyped $2 (reverse $4) $7 }
+                                    { ArrayDef $2 (reverse $4) (Just $7) }
 
 Params :: { [Param AlexPosn] }
   : {- empty -}                     { [] }

@@ -146,23 +146,18 @@ instance Pretty (LetDef b) where
 
 instance Pretty (Def b) where
   pretty def = case def of
-    FunDef i ps e _ -> prettyId i . showString sep . prettyPrecSepList 0 " " ps .
-      showString " " . showPretty EqualsT . showString " " $ pretty e where
+    FunDef i ps mt e _ ->
+      prettyId i . showString sep . prettyPrecSepList 0 " " ps . showString " " .
+      maybe id (\t -> showPretty ColonT . showString " " . showPretty t . showString " ") mt .
+      showPretty EqualsT . showString " " $ pretty e where
         sep = if null ps then "" else " "
-    FunDefTyped i ps t e _ -> prettyId i . showString sep . prettyPrecSepList 0 " " ps .
-      showString " " . showPretty ColonT . showString " " . showPretty t .
-      showString " " . showPretty EqualsT . showString " " $ pretty e where
-        sep = if null ps then "" else " "
-    VarDef i _ -> showPretty MutableT . showString " " $ prettyId i ""
-    VarDefTyped i t _ -> showPretty MutableT . showString " " . prettyId i .
-      showString " " . showPretty ColonT . showString " " $ showPretty t ""
-    ArrayDef i es _ -> showPretty MutableT . showString " " . prettyId i .
-      showString " " . showPretty LBracketT . prettyPrecSepList 0 ", " es $
-      showPretty RBracketT ""
-    ArrayDefTyped i es t _ -> showPretty MutableT . showString " " . prettyId i .
-      showString " " . showPretty LBracketT . prettyPrecSepList 0 ", " es .
-      showPretty RBracketT . showString " " . showPretty ColonT .
-      showString " " $ showPretty t ""
+    VarDef i mt _ ->
+      showPretty MutableT . showString " " . prettyId i $
+      maybe "" (\t -> showString " " . showPretty ColonT . showString " " $ showPretty t "") mt
+    ArrayDef i es mt _ ->
+      showPretty MutableT . showString " " . prettyId i .
+      showString " " . showPretty LBracketT . prettyPrecSepList 0 ", " es . showPretty RBracketT $
+      maybe "" (\t -> showString " " . showPretty ColonT . showString " " $ showPretty t "") mt
 
 instance Pretty (Param b) where
   pretty (Param i _) = prettyId i ""

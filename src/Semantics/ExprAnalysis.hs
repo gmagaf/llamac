@@ -102,9 +102,9 @@ secondAnalysis (d, _, e) = return (d, e)
     get polymorphic functions
 -}
 genResult :: S.Set Int -> (Def SemanticTag, TableEntry) -> Parser (Def SemanticTag, TableEntry)
-genResult freeVars (FunDef i ps e tg, FunEntry (MonoType t) params) = do
+genResult freeVars (FunDef i ps Nothing e tg, FunEntry (MonoType t) params) = do
     let scheme = gen freeVars t
-    return (FunDef i ps e tg{typeInfo = DefType scheme}, FunEntry scheme params)
+    return (FunDef i ps Nothing e tg{typeInfo = DefType scheme}, FunEntry scheme params)
 genResult _ pair = return pair
 
 -- Util definitions for sig analysis
@@ -133,25 +133,25 @@ typeToSymbolType = typeTo SymType
     Analysis of the signature of a definition
 -}
 analyzeDefSig :: Def AlexPosn -> Parser SigAnalysisRes
-analyzeDefSig (VarDef x p) = do
+analyzeDefSig (VarDef x Nothing p) = do
     tv <- freshTVar
     let varType = SymType . RefType $ tv
     return $ UntypedMutSig varType (x, MutableEntry varType) p
-analyzeDefSig (VarDefTyped x t p) = do
+analyzeDefSig (VarDef x (Just t) p) = do
     semT <- stackTrace ("while analyzing mut var " ++ x) $ analyzeType t
     let varType = SymType . RefType $ typeToSymbolType semT
     return $ TypedMutSig semT (x, MutableEntry varType) p
-analyzeDefSig (ArrayDef i es p) = do
+analyzeDefSig (ArrayDef i es Nothing p) = do
     let dims = length es
     tv <- freshTVar
     let arrayType = SymType . ArrayType dims $ tv
     return $ UntypedArrSig arrayType es (i, ArrayEntry arrayType dims) p
-analyzeDefSig (ArrayDefTyped i es t p) = do
+analyzeDefSig (ArrayDef i es (Just t) p) = do
     let dims = length es
     semT <- stackTrace ("while analyzing array " ++ i) $ analyzeType t
     let arrayType = SymType . ArrayType dims $ typeToSymbolType semT
     return $ TypedArrSig semT es (i, ArrayEntry arrayType dims) p
-analyzeDefSig (FunDef i ps e p) = do
+analyzeDefSig (FunDef i ps Nothing e p) = do
     let paramNames = map ide ps
     when (hasDuplicates paramNames) $
         throwSemAtPosn ("Fun " ++ i ++ " cannot have duplicate params") p
@@ -164,7 +164,7 @@ analyzeDefSig (FunDef i ps e p) = do
     let fType = paramsToFun SymType paramTypes outV
     -- fScheme <- gen fType
     return $ UnTypedFunSig fType semPs e (i, FunEntry (MonoType fType) paramNames) p
-analyzeDefSig (FunDefTyped i ps t e p) = do
+analyzeDefSig (FunDef i ps (Just t) e p) = do
     let paramNames = map ide ps
     -- First we make sure that there are no duplicates in params
     when (hasDuplicates paramNames) $
@@ -204,10 +204,10 @@ analyzeParam (Param param p) = do
 analyzeDefBody :: SigAnalysisRes -> Parser (Def SemanticTag, TableEntry)
 analyzeDefBody (UntypedMutSig st (i, entry) p) =
     let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}
-    in return (VarDef i tg, entry)
+    in return (VarDef i Nothing tg, entry)
 analyzeDefBody (TypedMutSig semT (i, entry) p) =
     let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}
-    in return (VarDefTyped i semT tg, entry)
+    in return (VarDef i (Just semT) tg, entry)
 analyzeDefBody (UntypedArrSig st es (i, entry) p) = do
     semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
     typesEs <- mapM getNodeType semEs
@@ -215,7 +215,7 @@ analyzeDefBody (UntypedArrSig st es (i, entry) p) = do
     mapM_ (unify . (,) (SymType IntType)) typesEs
     rSemEs <- mapM resolveNodeType semEs
     let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}
-    return (ArrayDef i rSemEs tg, entry)
+    return (ArrayDef i rSemEs Nothing tg, entry)
 analyzeDefBody (TypedArrSig semT es (i, entry) p) = do
     semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
     typesEs <- mapM getNodeType semEs
@@ -223,7 +223,7 @@ analyzeDefBody (TypedArrSig semT es (i, entry) p) = do
     mapM_ (unify . (,) (SymType IntType)) typesEs
     rSemEs <- mapM resolveNodeType semEs
     let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}
-    return (ArrayDefTyped i rSemEs semT tg, entry)
+    return (ArrayDef i rSemEs (Just semT) tg, entry)
 analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do
     -- Hold the free vars outside the body
     outerScopeVars <- getFreeTVars
@@ -252,7 +252,7 @@ analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do
     putFreeTVars outerScopeVars
     let fScheme = MonoType rst
     let tg = SemTag{posn = p, typeInfo = DefType fScheme}
-    return (FunDef i rSemPs rSemE tg, FunEntry fScheme (map ide rSemPs))
+    return (FunDef i rSemPs Nothing rSemE tg, FunEntry fScheme (map ide rSemPs))
 analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do
     -- Hold the free vars outside the body
     outerScopeVars <- getFreeTVars
@@ -281,7 +281,7 @@ analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do
     putFreeTVars outerScopeVars
     let fScheme = MonoType st
     let tg = SemTag{posn = p, typeInfo = DefType fScheme}
-    return (FunDefTyped i rSemPs semT rSemE tg, FunEntry fScheme (map ide rSemPs))
+    return (FunDef i rSemPs (Just semT) rSemE tg, FunEntry fScheme (map ide rSemPs))
 
 -- Semantic analysis of expressions
 

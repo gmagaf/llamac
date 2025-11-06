@@ -166,13 +166,13 @@ arbLetDef s ts = sized $ \n -> do
 
 arbDef :: Arbitrary b => Scope -> (Identifier, Type b) -> Gen (Def b)
 arbDef s (i, t@(Type tf _)) = case tf of
-  RefType t'       -> frequency [(2, VarDef i <$> arbitrary),
-                                 (1, VarDefTyped i t' <$> arbitrary)]
+  RefType t'       -> frequency [(2, VarDef i Nothing <$> arbitrary),
+                                 (1, VarDef i (Just t') <$> arbitrary)]
   ArrayType dim t' -> do
     b <- arbitrary
     let intType = Type IntType b
-    frequency [(2, ArrayDef i <$> es intType <*> arbitrary),
-               (1, ArrayDefTyped i <$> es intType <*> return t' <*> arbitrary)] where
+    frequency [(2, ArrayDef i <$> es intType <*> return Nothing <*> arbitrary),
+               (1, ArrayDef i <$> es intType <*> return (Just t') <*> arbitrary)] where
       es et = listGen dim (arbExpr s et)
   FunType _ _      -> do
     let types = funToTypes (\(Type tf' _) -> Left tf') t
@@ -182,12 +182,12 @@ arbDef s (i, t@(Type tf _)) = case tf of
     pids <- suchThat (listGen pc arbId) (not . hasDuplicates)
     ps <- mapM arbParam (zip pids argTypes)
     let s' = M.union s (M.fromList $ zipWith pEntry ps argTypes)
-    frequency [(2, FunDef i ps <$> arbExpr s' outT <*> arbitrary),
-               (3, FunDefTyped i ps t <$> arbExpr s' outT <*> arbitrary)] where
+    frequency [(2, FunDef i ps Nothing <$> arbExpr s' outT <*> arbitrary),
+               (3, FunDef i ps (Just t) <$> arbExpr s' outT <*> arbitrary)] where
       pEntry :: Param b -> Type b -> (Identifier, ConstType)
       pEntry p t' = (ide p, typeTo ConstType t')
-  _ -> frequency [(2, FunDef i [] <$> arbExpr s t <*> arbitrary),
-                  (1, FunDefTyped i [] t <$> arbExpr s t <*> arbitrary)]
+  _ -> frequency [(2, FunDef i [] Nothing <$> arbExpr s t <*> arbitrary),
+                  (1, FunDef i [] (Just t) <$> arbExpr s t <*> arbitrary)]
 
 arbParam :: Arbitrary b => (Identifier, Type b) -> Gen (Param b)
 arbParam (i, t) = oneof [Param i <$> arbitrary,

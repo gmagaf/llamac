@@ -54,12 +54,12 @@ arbLetDef = frequency [(3, Let <$> defs <*> arbitrary),
   defs = boundedListOf (1, 2) arbDef
 
 arbDef :: Arbitrary b => Gen (Def b)
-arbDef = frequency [(3, FunDef <$> i <*> ps <*> arbExpr <*> arbitrary),
-    (3, FunDefTyped <$> i <*> ps <*> arbType <*> arbExpr <*> arbitrary),
-    (1, VarDef <$> i <*> arbitrary),
-    (1, VarDefTyped <$> i <*> arbType <*> arbitrary),
-    (1, ArrayDef <$> i <*> es <*> arbitrary),
-    (1, ArrayDefTyped <$> i <*> es <*> arbType <*> arbitrary)] where
+arbDef = frequency [(3, FunDef <$> i <*> ps <*> return Nothing <*> arbExpr <*> arbitrary),
+    (3, FunDef <$> i <*> ps <*> (Just <$> arbType) <*> arbExpr <*> arbitrary),
+    (1, VarDef <$> i <*> return Nothing <*> arbitrary),
+    (1, VarDef <$> i <*> (Just <$> arbType) <*> arbitrary),
+    (1, ArrayDef <$> i <*> es <*> return Nothing <*> arbitrary),
+    (1, ArrayDef <$> i <*> es <*> (Just <$> arbType) <*> arbitrary)] where
   i = arbitraryIdentifier
   es = boundedListOf (1, 3) arbExpr
   ps = boundedListOf (0, 3) arbParam

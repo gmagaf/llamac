@@ -35,7 +35,7 @@ genDefs (LetRec defs _) = mdo
 
 registerDefs :: [Def SemanticTag] -> [L.Operand] -> Parser ()
 registerDefs [] _ = return ()
-registerDefs (f@(FunDef fname params _ _):ds) ops = do -- TODO: Define register for the rest of the cases
+registerDefs (f@(FunDef fname params _ _ _):ds) ops = do -- TODO: Define register for the rest of the cases
     s <- getDefScheme f
     symbols . names %= insert fname (mkFullTableEntry (FunEntry s (map ide params)) (Just (head ops)))
     registerDefs ds (tail ops)
@@ -47,7 +47,7 @@ genParam p = do
     return (lt, fromString (ide p))
 
 genDef :: Def SemanticTag -> Parser L.Operand
-genDef n@(FunDef fname params body _) = do -- TODO: Define defs gen
+genDef n@(FunDef fname params _ body _) = do -- TODO: Define defs gen
     scheme <- getDefScheme n
     st <- inst scheme
     let retsty = getRetStType st

@@ -65,15 +65,11 @@ computeConst c = case c of
 -- the operational semantics of the computation
 -- of array dimensions
 runDef :: Def SemanticTag -> Interpreter Value
-runDef (VarDef _ _)             = do
+runDef (VarDef _ _ _)             = do
     x <- liftIO (newIORef Undefined)
     ha <- getAndIncrHeapAddress
     return (RefVal ha x)
-runDef (VarDefTyped {})         = do
-    x <- liftIO (newIORef Undefined)
-    ha <- getAndIncrHeapAddress
-    return (RefVal ha x)
-runDef (ArrayDef _ ds t)        = do
+runDef (ArrayDef _ ds _ t)        = do
     let checkDim n = if n < 0
                      then throwRunTimeAtPosn "Cannot create an array of negative dimension" (posn t)
                      else return n
@@ -85,20 +81,7 @@ runDef (ArrayDef _ ds t)        = do
           return (n, x)
     ar <- mapM alloc [0..(size - 1)]
     return (ArrayVal vDims ha (M.fromList ar))
-runDef (ArrayDefTyped _ ds _ t) = do
-    let checkDim n = if n < 0
-                     then throwRunTimeAtPosn "Cannot create an array of negative dimension" (posn t)
-                     else return n
-    vDims <- mapM (evalIntExpr >=> checkDim) ds
-    let size = product vDims
-    ha <- getAndOffsetHeapAddress size
-    let alloc n = do
-          x  <- liftIO (newIORef Undefined)
-          return (n, x)
-    ar <- mapM alloc [0..(size - 1)]
-    return (ArrayVal vDims ha (M.fromList ar))
-runDef (FunDef i ps e _)        = return (FunVal i (map ide ps) (LlamaFun e))
-runDef (FunDefTyped i ps _ e _) = return (FunVal i (map ide ps) (LlamaFun e))
+runDef (FunDef i ps _ e _)        = return (FunVal i (map ide ps) (LlamaFun e))
 
 finallyStack :: Interpreter a -> Interpreter a
 finallyStack run = do

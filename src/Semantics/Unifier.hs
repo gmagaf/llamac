@@ -18,21 +18,23 @@ import Semantics.TypeConstraints (TypeConstraint(..), singletonSet,
 import Prelude hiding (traverse)
 
 checkConstraint :: SymbolType -> TypeConstraint t -> Parser ()
-checkConstraint (SymType (FunType _ _)) (NotAllowedFunType s) =
-    throwSem $ "Type constraint failed: " ++ s
-checkConstraint (SymType _) (NotAllowedFunType _) = return ()
-checkConstraint (SymType (ArrayType _ _)) (NotAllowedArrayType s) =
-    throwSem $ "Type constraint failed: " ++ s
-checkConstraint (SymType _) (NotAllowedArrayType _) = return ()
-checkConstraint (SymType (ArrayType d _)) (ArrayOfAtLeastDim l s) =
-    when (d < l) $ throwSem $ "Type constraint failed: " ++ s
-checkConstraint (SymType _) (ArrayOfAtLeastDim _ s) = throwSem $ "Type constraint failed: " ++ s
-checkConstraint t@(SymType _) (AllowedTypes ts s) =
-    let eqTypes = any (\ct -> t == constTypeToSymbolType ct) ts
-    in unless eqTypes . throwSem $ "Type constraint failed for type " ++ pretty t ++ ": " ++ s
-checkConstraint (SymType (UserDefinedType _)) (AllowedUserDefinedType _) = return ()
-checkConstraint t@(SymType _) (AllowedUserDefinedType s) =
-    throwSem $ "Type constraint failed: for type " ++ pretty t ++ ". " ++ s
+checkConstraint t@(SymType ft) tc = case (ft, tc) of
+    (FunType {}, NotAllowedFunType s) ->
+        throwSem $ "Type constraint failed: " ++ s
+    (_, NotAllowedFunType _) -> return ()
+    (ArrayType {}, NotAllowedArrayType s) ->
+        throwSem $ "Type constraint failed: " ++ s
+    (_, NotAllowedArrayType _) -> return ()
+    (ArrayType d _, ArrayOfAtLeastDim l s) ->
+        when (d < l) $ throwSem $ "Type constraint failed: " ++ s
+    (_, ArrayOfAtLeastDim _ s) ->
+        throwSem $ "Type constraint failed: " ++ s
+    (_, AllowedTypes ts s) ->
+        let eqTypes = any (\ct -> t == constTypeToSymbolType ct) ts
+        in unless eqTypes . throwSem $ "Type constraint failed for type " ++ pretty t ++ ": " ++ s
+    (UserDefinedType _, AllowedUserDefinedType _) -> return ()
+    (_, AllowedUserDefinedType s) ->
+        throwSem $ "Type constraint failed: for type " ++ pretty t ++ ". " ++ s
 checkConstraint (TVar v) c = do
     let tv = TVar v
     f <- getUnifier

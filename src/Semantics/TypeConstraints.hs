@@ -7,12 +7,12 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 module Semantics.TypeConstraints (TypeConstraint(..), mkAllowedTypes
-                                 , ConstraintSet
+                                 , Tag(..), ConstraintSet
                                  , emptyConstraintSet, singletonSet
                                  , union, traverse, showDPair
                                  , ConstraintsMap
                                  , showConstraintsMap, emptyConstraintsMap
-                                 , lookupConstr, insertConstr, insertConstrWith
+                                 , lookupConstr, lookupConstrTg, insertConstr, insertConstrWith
                                  ) where
 
 import Prelude hiding (traverse)
@@ -32,6 +32,7 @@ data TypeConstraintK = AllowedTypesT
                      | NotAllowedArrayTypeT
                      | ArrayOfAtLeastDimT
                      | AllowedUserDefinedTypeT
+                     | NotPolymorphicVarT
     deriving Show
 
 data Tag (tg :: TypeConstraintK) where
@@ -40,6 +41,7 @@ data Tag (tg :: TypeConstraintK) where
     NotAllowedArrayTypeTg    :: Tag 'NotAllowedArrayTypeT
     ArrayOfAtLeastDimTg      :: Tag 'ArrayOfAtLeastDimT
     AllowedUserDefinedTypeTg :: Tag 'AllowedUserDefinedTypeT
+    NotPolymorphicVarTg      :: Tag 'NotPolymorphicVarT
 
 deriving instance Show (Tag a)
 deriveGEq      ''Tag
@@ -53,6 +55,7 @@ data TypeConstraint (tg :: TypeConstraintK) where
     NotAllowedArrayType    :: String -> TypeConstraint 'NotAllowedArrayTypeT
     ArrayOfAtLeastDim      :: Int -> String -> TypeConstraint 'ArrayOfAtLeastDimT
     AllowedUserDefinedType :: String -> TypeConstraint 'AllowedUserDefinedTypeT
+    NotPolymorphicVar      :: String -> TypeConstraint 'NotPolymorphicVarT
 
 deriving instance Show (TypeConstraint a)
 
@@ -77,6 +80,7 @@ getTag (NotAllowedFunType {})      = NotAllowedFunTypeTg
 getTag (NotAllowedArrayType {})    = NotAllowedArrayTypeTg
 getTag (ArrayOfAtLeastDim {})      = ArrayOfAtLeastDimTg
 getTag (AllowedUserDefinedType {}) = AllowedUserDefinedTypeTg
+getTag (NotPolymorphicVar {})      = NotPolymorphicVarTg
 
 singletonSet :: forall (c :: TypeConstraintK). TypeConstraint c -> ConstraintSet
 singletonSet tc = ConstraintSet $ DM.singleton (getTag tc) tc
@@ -88,6 +92,7 @@ combineConstrs NotAllowedArrayTypeTg (NotAllowedArrayType s) (NotAllowedArrayTyp
 combineConstrs ArrayOfAtLeastDimTg (ArrayOfAtLeastDim d1 s1) (ArrayOfAtLeastDim d2 s2) | d1 < d2   = ArrayOfAtLeastDim d2 s2
                                                                                        | otherwise = ArrayOfAtLeastDim d1 s1
 combineConstrs AllowedUserDefinedTypeTg (AllowedUserDefinedType s) (AllowedUserDefinedType _)      = AllowedUserDefinedType s
+combineConstrs NotPolymorphicVarTg (NotPolymorphicVar s) (NotPolymorphicVar _)                     = NotPolymorphicVar s
 
 union :: ConstraintSet -> ConstraintSet -> ConstraintSet
 union s1 s2 = ConstraintSet $ DM.unionWithKey combineConstrs (getMap s1) (getMap s2)
@@ -106,6 +111,11 @@ emptyConstraintsMap = IM.empty
 
 lookupConstr :: Int -> ConstraintsMap -> Maybe ConstraintSet
 lookupConstr = IM.lookup
+
+lookupConstrTg :: forall c. Int -> Tag c -> ConstraintsMap -> Maybe (TypeConstraint c)
+lookupConstrTg v tg m = do
+    cSet <- lookupConstr v m
+    DM.lookup tg (getMap cSet)
 
 insertConstr :: Int -> ConstraintSet -> ConstraintsMap -> ConstraintsMap
 insertConstr = IM.insert

@@ -10,7 +10,7 @@ import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST (Node(..), TypeF(..))
 import Common.PrintAST
 import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..),
-                          substScheme, cata, tvarsInType)
+                          substScheme, cataM, tvarsInType)
 import Common.SymbolTable (Context, NameSpace, FullTableEntry, TableEntry(..), TypeTableEntry(..), names)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
@@ -18,7 +18,7 @@ import Parser.ParserM (Parser,
     throwSemanticError, throwAtPosn)
 import Parser.ParserState (symbols)
 import Parser.SymbolTableUtils (getNames, getTypes, queryP, updateP)
-import Semantics.TypeConstraints (ConstraintsMap, union, lookupConstr, insertConstr, insertConstrWith)
+import Semantics.TypeConstraints (ConstraintsMap, union, lookupConstr, insertConstr, insertConstrWith, lookupConstrTg, Tag (NotPolymorphicVarTg))
 import Semantics.SemanticState (SemanticState(..), Unifier)
 
 -- This module contains semantic analysis tools
@@ -58,13 +58,6 @@ putSemPosn :: AlexPosn -> Parser ()
 putSemPosn p = do
     s <- getSemState
     putSemState s{posnOfSem = p}
-
-getAndIncrTVarC :: Parser Int
-getAndIncrTVarC = do
-    sState <- getSemState
-    let c = varTypeC sState
-    putSemState sState{varTypeC = c + 1}
-    return c
 
 getUnifier :: Parser Unifier
 getUnifier = unifier <$> getSemState
@@ -137,12 +130,17 @@ throwSem s = do
     throwAtPosn p (throwSemanticError s)
 
 -- The only way to create a new tvar
-freshTVar :: Parser SymbolType
-freshTVar = do
-    c <- getAndIncrTVarC
+freshTVarC :: Parser (SymbolType, Int)
+freshTVarC = do
+    sState <- getSemState
+    let c = varTypeC sState
+    putSemState sState{varTypeC = c + 1}
     let v = TVar c
     addUnifier c
-    return v
+    return (v, c)
+
+freshTVar :: Parser SymbolType
+freshTVar = fst <$> freshTVarC
 
 -- instantiate a type scheme to a monotype
 -- by substituting all bound variables with new free ones
@@ -157,23 +155,29 @@ inst (AbsType v t) = do
 -- generalize a monotype to a type scheme
 -- by bounding all free variables not found
 -- in scope
-gen :: S.Set Int -> SymbolType -> TypeScheme
-gen freeVars t =
-    let varNotInScope :: Int -> [Int]
-        varNotInScope v = ([v | not (S.member v freeVars)])
-        alg :: TypeF [Int] -> [Int]
-        alg (FunType f1 f2) = f1 ++ f2
-        alg (ArrayType _ f) = f
-        alg (RefType f)     = f
-        alg _               = []
+gen :: SymbolType -> Parser TypeScheme
+gen t =
+    let varNotInScope :: Int -> Parser [Int]
+        varNotInScope v = do
+            isFree <- S.member v <$> getFreeTVars
+            if isFree then return []
+            else do
+                mCSet <- lookupConstrTg v NotPolymorphicVarTg <$> getConstraints
+                return $ maybe [v] (const []) mCSet
+        alg :: TypeF [Int] -> Parser [Int]
+        alg (FunType f1 f2) = return $ f1 ++ f2
+        alg (ArrayType _ f) = return f
+        alg (RefType f)     = return f
+        alg _               = return []
         removeDuplicates :: S.Set Int -> [Int] -> [Int]
         removeDuplicates _ []     = []
         removeDuplicates s (x:xs) = if S.member x s
                                     then removeDuplicates s xs
                                     else x:removeDuplicates (S.insert x s) xs
-        varsNotInScope = cata (alg, varNotInScope) t
-        varsToBound = removeDuplicates S.empty varsNotInScope
-    in foldr AbsType (MonoType t) varsToBound
+    in do
+        varsNotInScope <- cataM (alg, varNotInScope) t
+        let varsToBound = removeDuplicates S.empty varsNotInScope
+        return $ foldr AbsType (MonoType t) varsToBound
 
 -- Parser symbol table utiles
 -- function aliases

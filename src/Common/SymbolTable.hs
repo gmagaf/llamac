@@ -24,8 +24,10 @@ module Common.SymbolTable (Context,
                            update,
                            partialUpdate,
                            openScope,
-                           closeScope) where
+                           closeScope,
+                           varKey) where
 
+import Data.Bool (bool)
 import qualified Data.Map as M
 import Data.List (intercalate)
 import Data.Bifunctor (bimap)
@@ -38,7 +40,7 @@ import qualified LLVM.AST.Type as L
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (Pretty (pretty))
-import Common.SymbolType (SymbolType, TypeScheme, ConstType)
+import Common.SymbolType (SymbolType (TVar), TypeScheme, ConstType)
 
 -- This module contains the defintion of the Symbol table for the compiler
 
@@ -121,6 +123,9 @@ newtype TypeTableEntry
     = TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
         deriving Show
 
+varKey :: Int -> String
+varKey = pretty . TVar
+
 type NameSpace = Context String (FullTableEntry TableEntry L.Operand)
 type TypeSpace = Context String (FullTableEntry TypeTableEntry L.Type)
 data SymbolTable = SymbolTable {
@@ -156,9 +161,13 @@ instance Pretty TableEntry where
             " with type: " ++ pretty constrType ++
             " with params: (" ++ intercalate ", " (map pretty ts) ++ ")"
 
+showOptInfo :: Bool
+showOptInfo = False
+
 instance (Pretty e, Show g) => Pretty (FullTableEntry e g) where
     pretty entry = pretty (view basicInfo entry) ++
-                   maybe "" (\(_, i) -> " additional info: " ++ show i) (preview generated entry)
+                   bool "" (maybe "" (\(_, i) -> " additional info: " ++ show i) (preview generated entry))
+                   showOptInfo
 
 instance Pretty TypeTableEntry where
     pretty entry = case entry of

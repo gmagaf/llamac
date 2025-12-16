@@ -1,7 +1,6 @@
 module Semantics.ExprAnalysis(analyzeLet, analyzeExpr) where
 
 import Control.Monad (when)
-import qualified Data.Set as S
 import qualified Data.Bifunctor as B
 
 import Common.Token (Identifier, ConstrIdentifier)
@@ -9,8 +8,8 @@ import Common.AST
 import Common.PrintAST
 import Common.SymbolTable
 import Common.SymbolType (TypeScheme(..), SymbolType(..), ConstType(..),
-                          constTypeToSymbolType, typeTo, tvarsInType,
-                          funToArgs, stCoAlg, paramsToFun )
+                          constTypeToSymbolType, typeTo,
+                          funToArgs, stCoAlg, paramsToFun)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser, stackTrace, throwInternalError)
 import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames, insertNameP)
@@ -33,28 +32,22 @@ insertName = insertNameP
 -}
 analyzeLet :: LetDef AlexPosn -> Parser (LetDef SemanticTag)
 analyzeLet (Let defs p) = do
-    -- Analyze the signatures of the definitions
-    sigAnalysisResults <- mapM analyzeDefSig defs
-    -- Analyze the body of the definitions
-    semDefEntries <- mapM analyzeDefBody sigAnalysisResults
-    -- Get all the free variables from the outer scope and update them
-    outerScopeVars <- getFreeTVars >>= resolveFreeVars
-    -- Add free vars of mutables in outerScopeVars
-    let mutVar (UntypedMutSig st _ _) acc   = tvarsInType st ++ acc
-        mutVar (UntypedArrSig st _ _ _) acc = tvarsInType st ++ acc
-        mutVar _ acc                        = acc
-    let thisScopeTVars = foldr mutVar [] sigAnalysisResults
-    let newFreeTVars = foldr S.insert outerScopeVars thisScopeTVars
-    putFreeTVars newFreeTVars
-    -- Generalize the results (using only outer scope tvars)
-    finalRes <- mapM (genResult outerScopeVars) semDefEntries
+    -- Analyze each definition separately
+    semDefs <- mapM semD defs
     -- Open the scope
     openScopeInNames
     -- Insert the definitions in the scope
-    mapM_ (uncurry insertName . B.first ide) finalRes
-    -- Second analysis of the definitions to get the most general signatures
-    let finalSemDefs = map fst finalRes
-    return $ Let finalSemDefs (cpPosn p)
+    mapM_ (uncurry insertName . B.first ide . fst) semDefs
+    mapM_ (addMutVarToFree . snd) semDefs
+    return $ Let (map (fst . fst) semDefs) (cpPosn p) where
+        semD def =  do
+            -- Analyze the signatures of the definition
+            sigAnalysisResult <- analyzeDefSig def
+            -- Analyze the body of the definition
+            semDefEntry <- analyzeDefBody sigAnalysisResult
+            -- Generalize the result
+            pair <- genResult semDefEntry
+            return (pair, sigAnalysisResult)
 analyzeLet (LetRec defs p) = do
     -- Analyze the signatures of the definitions
     sigAnalysisResults <- mapM analyzeDefSig defs
@@ -62,26 +55,17 @@ analyzeLet (LetRec defs p) = do
     openScopeInNames
     -- Insert the definitions in the scope with placeholder type vars
     mapM_ (uncurry insertName . entryPair) sigAnalysisResults
+    mapM_ addMutVarToFree sigAnalysisResults
     -- Analyze the body of the definitions
     semDefEntries <- mapM analyzeDefBody sigAnalysisResults
-    -- Get all the free variables from the outer scope
-    outerScopeVars <- getFreeTVars
-    -- Add free vars of mutables in outerScopeVars
-    let mutVar (UntypedMutSig st _ _) acc   = tvarsInType st ++ acc
-        mutVar (UntypedArrSig st _ _ _) acc = tvarsInType st ++ acc
-        mutVar _ acc                        = acc
-    let thisScopeTVars = foldr mutVar [] sigAnalysisResults
-    let newFreeTVars = foldr S.insert outerScopeVars thisScopeTVars
     -- Update the tvars in symbol table and in freeVars
     updatedEntries <- mapM (findName . ide . fst) semDefEntries
-    freeVars <- resolveFreeVars newFreeTVars
-    putFreeTVars freeVars
     -- Second analysis of the definitions to get the most general signatures
     let semDefs = map fst semDefEntries
     let genInput = zip3 semDefs defs updatedEntries
     res <- mapM secondAnalysis genInput
     -- Generalize the results
-    finalRes <- mapM (genResult freeVars) res
+    finalRes <- mapM genResult res
     let finalSemDefs = map fst finalRes
     -- Final update in scope
     mapM_ (uncurry updateName . B.first ide) finalRes
@@ -92,39 +76,44 @@ analyzeLet (LetRec defs p) = do
     in order to get the most general unifier principal type
 -}
 secondAnalysis :: (Def SemanticTag, Def AlexPosn, TableEntry) -> Parser (Def SemanticTag, TableEntry)
-secondAnalysis (_, d@(FunDef {}), FunEntry _ _) = do
-    sigRes <- analyzeDefSig d
-    analyzeDefBody sigRes
+secondAnalysis (_, d@(FunDef {}), FunEntry _ _) = analyzeDefSig d >>= analyzeDefBody
 secondAnalysis (d, _, e) = return (d, e)
 
 {-
     We generalize second analysis results to
     get polymorphic functions
 -}
-genResult :: S.Set Int -> (Def SemanticTag, TableEntry) -> Parser (Def SemanticTag, TableEntry)
-genResult freeVars (FunDef i ps Nothing e tg, FunEntry (MonoType t) params) = do
-    let scheme = gen freeVars t
+genResult :: (Def SemanticTag, TableEntry) -> Parser (Def SemanticTag, TableEntry)
+genResult (FunDef i ps Nothing e tg, FunEntry (MonoType t) params) = do
+    -- Get all the free variables from the outer scope and update them
+    freeVars <- getFreeTVars >>= resolveFreeVars
+    putFreeTVars freeVars
+    rt <- resolveType t
+    scheme <- gen rt
     return (FunDef i ps Nothing e tg{typeInfo = DefType scheme}, FunEntry scheme params)
-genResult _ pair = return pair
+genResult pair = return pair
 
 -- Util definitions for sig analysis
 type KeyEntryPair = (Identifier, TableEntry)
 
-data SigAnalysisRes =
-    TypedMutSig (Type SemanticTag) KeyEntryPair AlexPosn
-  | TypedArrSig (Type SemanticTag) [Expr AlexPosn] KeyEntryPair AlexPosn
-  | TypedFunSig (Type SemanticTag) [Param SemanticTag] (Expr AlexPosn) KeyEntryPair AlexPosn
-  | UntypedMutSig SymbolType KeyEntryPair AlexPosn
-  | UntypedArrSig SymbolType [Expr AlexPosn] KeyEntryPair AlexPosn
-  | UnTypedFunSig SymbolType [Param SemanticTag] (Expr AlexPosn) KeyEntryPair AlexPosn
+data SigAnalyzedAST =
+   Mut
+ | Arr [Expr AlexPosn]
+ | Fun [Param SemanticTag] (Expr AlexPosn)
+
+data SigAnalyzedType =
+    Typed (Type SemanticTag)
+  | Untyped SymbolType
+
+data SigAnalysisRes = SigAnalysisRes SigAnalyzedType SigAnalyzedAST AlexPosn KeyEntryPair
 
 entryPair :: SigAnalysisRes -> KeyEntryPair
-entryPair (TypedMutSig _ pair _)       = pair
-entryPair (TypedArrSig _ _ pair _)     = pair
-entryPair (TypedFunSig _ _ _ pair _)   = pair
-entryPair (UntypedMutSig _ pair _)     = pair
-entryPair (UntypedArrSig _ _ pair _)   = pair
-entryPair (UnTypedFunSig _ _ _ pair _) = pair
+entryPair (SigAnalysisRes _ _ _ pair) = pair
+
+addMutVarToFree :: SigAnalysisRes -> Parser ()
+addMutVarToFree (SigAnalysisRes (Untyped t) Mut _ _) = addFreeTVars t
+addMutVarToFree (SigAnalysisRes (Untyped t) (Arr _) _ _) = addFreeTVars t
+addMutVarToFree _ = return ()
 
 typeToSymbolType :: Type b -> SymbolType
 typeToSymbolType = typeTo SymType
@@ -135,22 +124,24 @@ typeToSymbolType = typeTo SymType
 analyzeDefSig :: Def AlexPosn -> Parser SigAnalysisRes
 analyzeDefSig (VarDef x Nothing p) = do
     tv <- freshTVar
+    checkConstraint tv (NotPolymorphicVar $ "Cannot abstract on mutable var " ++ pretty tv)
     let varType = SymType . RefType $ tv
-    return $ UntypedMutSig varType (x, MutableEntry varType) p
+    return $ SigAnalysisRes (Untyped varType) Mut p (x, MutableEntry varType)
 analyzeDefSig (VarDef x (Just t) p) = do
     semT <- stackTrace ("while analyzing mut var " ++ x) $ analyzeType t
     let varType = SymType . RefType $ typeToSymbolType semT
-    return $ TypedMutSig semT (x, MutableEntry varType) p
+    return $ SigAnalysisRes (Typed semT) Mut p (x, MutableEntry varType)
 analyzeDefSig (ArrayDef i es Nothing p) = do
     let dims = length es
     tv <- freshTVar
+    checkConstraint tv (NotPolymorphicVar $ "Cannot abstract on array var " ++ pretty tv)
     let arrayType = SymType . ArrayType dims $ tv
-    return $ UntypedArrSig arrayType es (i, ArrayEntry arrayType dims) p
+    return $ SigAnalysisRes (Untyped arrayType) (Arr es) p (i, ArrayEntry arrayType dims)
 analyzeDefSig (ArrayDef i es (Just t) p) = do
     let dims = length es
     semT <- stackTrace ("while analyzing array " ++ i) $ analyzeType t
     let arrayType = SymType . ArrayType dims $ typeToSymbolType semT
-    return $ TypedArrSig semT es (i, ArrayEntry arrayType dims) p
+    return $ SigAnalysisRes (Typed semT) (Arr es) p (i, ArrayEntry arrayType dims)
 analyzeDefSig (FunDef i ps Nothing e p) = do
     let paramNames = map ide ps
     when (hasDuplicates paramNames) $
@@ -162,8 +153,7 @@ analyzeDefSig (FunDef i ps Nothing e p) = do
     -- Fresh outV is the output type of the function
     outV <- freshTVar
     let fType = paramsToFun SymType paramTypes outV
-    -- fScheme <- gen fType
-    return $ UnTypedFunSig fType semPs e (i, FunEntry (MonoType fType) paramNames) p
+    return $ SigAnalysisRes (Untyped fType) (Fun semPs e) p (i, FunEntry (MonoType fType) paramNames)
 analyzeDefSig (FunDef i ps (Just t) e p) = do
     let paramNames = map ide ps
     -- First we make sure that there are no duplicates in params
@@ -180,7 +170,7 @@ analyzeDefSig (FunDef i ps (Just t) e p) = do
     let fType = paramsToFun SymType paramTypes eT
     unify (typeToSymbolType semT, fType)
     let fScheme = MonoType $ typeToSymbolType semT
-    return $ TypedFunSig semT semPs e (i, FunEntry fScheme paramNames) p
+    return $ SigAnalysisRes (Typed semT) (Fun semPs e) p (i, FunEntry fScheme paramNames)
 
 {-
     Analyzes params by writting them to
@@ -202,13 +192,13 @@ analyzeParam (Param param p) = do
     Analysis of the body of a definition
 -}
 analyzeDefBody :: SigAnalysisRes -> Parser (Def SemanticTag, TableEntry)
-analyzeDefBody (UntypedMutSig st (i, entry) p) =
+analyzeDefBody (SigAnalysisRes (Untyped st) Mut p (i, entry)) =
     let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}
     in return (VarDef i Nothing tg, entry)
-analyzeDefBody (TypedMutSig semT (i, entry) p) =
+analyzeDefBody (SigAnalysisRes (Typed semT) Mut p (i, entry)) =
     let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}
     in return (VarDef i (Just semT) tg, entry)
-analyzeDefBody (UntypedArrSig st es (i, entry) p) = do
+analyzeDefBody (SigAnalysisRes (Untyped st) (Arr es) p (i, entry)) = do
     semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
     typesEs <- mapM getNodeType semEs
     putSemPosn p
@@ -216,7 +206,7 @@ analyzeDefBody (UntypedArrSig st es (i, entry) p) = do
     rSemEs <- mapM resolveNodeType semEs
     let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}
     return (ArrayDef i rSemEs Nothing tg, entry)
-analyzeDefBody (TypedArrSig semT es (i, entry) p) = do
+analyzeDefBody (SigAnalysisRes (Typed semT) (Arr es) p (i, entry)) = do
     semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
     typesEs <- mapM getNodeType semEs
     putSemPosn p
@@ -224,15 +214,15 @@ analyzeDefBody (TypedArrSig semT es (i, entry) p) = do
     rSemEs <- mapM resolveNodeType semEs
     let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}
     return (ArrayDef i rSemEs (Just semT) tg, entry)
-analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do
+analyzeDefBody (SigAnalysisRes (Untyped st) (Fun semPs e) p (i, _)) = do
     -- Hold the free vars outside the body
     outerScopeVars <- getFreeTVars
     -- Open scope for params names and their types
     openScopeInNames
+    addFreeTVars st
     -- Insert params in the current scope
     let insertParam param = do
           t <- getNodeType param
-          addFreeTVars t
           insertName (ide param) (ParamEntry t i)
           return t
     paramTypes <- mapM insertParam semPs
@@ -253,15 +243,13 @@ analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do
     let fScheme = MonoType rst
     let tg = SemTag{posn = p, typeInfo = DefType fScheme}
     return (FunDef i rSemPs Nothing rSemE tg, FunEntry fScheme (map ide rSemPs))
-analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do
-    -- Hold the free vars outside the body
-    outerScopeVars <- getFreeTVars
+analyzeDefBody (SigAnalysisRes (Typed semT) (Fun semPs e) p (i, _)) = do
     -- Open scope for params names and their types
     openScopeInNames
+    outerScopeVars <- getFreeTVars
     -- Insert params in the current scope
     let insertParam param = do
           t <- getNodeType param
-          addFreeTVars t
           insertName (ide param) (ParamEntry t i)
           return t
     paramTypes <- mapM insertParam semPs

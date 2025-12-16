@@ -35,6 +35,7 @@ checkConstraint t@(SymType ft) tc = case (ft, tc) of
     (UserDefinedType _, AllowedUserDefinedType _) -> return ()
     (_, AllowedUserDefinedType s) ->
         throwSem $ "Type constraint failed: for type " ++ pretty t ++ ". " ++ s
+    (_, NotPolymorphicVar {}) -> return () -- This constraint only makes sense for type variables
 checkConstraint (TVar v) c = do
     let tv = TVar v
     f <- getUnifier

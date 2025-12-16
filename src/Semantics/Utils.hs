@@ -1,7 +1,7 @@
 module Semantics.Utils (module Semantics.Utils) where
 
-import Data.Foldable (foldrM)
-import qualified Data.Set as S
+import qualified Data.IntSet as S
+import qualified Data.Set as Set
 import Data.Maybe (isJust, isNothing)
 import Control.Monad ((>=>), when)
 import Control.Lens.Setter ((<~))
@@ -89,10 +89,10 @@ putUnifier v t = do
 getConstraints :: Parser ConstraintsMap
 getConstraints = constraints <$> getSemState
 
-getFreeTVars :: Parser (S.Set Int)
+getFreeTVars :: Parser S.IntSet
 getFreeTVars = freeTVars <$> getSemState
 
-putFreeTVars :: S.Set Int -> Parser ()
+putFreeTVars :: S.IntSet -> Parser ()
 putFreeTVars set = do
     s <- getSemState
     putSemState s{freeTVars = set}
@@ -169,7 +169,7 @@ gen t =
         alg (ArrayType _ f) = return f
         alg (RefType f)     = return f
         alg _               = return []
-        removeDuplicates :: S.Set Int -> [Int] -> [Int]
+        removeDuplicates :: S.IntSet -> [Int] -> [Int]
         removeDuplicates _ []     = []
         removeDuplicates s (x:xs) = if S.member x s
                                     then removeDuplicates s xs
@@ -196,13 +196,13 @@ updateName key entry = do
         _ -> throwSem ("Cannot update symbol " ++ key ++ " as it is not in scope")
 
 -- Resolution utils
-resolveFreeVars :: S.Set Int -> Parser (S.Set Int)
+resolveFreeVars :: S.IntSet -> Parser S.IntSet
 resolveFreeVars fv = do
     f <- getUnifier
     let g v s = case f (TVar v) of
-            Just st -> return $ S.union s (S.fromList $ tvarsInType st)
+            Just st -> S.union (S.fromList $ tvarsInType st) <$> s
             Nothing -> throwSem $ "Unable to resolve type var " ++ pretty (TVar v)
-    foldrM g S.empty fv
+    S.foldr' g (pure S.empty) fv
 
 resolveType :: SymbolType -> Parser SymbolType
 resolveType st = do
@@ -333,4 +333,4 @@ checkTypeInScope = findType >=> const (return ())
 -- Other util functions
 hasDuplicates :: (Ord a) => [a] -> Bool
 hasDuplicates list = length list /= length set
-  where set = S.fromList list
+  where set = Set.fromList list

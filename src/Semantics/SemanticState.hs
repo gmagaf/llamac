@@ -3,7 +3,7 @@ module Semantics.SemanticState (SemanticState(..),
                                 initSemanticState) where
 
 import Data.List (intercalate)
-import qualified Data.Set as S
+import qualified Data.IntSet as S
 
 import Common.PrintAST (Pretty(pretty))
 import Common.SymbolType (SymbolType (..))
@@ -24,7 +24,7 @@ data SemanticState = SemanticState
                                 -- a type in scope.
   , constraints  :: ConstraintsMap
                                 -- a map to hold all the constraints for each type var
-  , freeTVars    :: S.Set Int   -- a set of all free type variables at current scope
+  , freeTVars    :: S.IntSet    -- a set of all free type variables at current scope
   }
 
 instance Show SemanticState where
@@ -44,7 +44,7 @@ showUnifierVal :: Unifier -> SymbolType -> String
 showUnifierVal f st = "U(" ++ pretty st ++ ") = " ++ val where
   val = maybe "Nothing" pretty (f st)
 
-showFreeTVars :: S.Set Int -> String
+showFreeTVars :: S.IntSet -> String
 showFreeTVars s = "[" ++ intercalate ", " (map (pretty . TVar) (S.toList s)) ++ "]"
 
 initSemanticState :: SemanticState

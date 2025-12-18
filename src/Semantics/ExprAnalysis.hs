@@ -1,6 +1,6 @@
 module Semantics.ExprAnalysis(analyzeLet, analyzeExpr) where
 
-import Control.Monad (when)
+import Control.Monad (when, zipWithM)
 import qualified Data.Bifunctor as B
 
 import Common.Token (Identifier, ConstrIdentifier)
@@ -58,26 +58,22 @@ analyzeLet (LetRec defs p) = do
     mapM_ addMutVarToFree sigAnalysisResults
     -- Analyze the body of the definitions
     semDefEntries <- mapM analyzeDefBody sigAnalysisResults
-    -- Update the tvars in symbol table and in freeVars
-    updatedEntries <- mapM (findName . ide . fst) semDefEntries
     -- Second analysis of the definitions to get the most general signatures
-    let semDefs = map fst semDefEntries
-    let genInput = zip3 semDefs defs updatedEntries
-    res <- mapM secondAnalysis genInput
+    res <- zipWithM secondAnalysis defs semDefEntries
     -- Generalize the results
     finalRes <- mapM genResult res
-    let finalSemDefs = map fst finalRes
     -- Final update in scope
     mapM_ (uncurry updateName . B.first ide) finalRes
+    let finalSemDefs = map fst finalRes
     return $ LetRec finalSemDefs (cpPosn p)
 
 {-
     In Second analysis we only analyze Untyped fun definitions
     in order to get the most general unifier principal type
 -}
-secondAnalysis :: (Def SemanticTag, Def AlexPosn, TableEntry) -> Parser (Def SemanticTag, TableEntry)
-secondAnalysis (_, d@(FunDef {}), FunEntry _ _) = analyzeDefSig d >>= analyzeDefBody
-secondAnalysis (d, _, e) = return (d, e)
+secondAnalysis :: Def AlexPosn -> (Def SemanticTag, TableEntry) -> Parser (Def SemanticTag, TableEntry)
+secondAnalysis d@(FunDef {}) (_, FunEntry _ _) = analyzeDefSig d >>= analyzeDefBody
+secondAnalysis _ pair = return pair
 
 {-
     We generalize second analysis results to

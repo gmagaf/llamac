@@ -11,7 +11,7 @@ import Common.SymbolType (SymbolType)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser)
 import Semantics.Utils (SemanticTag(..), TypeInfo (..), throwSemAtPosn,
-    resolveTableEntry, resolveNodeRec)
+    resolveTableEntry, resolveType, resolveTypeScheme)
 import Semantics.TypeAnalysis (analyzeTypeDef, analyzeType)
 import Semantics.ExprAnalysis (analyzeLet, analyzeExpr)
 import Common.SymbolTable (basicInfo)
@@ -39,11 +39,26 @@ class Analyzable f => TypeAble f where
 -- Functions for analyzing nodes
 analyzeAST :: AST AlexPosn -> Parser (AST SemanticTag)
 analyzeAST ast = do
+    -- Run semantic analysis on let and type definitions
     semAst <- mapM (bitraverse sem sem) ast
+    -- Resolve let defs using the unifier
+    finalAst <- mapM (bitraverse (mapM resolveTag) return) semAst
+    -- Resolve all the def entries in symbol table
     overNamesM $ mapM (\fullEntry -> do
                 e <- resolveTableEntry (view basicInfo fullEntry)
                 return (set basicInfo e fullEntry))
-    mapM (bitraverse resolveNodeRec return) semAst
+    return finalAst
+
+-- Util function to resolve the type of a tag
+resolveTag :: SemanticTag -> Parser SemanticTag
+resolveTag tg = case typeInfo tg of
+    NodeType t -> do
+        rt <- resolveType t
+        return tg{typeInfo = NodeType rt}
+    DefType t  -> do
+        rt <- resolveTypeScheme t
+        return tg{typeInfo = DefType rt}
+    NotTypable -> return tg
 
 instance Analyzable TypeDef where
     sem = analyzeTypeDef

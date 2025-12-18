@@ -224,19 +224,6 @@ resolveTypeScheme s = do
                 g (SymType tf) = SymType <$> mapM g tf
             in AbsType v <$> aux g s'
 
-resolveTag :: SemanticTag -> Parser SemanticTag
-resolveTag tg = case typeInfo tg of
-    NodeType t -> do
-        rt <- resolveType t
-        return tg{typeInfo = NodeType rt}
-    DefType t  -> do
-        rt <- resolveTypeScheme t
-        return tg{typeInfo = DefType rt}
-    NotTypable -> return tg
-
-resolveNodeRec :: Node n => n SemanticTag -> Parser (n SemanticTag)
-resolveNodeRec = mapM resolveTag
-
 resolveTableEntry :: TableEntry -> Parser TableEntry
 resolveTableEntry entry = case entry of
     MutableEntry t -> do

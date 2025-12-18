@@ -211,16 +211,6 @@ resolveType st = do
         Just t  -> return t
         Nothing -> throwSem $ "Unable to resolve type " ++ pretty st
 
-resolveNodeType :: Node n => n SemanticTag -> Parser (n SemanticTag)
-resolveNodeType n = case typeInfo (tag n) of
-    NodeType t -> do
-        rt <- resolveType t
-        let mn = mapTag (\tg -> tg{typeInfo = NodeType rt}) n
-        return mn
-    _          -> do
-        let p = posn $ tag n
-        throwSemAtPosn "Unable to compute type of node" p
-
 resolveTypeScheme :: TypeScheme -> Parser TypeScheme
 resolveTypeScheme s = do
     f <- getUnifier

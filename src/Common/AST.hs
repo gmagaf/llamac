@@ -11,7 +11,6 @@ import Common.Token (Identifier,
 -- Utils for nodes
 class Traversable n => Node n where
   tag :: n b -> b
-  mapTag :: (a -> a) -> n a -> n a
 
 class Node n => NameDef n where
   ide :: n b -> String
@@ -133,57 +132,51 @@ mapAST f = map g where
 instance Node LetDef where
   tag (Let _ b)    = b
   tag (LetRec _ b) = b
-  mapTag f (Let defs b)    = Let defs (f b)
-  mapTag f (LetRec defs b) = LetRec defs (f b)
+
 instance Node Def where
   tag (FunDef _ _ _ _ b)  = b
   tag (VarDef _ _ b)      = b
   tag (ArrayDef _ _ _ b)  = b
-  mapTag f (FunDef i p e t b) = FunDef i p e t (f b)
-  mapTag f (VarDef i t b)     = VarDef i t (f b)
-  mapTag f (ArrayDef i e t b) = ArrayDef i e t (f b)
+
 instance Node Param where
   tag (Param _ b)        = b
   tag (TypedParam _ _ b) = b
-  mapTag f (Param i b)        = Param i (f b)
-  mapTag f (TypedParam i t b) = TypedParam i t (f b)
+
 instance Node TypeDef where
   tag (TypeDef _ b) = b
-  mapTag f (TypeDef tDef b) = TypeDef tDef (f b)
+
 instance Node TDef where
   tag (TDef _ _ b) = b
-  mapTag f (TDef i cs b) = TDef i cs (f b)
+
 instance Node Constr where
   tag (Constr _ _ b) = b
-  mapTag f (Constr i ts b) = Constr i ts (f b)
+
 instance Node Type where
   tag (Type _ b) = b
-  mapTag f (Type tf b) = Type tf (f b)
+
 instance Node Expr where
   tag (Expr _ b) = b
   tag (NewType _ b) = b
   tag (LetIn _ _ b) = b
   tag (MatchExpr _ _ b) = b
-  mapTag f (Expr ef b) = Expr ef (f b)
-  mapTag f (NewType e b) = NewType e (f b)
-  mapTag f (LetIn l e b) = LetIn l e (f b)
-  mapTag f (MatchExpr e cs b) = MatchExpr e cs (f b)
 
 instance Node Clause where
   tag (Match _ _ b) = b
-  mapTag f (Match p e b) = Match p e (f b)
+
 instance Node Pattern where
   tag (Pattern _ b) = b
-  mapTag f (Pattern pf b) = Pattern pf (f b)
 
 instance NameDef Def where
   ide (FunDef i _ _ _ _) = i
   ide (VarDef i _ _)     = i
   ide (ArrayDef i _ _ _) = i
+
 instance NameDef Param where
   ide (Param i _)        = i
   ide (TypedParam i _ _) = i
+
 instance NameDef TDef where
   ide (TDef i _ _) = i
+
 instance NameDef Constr where
   ide (Constr i _ _) = i

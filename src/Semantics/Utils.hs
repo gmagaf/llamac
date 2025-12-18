@@ -169,11 +169,6 @@ gen t =
         alg (ArrayType _ f) = return f
         alg (RefType f)     = return f
         alg _               = return []
-        removeDuplicates :: S.IntSet -> [Int] -> [Int]
-        removeDuplicates _ []     = []
-        removeDuplicates s (x:xs) = if S.member x s
-                                    then removeDuplicates s xs
-                                    else x:removeDuplicates (S.insert x s) xs
     in do
         varsNotInScope <- cataM (alg, varNotInScope) t
         let varsToBound = removeDuplicates S.empty varsNotInScope
@@ -196,13 +191,15 @@ updateName key entry = do
         _ -> throwSem ("Cannot update symbol " ++ key ++ " as it is not in scope")
 
 -- Resolution utils
-resolveFreeVars :: S.IntSet -> Parser S.IntSet
-resolveFreeVars fv = do
+resolveFreeVars :: Parser ()
+resolveFreeVars = do
     f <- getUnifier
-    let g v s = case f (TVar v) of
+    fvs <- getFreeTVars
+    let g s v = case f (TVar v) of
             Just st -> S.union (S.fromList $ tvarsInType st) <$> s
             Nothing -> throwSem $ "Unable to resolve type var " ++ pretty (TVar v)
-    S.foldr' g (pure S.empty) fv
+    fvs' <- S.foldl' g (pure S.empty) fvs
+    putFreeTVars fvs'
 
 resolveType :: SymbolType -> Parser SymbolType
 resolveType st = do
@@ -298,3 +295,9 @@ checkTypeInScope = findType >=> const (return ())
 hasDuplicates :: (Ord a) => [a] -> Bool
 hasDuplicates list = length list /= length set
   where set = Set.fromList list
+
+removeDuplicates :: S.IntSet -> [Int] -> [Int]
+removeDuplicates _ []     = []
+removeDuplicates s (x:xs) = if S.member x s
+                            then removeDuplicates s xs
+                            else x:removeDuplicates (S.insert x s) xs

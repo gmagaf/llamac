@@ -85,10 +85,11 @@ secondAnalysis (d, _, e) = return (d, e)
 -}
 genResult :: (Def SemanticTag, TableEntry) -> Parser (Def SemanticTag, TableEntry)
 genResult (FunDef i ps Nothing e tg, FunEntry (MonoType t) params) = do
-    -- Get all the free variables from the outer scope and update them
-    freeVars <- getFreeTVars >>= resolveFreeVars
-    putFreeTVars freeVars
+    -- Update all the free variables from the outer scope
+    resolveFreeVars
+    -- Resolve the type to generalize
     rt <- resolveType t
+    -- Generalize type
     scheme <- gen rt
     return (FunDef i ps Nothing e tg{typeInfo = DefType scheme}, FunEntry scheme params)
 genResult pair = return pair

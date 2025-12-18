@@ -248,37 +248,11 @@ resolveTableEntry entry = case entry of
 
 -- Find symbol if exists else throw error
 findName :: String -> Parser TableEntry
-findName k = let
-    aux k' = do
-        ns <- getNames
-        case query k' ns of
-            Just entry -> return entry
-            _ -> throwSem ("Symbol " ++ k' ++ " is not in scope")
-    in do
-    entry <- aux k
-    case entry of
-        MutableEntry t -> do
-            rt <- resolveType t
-            let updated = MutableEntry rt
-            return updated
-        ArrayEntry t dim -> do
-            rt <- resolveType t
-            let updated = ArrayEntry rt dim
-            return updated
-        FunEntry scheme ps -> do
-            rScheme <- resolveTypeScheme scheme
-            let updated = FunEntry rScheme ps
-            return updated
-        ParamEntry t i -> do
-            rt <- resolveType t
-            let updated = ParamEntry rt i
-            return updated
-        PatternEntry t -> do
-            rt <- resolveType t
-            let updated = PatternEntry rt
-            return updated
-        -- constructors can not have var types
-        ConstrEntry {} -> return entry
+findName k = do
+    ns <- getNames
+    case query k ns of
+        Just entry -> resolveTableEntry entry
+        _ -> throwSem ("Symbol " ++ k ++ " is not in scope")
 
 findType :: Identifier -> Parser [(ConstrIdentifier, [ConstType])]
 findType i = do

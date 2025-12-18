@@ -203,17 +203,15 @@ analyzeDefBody (SigAnalysisRes (Untyped st) (Arr es) p (i, entry)) = do
     typesEs <- mapM getNodeType semEs
     putSemPosn p
     mapM_ (unify . (,) (SymType IntType)) typesEs
-    rSemEs <- mapM resolveNodeType semEs
     let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}
-    return (ArrayDef i rSemEs Nothing tg, entry)
+    return (ArrayDef i semEs Nothing tg, entry)
 analyzeDefBody (SigAnalysisRes (Typed semT) (Arr es) p (i, entry)) = do
     semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
     typesEs <- mapM getNodeType semEs
     putSemPosn p
     mapM_ (unify . (,) (SymType IntType)) typesEs
-    rSemEs <- mapM resolveNodeType semEs
     let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}
-    return (ArrayDef i rSemEs (Just semT) tg, entry)
+    return (ArrayDef i semEs (Just semT) tg, entry)
 analyzeDefBody (SigAnalysisRes (Untyped st) (Fun semPs e) p (i, _)) = do
     -- Hold the free vars outside the body
     outerScopeVars <- getFreeTVars
@@ -232,17 +230,14 @@ analyzeDefBody (SigAnalysisRes (Untyped st) (Fun semPs e) p (i, _)) = do
     eT <- getNodeType semE
     let fType = paramsToFun SymType paramTypes eT
     unify (st, fType)
-    rSemPs <- mapM resolveNodeType semPs
-    rSemE <- resolveNodeType semE
-    reT <- getNodeType rSemE
+    reT <- getNodeType semE
     checkConstraint reT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty reT)
-    rst <- resolveType st
     -- Close scope
     closeScopeInNames
     putFreeTVars outerScopeVars
-    let fScheme = MonoType rst
+    let fScheme = MonoType st
     let tg = SemTag{posn = p, typeInfo = DefType fScheme}
-    return (FunDef i rSemPs Nothing rSemE tg, FunEntry fScheme (map ide rSemPs))
+    return (FunDef i semPs Nothing semE tg, FunEntry fScheme (map ide semPs))
 analyzeDefBody (SigAnalysisRes (Typed semT) (Fun semPs e) p (i, _)) = do
     -- Open scope for params names and their types
     openScopeInNames
@@ -260,16 +255,14 @@ analyzeDefBody (SigAnalysisRes (Typed semT) (Fun semPs e) p (i, _)) = do
     let fType = paramsToFun SymType paramTypes eT
     let st = typeToSymbolType semT
     unify (st, fType)
-    rSemPs <- mapM resolveNodeType semPs
-    rSemE <- resolveNodeType semE
-    reT <- getNodeType rSemE
+    reT <- getNodeType semE
     checkConstraint reT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty reT)
     -- Close scope
     closeScopeInNames
     putFreeTVars outerScopeVars
     let fScheme = MonoType st
     let tg = SemTag{posn = p, typeInfo = DefType fScheme}
-    return (FunDef i rSemPs (Just semT) rSemE tg, FunEntry fScheme (map ide rSemPs))
+    return (FunDef i semPs (Just semT) semE tg, FunEntry fScheme (map ide semPs))
 
 -- Semantic analysis of expressions
 
@@ -396,36 +389,30 @@ semFunAppExpr i es = let funTypeToArgTypes = funToArgs stCoAlg in do
                     t <- inst ft
                     let inf = paramsToFun SymType ts v
                     unify (t, inf)
-                    res <- mapM resolveNodeType es
-                    rv <- resolveType v
-                    checkConstraint rv (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty rv)
-                    retE (FunAppExpr i res) rv
+                    checkConstraint v (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty v)
+                    retE (FunAppExpr i es) v
         ParamEntry t _ -> do
             ts <- mapM getNodeType es
             v <- freshTVar
             let inf = paramsToFun SymType ts v
             unify (t, inf)
-            res <- mapM resolveNodeType es
-            rv <- resolveType v
             rt <- resolveType t
             let argTypes = funTypeToArgTypes rt
             case compare (length es) (length argTypes) of
-                LT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty t ++ " is applied to too few arguments"
-                GT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty t ++ " is applied to too many arguments"
-                EQ -> retE (FunAppExpr i res) rv
+                LT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty rt ++ " is applied to too few arguments"
+                GT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty rt ++ " is applied to too many arguments"
+                EQ -> retE (FunAppExpr i es) v
         PatternEntry t -> do
             ts <- mapM getNodeType es
             v <- freshTVar
             let inf = paramsToFun SymType ts v
             unify (t, inf)
-            res <- mapM resolveNodeType es
-            rv <- resolveType v
             rt <- resolveType t
             let argTypes = funTypeToArgTypes rt
             case compare (length es) (length argTypes) of
-                LT -> throwSem $ "Pattern " ++ i ++ " of type " ++ pretty t ++ " is applied to too few arguments"
-                GT -> throwSem $ "Pattern " ++ i ++ " of type " ++ pretty t ++ " is applied to too many arguments"
-                EQ -> retE (FunAppExpr i res) rv
+                LT -> throwSem $ "Pattern " ++ i ++ " of type " ++ pretty rt ++ " is applied to too few arguments"
+                GT -> throwSem $ "Pattern " ++ i ++ " of type " ++ pretty rt ++ " is applied to too many arguments"
+                EQ -> retE (FunAppExpr i es) v
         MutableEntry _    -> throwSem $ "Cannot apply arguments to the mutable variable " ++ i
         ArrayEntry _ _    -> throwSem $ "Cannot apply arguments to array " ++ i
         ConstrEntry {}    -> throwSem $ "Cannot apply function arguments to constr " ++ i
@@ -443,10 +430,8 @@ semConstrAppExpr i es = do
                     v <- freshTVar
                     let inf = paramsToFun SymType ts v
                     unify (constTypeToSymbolType t, inf)
-                    res <- mapM resolveNodeType es
-                    rv <- resolveType v
-                    checkConstraint rv (NotAllowedFunType $ "Constructor " ++ i ++ " cannot return function type: " ++ pretty rv)
-                    retE (ConstrAppExpr i res) rv
+                    checkConstraint v (NotAllowedFunType $ "Constructor " ++ i ++ " cannot return function type: " ++ pretty v)
+                    retE (ConstrAppExpr i es) v
         _ -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
 
@@ -486,10 +471,8 @@ semUnOp op e = do
         PlusFloatUnOp  -> unify (SymType FloatType, t)
         MinusFloatUnOp -> unify (SymType FloatType, t)
         NotOp          -> unify (SymType BoolType, t)
-    rE <- resolveNodeType e
-    rt <- resolveType t
-    let finalT = if op == BangOp then v else rt
-    retE (UnOpExpr op rE) finalT
+    let finalT = if op == BangOp then v else t
+    retE (UnOpExpr op e) finalT
 
 semBinOp :: BinOp -> Expr SemanticTag -> Expr SemanticTag -> Parser (Expr SemanticTag)
 semBinOp op d e = do
@@ -521,9 +504,7 @@ semBinOp op d e = do
         GTOp            -> unifyComp s t outT
         LEqOp           -> unifyComp s t outT
         GEqOp           -> unifyComp s t outT
-    rd <- resolveNodeType d
-    re <- resolveNodeType e
-    retE (BinOpExpr op rd re) outT where
+    retE (BinOpExpr op d e) outT where
         unifyAll expected s' t' outT' = do
             unify (expected, s')
             unify (expected, t')
@@ -557,18 +538,14 @@ semArrayAccess i es = do
                     v <- freshTVar
                     let inf = SymType (ArrayType dims v)
                     unify (t, inf)
-                    res <- mapM resolveNodeType es
-                    rv <- resolveType v
-                    retE (ArrayAccess i res) (SymType (RefType rv))
+                    retE (ArrayAccess i es) (SymType (RefType v))
         ParamEntry t _ -> do
             ts <- mapM getNodeType es
             mapM_ (\et -> unify (SymType IntType, et)) ts
             v <- freshTVar
             let inf = SymType (ArrayType (length es) v)
             unify (t, inf)
-            res <- mapM resolveNodeType es
-            rv <- resolveType v
-            retE (ArrayAccess i res) (SymType (RefType rv))
+            retE (ArrayAccess i es) (SymType (RefType v))
         FunEntry s []  -> do
             ts <- mapM getNodeType es
             mapM_ (\et -> unify (SymType IntType, et)) ts
@@ -576,18 +553,14 @@ semArrayAccess i es = do
             v <- freshTVar
             let inf = SymType (ArrayType (length es) v)
             unify (t, inf)
-            res <- mapM resolveNodeType es
-            rv <- resolveType v
-            retE (ArrayAccess i res) (SymType (RefType rv))
+            retE (ArrayAccess i es) (SymType (RefType v))
         PatternEntry t -> do
             ts <- mapM getNodeType es
             mapM_ (\et -> unify (SymType IntType, et)) ts
             v <- freshTVar
             let inf = SymType (ArrayType (length es) v)
             unify (t, inf)
-            res <- mapM resolveNodeType es
-            rv <- resolveType v
-            retE (ArrayAccess i res) (SymType (RefType rv))
+            retE (ArrayAccess i es) (SymType (RefType v))
         _    -> throwSem $ "No array " ++ i ++ " found in scope"
 
 semNewType :: Type SemanticTag -> Parser (Expr SemanticTag)
@@ -602,8 +575,7 @@ semDeleteExpr e = do
     t <- getNodeType e
     v <- freshTVar
     unify (SymType (RefType v), t)
-    re <- resolveNodeType e
-    retE (DeleteExpr re) (SymType UnitType)
+    retE (DeleteExpr e) (SymType UnitType)
 
 semIfThenElseExpr :: Expr SemanticTag
                   -> Expr SemanticTag
@@ -615,11 +587,7 @@ semIfThenElseExpr c d e = do
     et <- getNodeType e
     unify (SymType BoolType, ct)
     unify (dt, et)
-    rc <- resolveNodeType c
-    rd <- resolveNodeType d
-    re <- resolveNodeType e
-    outT <- resolveType dt
-    retE (IfThenElseExpr rc rd re) outT
+    retE (IfThenElseExpr c d e) dt
 
 semIfThenExpr :: Expr SemanticTag
               -> Expr SemanticTag
@@ -629,9 +597,7 @@ semIfThenExpr c e = do
     et <- getNodeType e
     unify (SymType BoolType, ct)
     unify (SymType UnitType, et)
-    rc <- resolveNodeType c
-    re <- resolveNodeType e
-    retE (IfThenExpr rc re) (SymType UnitType)
+    retE (IfThenExpr c e) (SymType UnitType)
 
 semWhileExpr :: Expr SemanticTag
              -> Expr SemanticTag
@@ -641,9 +607,7 @@ semWhileExpr c e = do
     et <- getNodeType e
     unify (SymType BoolType, ct)
     unify (SymType UnitType, et)
-    rc <- resolveNodeType c
-    re <- resolveNodeType e
-    retE (WhileExpr rc re) (SymType UnitType)
+    retE (WhileExpr c e) (SymType UnitType)
 
 semForExpr :: Identifier
            -> Expr SemanticTag
@@ -657,10 +621,7 @@ semForExpr i l u e = do
     unify (SymType IntType, lt)
     unify (SymType IntType, ut)
     unify (SymType UnitType, et)
-    rl <- resolveNodeType l
-    ru <- resolveNodeType u
-    re <- resolveNodeType e
-    retE (ForExpr i rl ru re) (SymType UnitType)
+    retE (ForExpr i l u e) (SymType UnitType)
 
 semForDownExpr :: Identifier
                -> Expr SemanticTag
@@ -674,10 +635,7 @@ semForDownExpr i u l e = do
     unify (SymType IntType, ut)
     unify (SymType IntType, lt)
     unify (SymType UnitType, et)
-    ru <- resolveNodeType u
-    rl <- resolveNodeType l
-    re <- resolveNodeType e
-    retE (ForDownExpr i ru rl re) (SymType UnitType)
+    retE (ForDownExpr i u l e) (SymType UnitType)
 
 semMatchExpr :: Expr SemanticTag
              -> [Clause SemanticTag]
@@ -695,14 +653,7 @@ semMatchExpr e cs = do
     let patExps = map getExp cs
     patExpTs <- mapM getNodeType patExps
     mapM_ (\t -> unify (outT, t)) patExpTs
-    re <- resolveNodeType e
-    rcs <- mapM resClause cs
-    routT <- resolveType outT
-    return $ MatchExpr re rcs SemTag{posn = p, typeInfo = NodeType routT} where
-        resClause (Match pat expr t) = do
-            rPat <- resolveNodeType pat
-            rExp <- resolveNodeType expr
-            return (Match rPat rExp t)
+    return $ MatchExpr e cs SemTag{posn = p, typeInfo = NodeType outT}
 
 -- Semantic analysis of clauses
 
@@ -758,9 +709,8 @@ indSemPat (ConstrPattern i pats) = do
                 EQ -> do
                     patTs <- mapM getNodeType pats
                     mapM_ unify (zipWith (\ct t -> (constTypeToSymbolType ct, t)) argT patTs)
-                    rpats <- mapM resolveNodeType pats
-                    mapM_ verifyParamPat rpats
-                    retP (ConstrPattern i rpats) (constTypeToSymbolType outT)
+                    mapM_ verifyParamPat pats
+                    retP (ConstrPattern i pats) (constTypeToSymbolType outT)
             where verifyParamPat (Pattern (ConstrPattern _ []) _) = return ()
                   verifyParamPat (Pattern (ConstrPattern p _) tg) =
                     throwSemAtPosn ("Pattern param " ++ p ++

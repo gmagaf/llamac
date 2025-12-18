@@ -286,36 +286,23 @@ findName k = let
         MutableEntry t -> do
             rt <- resolveType t
             let updated = MutableEntry rt
-            if rt == t then return entry
-            else do
-                updateName k updated
-                return updated
+            return updated
         ArrayEntry t dim -> do
             rt <- resolveType t
             let updated = ArrayEntry rt dim
-            if rt == t then return entry
-            else do
-                updateName k updated
-                return updated
+            return updated
         FunEntry scheme ps -> do
             rScheme <- resolveTypeScheme scheme
             let updated = FunEntry rScheme ps
-            updateName k updated
             return updated
         ParamEntry t i -> do
             rt <- resolveType t
             let updated = ParamEntry rt i
-            if rt == t then return entry
-            else do
-                updateName k updated
-                return updated
+            return updated
         PatternEntry t -> do
             rt <- resolveType t
             let updated = PatternEntry rt
-            if rt == t then return entry
-            else do
-                updateName k updated
-                return updated
+            return updated
         -- constructors can not have var types
         ConstrEntry {} -> return entry
 

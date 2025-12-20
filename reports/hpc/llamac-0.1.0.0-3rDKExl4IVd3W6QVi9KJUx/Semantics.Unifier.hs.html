@@ -1,0 +1,101 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    2 </span>module Semantics.Unifier (checkConstraint, unify) where
+<span class="lineno">    3 </span>
+<span class="lineno">    4 </span>import Data.Maybe (isNothing)
+<span class="lineno">    5 </span>import Control.Monad (when, unless)
+<span class="lineno">    6 </span>import Data.Foldable (forM_)
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>import Common.AST (TypeF(..))
+<span class="lineno">    9 </span>import Common.PrintAST (pretty)
+<span class="lineno">   10 </span>import Common.SymbolType(SymbolType(..), constTypeToSymbolType, notVarInType)
+<span class="lineno">   11 </span>import Parser.ParserM (Parser)
+<span class="lineno">   12 </span>import Semantics.Utils (throwSem, getUnifier, putUnifier,
+<span class="lineno">   13 </span>                        getConstraints, putConstraints,
+<span class="lineno">   14 </span>                        resolveType, copyConstraints)
+<span class="lineno">   15 </span>import Semantics.TypeConstraints (TypeConstraint(..), singletonSet,
+<span class="lineno">   16 </span>                                  traverse, union, lookupConstr,
+<span class="lineno">   17 </span>                                  insertConstrWith)
+<span class="lineno">   18 </span>import Prelude hiding (traverse)
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>checkConstraint :: SymbolType -&gt; TypeConstraint t -&gt; Parser ()
+<span class="lineno">   21 </span><span class="decl"><span class="istickedoff">checkConstraint (SymType (FunType _ _)) (NotAllowedFunType s) =</span>
+<span class="lineno">   22 </span><span class="spaces">    </span><span class="istickedoff">throwSem $ <span class="nottickedoff">&quot;Type constraint failed: &quot; ++ s</span></span>
+<span class="lineno">   23 </span><span class="spaces"></span><span class="istickedoff">checkConstraint (SymType _) (NotAllowedFunType _) = return <span class="nottickedoff">()</span></span>
+<span class="lineno">   24 </span><span class="spaces"></span><span class="istickedoff">checkConstraint (SymType (ArrayType _ _)) (NotAllowedArrayType s) =</span>
+<span class="lineno">   25 </span><span class="spaces">    </span><span class="istickedoff">throwSem $ <span class="nottickedoff">&quot;Type constraint failed: &quot; ++ s</span></span>
+<span class="lineno">   26 </span><span class="spaces"></span><span class="istickedoff">checkConstraint (SymType _) (NotAllowedArrayType _) = return <span class="nottickedoff">()</span></span>
+<span class="lineno">   27 </span><span class="spaces"></span><span class="istickedoff">checkConstraint (SymType (ArrayType d _)) (ArrayOfAtLeastDim l s) =</span>
+<span class="lineno">   28 </span><span class="spaces">    </span><span class="istickedoff">when (d &lt; l) $ <span class="nottickedoff">throwSem $ &quot;Type constraint failed: &quot; ++ s</span></span>
+<span class="lineno">   29 </span><span class="spaces"></span><span class="istickedoff">checkConstraint (SymType _) (ArrayOfAtLeastDim _ s) = <span class="nottickedoff">throwSem $ &quot;Type constraint failed: &quot; ++ s</span></span>
+<span class="lineno">   30 </span><span class="spaces"></span><span class="istickedoff">checkConstraint t@(SymType _) (AllowedTypes ts s) =</span>
+<span class="lineno">   31 </span><span class="spaces">    </span><span class="istickedoff">let eqTypes = any (\ct -&gt; t == constTypeToSymbolType ct) ts</span>
+<span class="lineno">   32 </span><span class="spaces">    </span><span class="istickedoff">in unless eqTypes . throwSem $ <span class="nottickedoff">&quot;Type constraint failed for type &quot; ++ pretty t ++ &quot;: &quot; ++ s</span></span>
+<span class="lineno">   33 </span><span class="spaces"></span><span class="istickedoff">checkConstraint (SymType (UserDefinedType _)) (AllowedUserDefinedType _) = return <span class="nottickedoff">()</span></span>
+<span class="lineno">   34 </span><span class="spaces"></span><span class="istickedoff">checkConstraint t@(SymType _) (AllowedUserDefinedType s) =</span>
+<span class="lineno">   35 </span><span class="spaces">    </span><span class="istickedoff">throwSem $ <span class="nottickedoff">&quot;Type constraint failed: for type &quot; ++ pretty t ++ &quot;. &quot; ++ s</span></span>
+<span class="lineno">   36 </span><span class="spaces"></span><span class="istickedoff">checkConstraint (TVar v) c = do</span>
+<span class="lineno">   37 </span><span class="spaces">    </span><span class="istickedoff">let tv = TVar v</span>
+<span class="lineno">   38 </span><span class="spaces">    </span><span class="istickedoff">f &lt;- getUnifier</span>
+<span class="lineno">   39 </span><span class="spaces">    </span><span class="istickedoff">when (isNothing (f tv)) $</span>
+<span class="lineno">   40 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwSem (&quot;Unable to add constraint: &quot; ++ show c ++</span></span>
+<span class="lineno">   41 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">&quot; . Variable &quot; ++ pretty tv ++ &quot; has never been used before&quot;)</span></span>
+<span class="lineno">   42 </span><span class="spaces">    </span><span class="istickedoff">cs &lt;- getConstraints</span>
+<span class="lineno">   43 </span><span class="spaces">    </span><span class="istickedoff">putConstraints $ insertConstrWith union v (singletonSet c) cs</span></span>
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>applyConstraints :: (SymbolType, SymbolType) -&gt; Parser ()
+<span class="lineno">   46 </span><span class="decl"><span class="istickedoff">applyConstraints (TVar v, TVar u) = copyConstraints (TVar v, TVar u)</span>
+<span class="lineno">   47 </span><span class="spaces"></span><span class="istickedoff">applyConstraints (TVar v, t) = do</span>
+<span class="lineno">   48 </span><span class="spaces">    </span><span class="istickedoff">c &lt;- getConstraints</span>
+<span class="lineno">   49 </span><span class="spaces">    </span><span class="istickedoff">forM_ (lookupConstr v c) (traverse (\ _ -&gt; checkConstraint t))</span>
+<span class="lineno">   50 </span><span class="spaces"></span><span class="istickedoff">applyConstraints (t, TVar v) = do</span>
+<span class="lineno">   51 </span><span class="spaces">    </span><span class="istickedoff">c &lt;- getConstraints</span>
+<span class="lineno">   52 </span><span class="spaces">    </span><span class="istickedoff">forM_ (lookupConstr v c) (traverse (\ _ -&gt; checkConstraint t))</span>
+<span class="lineno">   53 </span><span class="spaces"></span><span class="istickedoff">applyConstraints _ = return <span class="nottickedoff">()</span></span></span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>-- This function is used to unify two types
+<span class="lineno">   56 </span>-- Given a type constraint it extends the unifier
+<span class="lineno">   57 </span>-- by resolving the constraint.
+<span class="lineno">   58 </span>-- The constraint is solved in favor of the less
+<span class="lineno">   59 </span>-- variable if possible
+<span class="lineno">   60 </span>-- The result is saved in SymbolTable
+<span class="lineno">   61 </span>unify :: (SymbolType, SymbolType) -&gt; Parser ()
+<span class="lineno">   62 </span><span class="decl"><span class="istickedoff">unify (st1, st2) = do</span>
+<span class="lineno">   63 </span><span class="spaces">    </span><span class="istickedoff">rt &lt;- resolveType st1</span>
+<span class="lineno">   64 </span><span class="spaces">    </span><span class="istickedoff">rs &lt;- resolveType st2</span>
+<span class="lineno">   65 </span><span class="spaces">    </span><span class="istickedoff">applyConstraints (rt, rs)</span>
+<span class="lineno">   66 </span><span class="spaces">    </span><span class="istickedoff">case (rt, rs) of</span>
+<span class="lineno">   67 </span><span class="spaces">        </span><span class="istickedoff">(t, s) | t == s -&gt; return <span class="nottickedoff">()</span></span>
+<span class="lineno">   68 </span><span class="spaces">        </span><span class="istickedoff">(TVar v, TVar u) | v &lt; u -&gt; unify (rs, rt)</span>
+<span class="lineno">   69 </span><span class="spaces">        </span><span class="istickedoff">(TVar v, s) | <span class="tickonlytrue">notVarInType v s</span> -&gt; putUnifier v s</span>
+<span class="lineno">   70 </span><span class="spaces">        </span><span class="istickedoff">(t, TVar v) | <span class="tickonlytrue">notVarInType v t</span> -&gt; putUnifier v t</span>
+<span class="lineno">   71 </span><span class="spaces">        </span><span class="istickedoff">(SymType (FunType t1 t2), SymType (FunType s1 s2)) -&gt; do</span>
+<span class="lineno">   72 </span><span class="spaces">            </span><span class="istickedoff">unify (t1, s1)</span>
+<span class="lineno">   73 </span><span class="spaces">            </span><span class="istickedoff">unify (t2, s2)</span>
+<span class="lineno">   74 </span><span class="spaces">        </span><span class="istickedoff">(SymType (ArrayType dimT t), SymType (ArrayType dimS s)) | <span class="tickonlytrue">dimT == dimS</span> -&gt; do</span>
+<span class="lineno">   75 </span><span class="spaces">            </span><span class="istickedoff">unify (t, s)</span>
+<span class="lineno">   76 </span><span class="spaces">        </span><span class="istickedoff">(SymType (RefType t), SymType (RefType s)) -&gt; do</span>
+<span class="lineno">   77 </span><span class="spaces">            </span><span class="istickedoff">unify (t, s)</span>
+<span class="lineno">   78 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; throwSem $ <span class="nottickedoff">&quot;Unable to unify type &quot; ++ pretty rt ++ &quot; with &quot; ++ pretty rs</span></span></span>
+
+</pre>
+</body>
+</html>

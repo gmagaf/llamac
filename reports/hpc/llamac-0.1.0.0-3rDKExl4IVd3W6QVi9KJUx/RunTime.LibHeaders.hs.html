@@ -1,0 +1,111 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module RunTime.LibHeaders (module RunTime.LibHeaders) where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import Control.Lens ((%=))
+<span class="lineno">    4 </span>import qualified LLVM.IRBuilder as L (extern)
+<span class="lineno">    5 </span>import qualified LLVM.AST as L (mkName)
+<span class="lineno">    6 </span>
+<span class="lineno">    7 </span>import Common.Token (Identifier)
+<span class="lineno">    8 </span>import Common.AST (TypeF(FunType, RefType))
+<span class="lineno">    9 </span>import Common.SymbolTable (TableEntry(FunEntry), insert, openScope, names, mkFullTableEntry)
+<span class="lineno">   10 </span>import Common.SymbolType
+<span class="lineno">   11 </span>import Parser.ParserState (symbols)
+<span class="lineno">   12 </span>import Parser.ParserM (Parser)
+<span class="lineno">   13 </span>import IR.TypeUtils (genConstType)
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>-- This module contains the signatures of the run-time library
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>type RunTimeLibSib = (Identifier, ConstType, [Identifier])
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>libSigs :: [RunTimeLibSib]
+<span class="lineno">   20 </span><span class="decl"><span class="istickedoff">libSigs = ioLibSigs ++ mathLibSigs ++ incrLibSigs ++ convertLibSigs ++ stringLibSigs</span></span>
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>-- Input/Output
+<span class="lineno">   23 </span>ioLibSigs :: [RunTimeLibSib]
+<span class="lineno">   24 </span><span class="decl"><span class="istickedoff">ioLibSigs =</span>
+<span class="lineno">   25 </span><span class="spaces">    </span><span class="istickedoff">[ (&quot;print_int&quot;,    ConstType (FunType intConstType unitConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   26 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;print_bool&quot;,   ConstType (FunType boolConstType unitConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   27 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;print_char&quot;,   ConstType (FunType charConstType unitConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   28 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;print_float&quot;,  ConstType (FunType floatConstType unitConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   29 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;print_string&quot;, ConstType (FunType stringConstType unitConstType), [<span class="nottickedoff">&quot;arg0&quot;</span>])</span>
+<span class="lineno">   30 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;read_int&quot;,     ConstType (FunType unitConstType intConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   31 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;read_bool&quot;,    ConstType (FunType unitConstType boolConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   32 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;read_char&quot;,    ConstType (FunType unitConstType charConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   33 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;read_float&quot;,   ConstType (FunType unitConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   34 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;read_string&quot;,  ConstType (FunType stringConstType unitConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   35 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>-- Math
+<span class="lineno">   38 </span>mathLibSigs :: [RunTimeLibSib]
+<span class="lineno">   39 </span><span class="decl"><span class="istickedoff">mathLibSigs =</span>
+<span class="lineno">   40 </span><span class="spaces">    </span><span class="istickedoff">[ (&quot;abs&quot;,  ConstType (FunType intConstType intConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   41 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;fabs&quot;, ConstType (FunType floatConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   42 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;sqrt&quot;, ConstType (FunType floatConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   43 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;sin&quot;,  ConstType (FunType floatConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   44 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;cos&quot;,  ConstType (FunType floatConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   45 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;tan&quot;,  ConstType (FunType floatConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   46 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;atan&quot;, ConstType (FunType floatConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   47 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;exp&quot;,  ConstType (FunType floatConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   48 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;ln&quot;,   ConstType (FunType floatConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   49 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;pi&quot;,   ConstType (FunType unitConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   50 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>-- Incr/Decr
+<span class="lineno">   53 </span>incrLibSigs :: [RunTimeLibSib]
+<span class="lineno">   54 </span><span class="decl"><span class="istickedoff">incrLibSigs =</span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="istickedoff">[ (&quot;incr&quot;, ConstType (FunType (ConstType (RefType intConstType)) unitConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   56 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;decr&quot;, ConstType (FunType (ConstType (RefType intConstType)) unitConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   57 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>-- Conversions
+<span class="lineno">   60 </span>convertLibSigs :: [RunTimeLibSib]
+<span class="lineno">   61 </span><span class="decl"><span class="istickedoff">convertLibSigs =</span>
+<span class="lineno">   62 </span><span class="spaces">    </span><span class="istickedoff">[ (&quot;float_of_int&quot;, ConstType (FunType intConstType floatConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   63 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;int_of_float&quot;, ConstType (FunType floatConstType intConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   64 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;round&quot;,        ConstType (FunType floatConstType intConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   65 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;int_of_char&quot;,  ConstType (FunType charConstType intConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   66 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;char_of_int&quot;,  ConstType (FunType intConstType charConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   67 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>-- Strings
+<span class="lineno">   70 </span>stringLibSigs :: [RunTimeLibSib]
+<span class="lineno">   71 </span><span class="decl"><span class="istickedoff">stringLibSigs =</span>
+<span class="lineno">   72 </span><span class="spaces">    </span><span class="istickedoff">[ (&quot;strlen&quot;, ConstType (FunType stringConstType intConstType), <span class="nottickedoff">[&quot;arg0&quot;]</span>)</span>
+<span class="lineno">   73 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;strcmp&quot;, ConstType (FunType stringConstType (ConstType (FunType stringConstType intConstType))), <span class="nottickedoff">[&quot;arg0&quot;, &quot;arg1&quot;]</span>)</span>
+<span class="lineno">   74 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;strcpy&quot;, ConstType (FunType stringConstType (ConstType (FunType stringConstType unitConstType))), <span class="nottickedoff">[&quot;arg0&quot;, &quot;arg1&quot;]</span>)</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">, (&quot;strcat&quot;, ConstType (FunType stringConstType (ConstType (FunType stringConstType unitConstType))), <span class="nottickedoff">[&quot;arg0&quot;, &quot;arg1&quot;]</span>)</span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>initSymbolTable :: Parser ()
+<span class="lineno">   79 </span><span class="decl"><span class="istickedoff">initSymbolTable = do</span>
+<span class="lineno">   80 </span><span class="spaces">  </span><span class="istickedoff">symbols . names %= openScope</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="istickedoff">mapM_ f libSigs where</span>
+<span class="lineno">   82 </span><span class="spaces">    </span><span class="istickedoff">f :: RunTimeLibSib -&gt; Parser ()</span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="istickedoff">f (i, t, ps) = do</span>
+<span class="lineno">   84 </span><span class="spaces">        </span><span class="istickedoff">let scheme = MonoType (constTypeToSymbolType t)</span>
+<span class="lineno">   85 </span><span class="spaces">        </span><span class="istickedoff">argTs &lt;- mapM genConstType (funToArgs ctCoAlg t)</span>
+<span class="lineno">   86 </span><span class="spaces">        </span><span class="istickedoff">outT  &lt;- genConstType (outFunType ctCoAlg t)</span>
+<span class="lineno">   87 </span><span class="spaces">        </span><span class="istickedoff">fun   &lt;- L.extern <span class="nottickedoff">(L.mkName i)</span> <span class="nottickedoff">argTs</span> <span class="nottickedoff">outT</span></span>
+<span class="lineno">   88 </span><span class="spaces">        </span><span class="istickedoff">symbols . names %= insert i (mkFullTableEntry (FunEntry scheme ps) <span class="nottickedoff">(Just fun)</span>)</span></span>
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Common.Token(Token(..),
+<span class="lineno">    2 </span>                    Identifier,
+<span class="lineno">    3 </span>                    ConstrIdentifier,
+<span class="lineno">    4 </span>                    IntConstant,
+<span class="lineno">    5 </span>                    FloatConstant,
+<span class="lineno">    6 </span>                    CharConstant,
+<span class="lineno">    7 </span>                    StringConstant) where
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>-- Mappings of Llama constants to Haskell values
+<span class="lineno">   10 </span>type Identifier = String
+<span class="lineno">   11 </span>type ConstrIdentifier = String
+<span class="lineno">   12 </span>type IntConstant = Int
+<span class="lineno">   13 </span>type FloatConstant = Float
+<span class="lineno">   14 </span>type CharConstant = Char
+<span class="lineno">   15 </span>type StringConstant = String
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>-- Definition of all the Llama tokens
+<span class="lineno">   18 </span>data Token
+<span class="lineno">   19 </span>  -- Keywords
+<span class="lineno">   20 </span>  = T_and
+<span class="lineno">   21 </span>  | T_array
+<span class="lineno">   22 </span>  | T_begin
+<span class="lineno">   23 </span>  | T_bool
+<span class="lineno">   24 </span>  | T_char
+<span class="lineno">   25 </span>  | T_delete
+<span class="lineno">   26 </span>  | T_dim
+<span class="lineno">   27 </span>  | T_do
+<span class="lineno">   28 </span>  | T_done
+<span class="lineno">   29 </span>  | T_downto
+<span class="lineno">   30 </span>  | T_else
+<span class="lineno">   31 </span>  | T_end
+<span class="lineno">   32 </span>  | T_false
+<span class="lineno">   33 </span>  | T_float
+<span class="lineno">   34 </span>  | T_for
+<span class="lineno">   35 </span>  | T_if
+<span class="lineno">   36 </span>  | T_in
+<span class="lineno">   37 </span>  | T_int
+<span class="lineno">   38 </span>  | T_let
+<span class="lineno">   39 </span>  | T_match
+<span class="lineno">   40 </span>  | T_mod
+<span class="lineno">   41 </span>  | T_mutable
+<span class="lineno">   42 </span>  | T_new
+<span class="lineno">   43 </span>  | T_not
+<span class="lineno">   44 </span>  | T_of
+<span class="lineno">   45 </span>  | T_rec
+<span class="lineno">   46 </span>  | T_ref
+<span class="lineno">   47 </span>  | T_then
+<span class="lineno">   48 </span>  | T_to
+<span class="lineno">   49 </span>  | T_true
+<span class="lineno">   50 </span>  | T_type
+<span class="lineno">   51 </span>  | T_unit
+<span class="lineno">   52 </span>  | T_while
+<span class="lineno">   53 </span>  | T_with
+<span class="lineno">   54 </span>  -- Identifiers
+<span class="lineno">   55 </span>  | T_id Identifier
+<span class="lineno">   56 </span>  | T_id_constr ConstrIdentifier
+<span class="lineno">   57 </span>  -- Constants
+<span class="lineno">   58 </span>  | T_const_int IntConstant
+<span class="lineno">   59 </span>  | T_const_float FloatConstant
+<span class="lineno">   60 </span>  | T_const_char CharConstant
+<span class="lineno">   61 </span>  | T_const_string StringConstant
+<span class="lineno">   62 </span>  -- Symbols
+<span class="lineno">   63 </span>  | T_arrow
+<span class="lineno">   64 </span>  | T_equals
+<span class="lineno">   65 </span>  | T_bar
+<span class="lineno">   66 </span>  | T_plus
+<span class="lineno">   67 </span>  | T_minus
+<span class="lineno">   68 </span>  | T_times
+<span class="lineno">   69 </span>  | T_div
+<span class="lineno">   70 </span>  | T_plus_float
+<span class="lineno">   71 </span>  | T_minus_float
+<span class="lineno">   72 </span>  | T_times_float
+<span class="lineno">   73 </span>  | T_div_float
+<span class="lineno">   74 </span>  | T_exp
+<span class="lineno">   75 </span>  | T_bang
+<span class="lineno">   76 </span>  | T_semicolon
+<span class="lineno">   77 </span>  | T_and_op
+<span class="lineno">   78 </span>  | T_or_op
+<span class="lineno">   79 </span>  | T_not_equals
+<span class="lineno">   80 </span>  | T_less_than
+<span class="lineno">   81 </span>  | T_greater_than
+<span class="lineno">   82 </span>  | T_less_than_eq
+<span class="lineno">   83 </span>  | T_greater_than_eq
+<span class="lineno">   84 </span>  | T_nat_eq_op
+<span class="lineno">   85 </span>  | T_not_nat_eq_op
+<span class="lineno">   86 </span>  | T_assign_mutable
+<span class="lineno">   87 </span>  | T_lparen
+<span class="lineno">   88 </span>  | T_rparen
+<span class="lineno">   89 </span>  | T_lbracket
+<span class="lineno">   90 </span>  | T_rbracket
+<span class="lineno">   91 </span>  | T_comma
+<span class="lineno">   92 </span>  | T_colon
+<span class="lineno">   93 </span>  | T_eof
+<span class="lineno">   94 </span>  deriving <span class="decl"><span class="istickedoff">Eq</span></span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>instance Show Token where
+<span class="lineno">   97 </span>  <span class="decl"><span class="istickedoff">show t = case t of</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="istickedoff">-- Keywords</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="istickedoff">T_and               -&gt; &quot;and&quot;</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">T_array             -&gt; &quot;array&quot;</span>
+<span class="lineno">  101 </span><span class="spaces">    </span><span class="istickedoff">T_begin             -&gt; &quot;begin&quot;</span>
+<span class="lineno">  102 </span><span class="spaces">    </span><span class="istickedoff">T_bool              -&gt; &quot;bool&quot;</span>
+<span class="lineno">  103 </span><span class="spaces">    </span><span class="istickedoff">T_char              -&gt; &quot;char&quot;</span>
+<span class="lineno">  104 </span><span class="spaces">    </span><span class="istickedoff">T_delete            -&gt; &quot;delete&quot;</span>
+<span class="lineno">  105 </span><span class="spaces">    </span><span class="istickedoff">T_dim               -&gt; &quot;dim&quot;</span>
+<span class="lineno">  106 </span><span class="spaces">    </span><span class="istickedoff">T_do                -&gt; &quot;do&quot;</span>
+<span class="lineno">  107 </span><span class="spaces">    </span><span class="istickedoff">T_done              -&gt; &quot;done&quot;</span>
+<span class="lineno">  108 </span><span class="spaces">    </span><span class="istickedoff">T_downto            -&gt; &quot;downto&quot;</span>
+<span class="lineno">  109 </span><span class="spaces">    </span><span class="istickedoff">T_else              -&gt; &quot;else&quot;</span>
+<span class="lineno">  110 </span><span class="spaces">    </span><span class="istickedoff">T_end               -&gt; &quot;end&quot;</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="istickedoff">T_false             -&gt; &quot;false&quot;</span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="istickedoff">T_float             -&gt; &quot;float&quot;</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">T_for               -&gt; &quot;for&quot;</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">T_if                -&gt; &quot;if&quot;</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">T_in                -&gt; &quot;in&quot;</span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="istickedoff">T_int               -&gt; &quot;int&quot;</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">T_let               -&gt; &quot;let&quot;</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">T_match             -&gt; &quot;match&quot;</span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">T_mod               -&gt; &quot;mod&quot;</span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff">T_mutable           -&gt; &quot;mutable&quot;</span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff">T_new               -&gt; &quot;new&quot;</span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">T_not               -&gt; &quot;not&quot;</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">T_of                -&gt; &quot;of&quot;</span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">T_rec               -&gt; &quot;rec&quot;</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">T_ref               -&gt; &quot;ref&quot;</span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff">T_then              -&gt; &quot;then&quot;</span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff">T_to                -&gt; &quot;to&quot;</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">T_true              -&gt; &quot;true&quot;</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">T_type              -&gt; &quot;type&quot;</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">T_unit              -&gt; &quot;unit&quot;</span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">T_while             -&gt; &quot;while&quot;</span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">T_with              -&gt; &quot;with&quot;</span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">-- Identifiers</span>
+<span class="lineno">  134 </span><span class="spaces">    </span><span class="istickedoff">T_id v              -&gt; <span class="nottickedoff">&quot;id:&quot; ++ v</span></span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">T_id_constr v       -&gt; <span class="nottickedoff">&quot;constrId:&quot; ++ v</span></span>
+<span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff">-- Constants</span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">T_const_int v       -&gt; <span class="nottickedoff">&quot;intC:&quot; ++ show v</span></span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff">T_const_float v     -&gt; <span class="nottickedoff">&quot;floatC:&quot; ++ show v</span></span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">T_const_char v      -&gt; <span class="nottickedoff">&quot;charC:&quot; ++ [v]</span></span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff">T_const_string v    -&gt; <span class="nottickedoff">&quot;stringC:&quot; ++ v</span></span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">-- Symbols</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">T_arrow             -&gt; &quot;-&gt;&quot;</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">T_equals            -&gt; &quot;=&quot;</span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">T_bar               -&gt; &quot;|&quot;</span>
+<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff">T_plus              -&gt; &quot;+&quot;</span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">T_minus             -&gt; &quot;-&quot;</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">T_times             -&gt; &quot;*&quot;</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">T_div               -&gt; &quot;/&quot;</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">T_plus_float        -&gt; &quot;+.&quot;</span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">T_minus_float       -&gt; &quot;-.&quot;</span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">T_times_float       -&gt; &quot;*.&quot;</span>
+<span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff">T_div_float         -&gt; &quot;/.&quot;</span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">T_exp               -&gt; &quot;**&quot;</span>
+<span class="lineno">  154 </span><span class="spaces">    </span><span class="istickedoff">T_bang              -&gt; &quot;!&quot;</span>
+<span class="lineno">  155 </span><span class="spaces">    </span><span class="istickedoff">T_semicolon         -&gt; &quot;;&quot;</span>
+<span class="lineno">  156 </span><span class="spaces">    </span><span class="istickedoff">T_and_op            -&gt; &quot;&amp;&amp;&quot;</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff">T_or_op             -&gt; &quot;||&quot;</span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff">T_not_equals        -&gt; &quot;&lt;&gt;&quot;</span>
+<span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff">T_less_than         -&gt; &quot;&lt;&quot;</span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">T_greater_than      -&gt; &quot;&gt;&quot;</span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">T_less_than_eq      -&gt; &quot;&lt;=&quot;</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">T_greater_than_eq   -&gt; &quot;&gt;=&quot;</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">T_nat_eq_op         -&gt; &quot;==&quot;</span>
+<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">T_not_nat_eq_op     -&gt; &quot;!=&quot;</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">T_assign_mutable    -&gt; &quot;:=&quot;</span>
+<span class="lineno">  166 </span><span class="spaces">    </span><span class="istickedoff">T_lparen            -&gt; &quot;(&quot;</span>
+<span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff">T_rparen            -&gt; &quot;)&quot;</span>
+<span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">T_lbracket          -&gt; &quot;[&quot;</span>
+<span class="lineno">  169 </span><span class="spaces">    </span><span class="istickedoff">T_rbracket          -&gt; &quot;]&quot;</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">T_comma             -&gt; &quot;,&quot;</span>
+<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">T_colon             -&gt; &quot;:&quot;</span>
+<span class="lineno">  172 </span><span class="spaces">    </span><span class="istickedoff">T_eof               -&gt; <span class="nottickedoff">&quot;eof&quot;</span></span></span>
+
+</pre>
+</body>
+</html>

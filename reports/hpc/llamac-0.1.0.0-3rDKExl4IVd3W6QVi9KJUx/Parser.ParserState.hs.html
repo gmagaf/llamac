@@ -1,0 +1,71 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">    2 </span>module Parser.ParserState (ParserState,
+<span class="lineno">    3 </span>                           alex_state, sem_state,
+<span class="lineno">    4 </span>                           symbols, cgen_state,
+<span class="lineno">    5 </span>                           initAlexState, initParserState) where
+<span class="lineno">    6 </span>
+<span class="lineno">    7 </span>import Control.Lens (makeLenses)
+<span class="lineno">    8 </span>import Control.Lens.Getter (view)
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>import Common.SymbolTable (SymbolTable, emptySymbolTable)
+<span class="lineno">   11 </span>import Lexer.Lexer (AlexState(..), alexStartPos, alexInitUserState)
+<span class="lineno">   12 </span>import Semantics.SemanticState (SemanticState, initSemanticState)
+<span class="lineno">   13 </span>import IR.CodeGenState (CodeGenState, initCodeGenState)
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>-- The state of the parser
+<span class="lineno">   17 </span>data ParserState = ParserState
+<span class="lineno">   18 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_alex_state</span></span></span>   :: AlexState     -- lexer's state
+<span class="lineno">   19 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_sem_state</span></span></span>    :: SemanticState -- semantic analysis state
+<span class="lineno">   20 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_symbols</span></span></span>      :: SymbolTable   -- compiler's symbol table
+<span class="lineno">   21 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cgen_state</span></span></span>   :: CodeGenState  -- code generator's state
+<span class="lineno">   22 </span>  }
+<span class="lineno">   23 </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''ParserState</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>instance Show ParserState where
+<span class="lineno">   26 </span>  <span class="decl"><span class="nottickedoff">show s = &quot;ParserState {&quot; ++</span>
+<span class="lineno">   27 </span><span class="spaces">    </span><span class="nottickedoff">&quot;alex_state = _&quot;</span>
+<span class="lineno">   28 </span><span class="spaces">    </span><span class="nottickedoff">++ &quot;, &quot; ++ &quot;sem_state = &quot; ++ show (view sem_state s)</span>
+<span class="lineno">   29 </span><span class="spaces">    </span><span class="nottickedoff">++ &quot;, &quot; ++ &quot;cgen_state = &quot; ++ show (view cgen_state s)</span>
+<span class="lineno">   30 </span><span class="spaces">    </span><span class="nottickedoff">++ &quot;, &quot; ++ &quot;symbols = &quot; ++ show (view symbols s)</span>
+<span class="lineno">   31 </span><span class="spaces">    </span><span class="nottickedoff">++ &quot;}&quot;</span></span>
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>initAlexState :: String -&gt; AlexState
+<span class="lineno">   34 </span><span class="decl"><span class="istickedoff">initAlexState input = AlexState {alex_pos = alexStartPos,</span>
+<span class="lineno">   35 </span><span class="spaces">                        </span><span class="istickedoff">alex_inp = input,</span>
+<span class="lineno">   36 </span><span class="spaces">                        </span><span class="istickedoff">alex_chr = '\n',</span>
+<span class="lineno">   37 </span><span class="spaces">                        </span><span class="istickedoff">alex_bytes = [],</span>
+<span class="lineno">   38 </span><span class="spaces">                        </span><span class="istickedoff">alex_ust = alexInitUserState,</span>
+<span class="lineno">   39 </span><span class="spaces">                        </span><span class="istickedoff">alex_scd = 0}</span></span>
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>initParserState :: String -&gt; ParserState
+<span class="lineno">   42 </span><span class="decl"><span class="istickedoff">initParserState input =</span>
+<span class="lineno">   43 </span><span class="spaces">    </span><span class="istickedoff">ParserState</span>
+<span class="lineno">   44 </span><span class="spaces">       </span><span class="istickedoff">{ _alex_state = initAlexState input</span>
+<span class="lineno">   45 </span><span class="spaces">       </span><span class="istickedoff">, _sem_state  = initSemanticState</span>
+<span class="lineno">   46 </span><span class="spaces">       </span><span class="istickedoff">, _symbols    = emptySymbolTable</span>
+<span class="lineno">   47 </span><span class="spaces">       </span><span class="istickedoff">, _cgen_state = <span class="nottickedoff">initCodeGenState</span></span>
+<span class="lineno">   48 </span><span class="spaces">       </span><span class="istickedoff">}</span></span>
+
+</pre>
+</body>
+</html>

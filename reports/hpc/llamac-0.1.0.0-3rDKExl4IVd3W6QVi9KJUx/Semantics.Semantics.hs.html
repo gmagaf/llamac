@@ -1,0 +1,80 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Semantics.Semantics (Analyzable, sem, semTag,
+<span class="lineno">    2 </span>                            TypeAble, infer, typeCheck,
+<span class="lineno">    3 </span>                            analyzeAST) where
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>import Data.Bitraversable (Bitraversable(bitraverse))
+<span class="lineno">    6 </span>import Control.Lens.Getter (view)
+<span class="lineno">    7 </span>import Control.Lens.Setter (set)
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>import Common.AST (Expr, Type, TypeDef, LetDef, AST, Node(..))
+<span class="lineno">   10 </span>import Common.SymbolType (SymbolType)
+<span class="lineno">   11 </span>import Lexer.Lexer (AlexPosn)
+<span class="lineno">   12 </span>import Parser.ParserM (Parser)
+<span class="lineno">   13 </span>import Semantics.Utils (SemanticTag(..), TypeInfo (..), throwSemAtPosn,
+<span class="lineno">   14 </span>    resolveTableEntry, resolveNodeRec)
+<span class="lineno">   15 </span>import Semantics.TypeAnalysis (analyzeTypeDef, analyzeType)
+<span class="lineno">   16 </span>import Semantics.ExprAnalysis (analyzeLet, analyzeExpr)
+<span class="lineno">   17 </span>import Common.SymbolTable (basicInfo)
+<span class="lineno">   18 </span>import Parser.SymbolTableUtils (overNamesM)
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>-- This module contains the semantic analysis of the nodes
+<span class="lineno">   21 </span>-- and decorates them with the semantic tag
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>-- Organize the semantic analyzable nodes in a class
+<span class="lineno">   24 </span>class Node f =&gt; Analyzable f where
+<span class="lineno">   25 </span>    sem :: f AlexPosn -&gt; Parser (f SemanticTag)
+<span class="lineno">   26 </span>    semTag :: f AlexPosn -&gt; Parser SemanticTag
+<span class="lineno">   27 </span>    <span class="decl"><span class="nottickedoff">semTag f = tag &lt;$&gt; sem f</span></span>
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>class Analyzable f =&gt; TypeAble f where
+<span class="lineno">   30 </span>    infer :: f AlexPosn -&gt; Parser SymbolType
+<span class="lineno">   31 </span>    <span class="decl"><span class="nottickedoff">infer f = do</span>
+<span class="lineno">   32 </span><span class="spaces">        </span><span class="nottickedoff">tg &lt;- semTag f</span>
+<span class="lineno">   33 </span><span class="spaces">        </span><span class="nottickedoff">case typeInfo tg of</span>
+<span class="lineno">   34 </span><span class="spaces">            </span><span class="nottickedoff">NodeType t -&gt; return t</span>
+<span class="lineno">   35 </span><span class="spaces">            </span><span class="nottickedoff">_          -&gt; throwSemAtPosn &quot;Could not infer type of expr&quot; (posn tg)</span></span>
+<span class="lineno">   36 </span>    typeCheck :: f AlexPosn -&gt; SymbolType -&gt; Parser Bool
+<span class="lineno">   37 </span>    <span class="decl"><span class="nottickedoff">typeCheck f t = (t ==) &lt;$&gt; infer f</span></span>
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>-- Functions for analyzing nodes
+<span class="lineno">   40 </span>analyzeAST :: AST AlexPosn -&gt; Parser (AST SemanticTag)
+<span class="lineno">   41 </span><span class="decl"><span class="istickedoff">analyzeAST ast = do</span>
+<span class="lineno">   42 </span><span class="spaces">    </span><span class="istickedoff">semAst &lt;- mapM (bitraverse sem sem) ast</span>
+<span class="lineno">   43 </span><span class="spaces">    </span><span class="istickedoff">overNamesM $ mapM (\fullEntry -&gt; do</span>
+<span class="lineno">   44 </span><span class="spaces">                </span><span class="istickedoff">e &lt;- resolveTableEntry (view basicInfo fullEntry)</span>
+<span class="lineno">   45 </span><span class="spaces">                </span><span class="istickedoff">return <span class="nottickedoff">(set basicInfo e fullEntry)</span>)</span>
+<span class="lineno">   46 </span><span class="spaces">    </span><span class="istickedoff">mapM (bitraverse resolveNodeRec return) semAst</span></span>
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>instance Analyzable TypeDef where
+<span class="lineno">   49 </span>    <span class="decl"><span class="istickedoff">sem = analyzeTypeDef</span></span>
+<span class="lineno">   50 </span>instance Analyzable Type where
+<span class="lineno">   51 </span>    <span class="decl"><span class="nottickedoff">sem = analyzeType</span></span>
+<span class="lineno">   52 </span>instance Analyzable LetDef where
+<span class="lineno">   53 </span>    <span class="decl"><span class="istickedoff">sem = analyzeLet</span></span>
+<span class="lineno">   54 </span>instance Analyzable Expr where
+<span class="lineno">   55 </span>    <span class="decl"><span class="nottickedoff">sem = analyzeExpr</span></span>
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>instance TypeAble Expr where
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    2 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">    3 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">    4 </span>{-# LANGUAGE StandaloneDeriving #-}
+<span class="lineno">    5 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">    6 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">    7 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">    8 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">    9 </span>module Semantics.TypeConstraints (TypeConstraint(..), mkAllowedTypes
+<span class="lineno">   10 </span>                                 , ConstraintSet
+<span class="lineno">   11 </span>                                 , emptyConstraintSet, singletonSet
+<span class="lineno">   12 </span>                                 , union, traverse, showDPair
+<span class="lineno">   13 </span>                                 , ConstraintsMap
+<span class="lineno">   14 </span>                                 , showConstraintsMap, emptyConstraintsMap
+<span class="lineno">   15 </span>                                 , lookupConstr, insertConstr, insertConstrWith
+<span class="lineno">   16 </span>                                 ) where
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>import Prelude hiding (traverse)
+<span class="lineno">   19 </span>import qualified Data.Set as S
+<span class="lineno">   20 </span>import qualified Data.Dependent.Map as DM
+<span class="lineno">   21 </span>import qualified Data.Dependent.Sum as DS
+<span class="lineno">   22 </span>import qualified Data.IntMap as IM (IntMap, foldrWithKey, empty, lookup, insertWith, insert)
+<span class="lineno">   23 </span>import Data.GADT.Compare.TH (deriveGCompare, deriveGEq)
+<span class="lineno">   24 </span>import Data.GADT.Show.TH (deriveGShow)
+<span class="lineno">   25 </span>import Data.Constraint.Extras.TH (deriveArgDict)
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>import Common.SymbolType (ConstType, SymbolType (TVar))
+<span class="lineno">   28 </span>import Common.PrintAST (pretty)
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>data TypeConstraintK = AllowedTypesT
+<span class="lineno">   31 </span>                     | NotAllowedFunTypeT
+<span class="lineno">   32 </span>                     | NotAllowedArrayTypeT
+<span class="lineno">   33 </span>                     | ArrayOfAtLeastDimT
+<span class="lineno">   34 </span>                     | AllowedUserDefinedTypeT
+<span class="lineno">   35 </span>    deriving <span class="decl"><span class="nottickedoff">Show</span></span>
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>data Tag (tg :: TypeConstraintK) where
+<span class="lineno">   38 </span>    AllowedTypesTg           :: Tag 'AllowedTypesT
+<span class="lineno">   39 </span>    NotAllowedFunTypeTg      :: Tag 'NotAllowedFunTypeT
+<span class="lineno">   40 </span>    NotAllowedArrayTypeTg    :: Tag 'NotAllowedArrayTypeT
+<span class="lineno">   41 </span>    ArrayOfAtLeastDimTg      :: Tag 'ArrayOfAtLeastDimT
+<span class="lineno">   42 </span>    AllowedUserDefinedTypeTg :: Tag 'AllowedUserDefinedTypeT
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span><span class="decl"><span class="nottickedoff">deriving instance Show (Tag a)</span></span>
+<span class="lineno">   45 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriveGEq      ''Tag</span></span></span>
+<span class="lineno">   46 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriveArgDict  ''Tag</span></span></span>
+<span class="lineno">   47 </span><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="istickedoff">deriveGCompare ''Tag</span></span></span></span></span></span></span></span></span>
+<span class="lineno">   48 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriveGShow    ''Tag</span></span></span>
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>data TypeConstraint (tg :: TypeConstraintK) where
+<span class="lineno">   51 </span>    AllowedTypes           :: S.Set ConstType -&gt; String -&gt; TypeConstraint 'AllowedTypesT
+<span class="lineno">   52 </span>    NotAllowedFunType      :: String -&gt; TypeConstraint 'NotAllowedFunTypeT
+<span class="lineno">   53 </span>    NotAllowedArrayType    :: String -&gt; TypeConstraint 'NotAllowedArrayTypeT
+<span class="lineno">   54 </span>    ArrayOfAtLeastDim      :: Int -&gt; String -&gt; TypeConstraint 'ArrayOfAtLeastDimT
+<span class="lineno">   55 </span>    AllowedUserDefinedType :: String -&gt; TypeConstraint 'AllowedUserDefinedTypeT
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span><span class="decl"><span class="nottickedoff">deriving instance Show (TypeConstraint a)</span></span>
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>showDPair :: DS.DSum Tag TypeConstraint -&gt; String
+<span class="lineno">   60 </span><span class="decl"><span class="nottickedoff">showDPair (_ DS.:=&gt; c) = show c</span></span>
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>mkAllowedTypes :: [ConstType] -&gt; String -&gt; TypeConstraint 'AllowedTypesT
+<span class="lineno">   63 </span><span class="decl"><span class="istickedoff">mkAllowedTypes types = AllowedTypes (S.fromList types)</span></span>
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>newtype ConstraintSet = ConstraintSet { <span class="istickedoff"><span class="decl"><span class="istickedoff">getMap</span></span></span> :: DM.DMap Tag TypeConstraint }
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>instance Show ConstraintSet where
+<span class="lineno">   68 </span>    <span class="decl"><span class="nottickedoff">show (ConstraintSet m) = &quot;{&quot; ++ fst (DM.foldrWithKey showVal (&quot;}&quot;, True) m)</span>
+<span class="lineno">   69 </span><span class="spaces">        </span><span class="nottickedoff">where showVal _ v (acc, first) = (show v ++ (if first then &quot;&quot; else &quot;, &quot;) ++ acc, False)</span></span>
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>emptyConstraintSet :: ConstraintSet
+<span class="lineno">   72 </span><span class="decl"><span class="nottickedoff">emptyConstraintSet = ConstraintSet DM.empty</span></span>
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>getTag :: forall (c :: TypeConstraintK). TypeConstraint c -&gt; Tag c
+<span class="lineno">   75 </span><span class="decl"><span class="istickedoff">getTag (AllowedTypes {})           = AllowedTypesTg</span>
+<span class="lineno">   76 </span><span class="spaces"></span><span class="istickedoff">getTag (NotAllowedFunType {})      = NotAllowedFunTypeTg</span>
+<span class="lineno">   77 </span><span class="spaces"></span><span class="istickedoff">getTag (NotAllowedArrayType {})    = NotAllowedArrayTypeTg</span>
+<span class="lineno">   78 </span><span class="spaces"></span><span class="istickedoff">getTag (ArrayOfAtLeastDim {})      = ArrayOfAtLeastDimTg</span>
+<span class="lineno">   79 </span><span class="spaces"></span><span class="istickedoff">getTag (AllowedUserDefinedType {}) = AllowedUserDefinedTypeTg</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>singletonSet :: forall (c :: TypeConstraintK). TypeConstraint c -&gt; ConstraintSet
+<span class="lineno">   82 </span><span class="decl"><span class="istickedoff">singletonSet tc = ConstraintSet $ DM.singleton (getTag tc) tc</span></span>
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>combineConstrs :: forall v. Tag v -&gt; TypeConstraint v -&gt; TypeConstraint v -&gt; TypeConstraint v
+<span class="lineno">   85 </span><span class="decl"><span class="istickedoff">combineConstrs AllowedTypesTg (AllowedTypes s1 e1) (AllowedTypes s2 _)                             = <span class="nottickedoff">AllowedTypes (S.intersection s1 s2) e1</span></span>
+<span class="lineno">   86 </span><span class="spaces"></span><span class="istickedoff">combineConstrs NotAllowedFunTypeTg (NotAllowedFunType s) (NotAllowedFunType _)                     = NotAllowedFunType <span class="nottickedoff">s</span></span>
+<span class="lineno">   87 </span><span class="spaces"></span><span class="istickedoff">combineConstrs NotAllowedArrayTypeTg (NotAllowedArrayType s) (NotAllowedArrayType _)               = <span class="nottickedoff">NotAllowedArrayType s</span></span>
+<span class="lineno">   88 </span><span class="spaces"></span><span class="istickedoff">combineConstrs ArrayOfAtLeastDimTg (ArrayOfAtLeastDim d1 s1) (ArrayOfAtLeastDim d2 s2) | d1 &lt; d2   = ArrayOfAtLeastDim d2 <span class="nottickedoff">s2</span></span>
+<span class="lineno">   89 </span><span class="spaces">                                                                                       </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = ArrayOfAtLeastDim d1 <span class="nottickedoff">s1</span></span>
+<span class="lineno">   90 </span><span class="spaces"></span><span class="istickedoff">combineConstrs AllowedUserDefinedTypeTg (AllowedUserDefinedType s) (AllowedUserDefinedType _)      = AllowedUserDefinedType <span class="nottickedoff">s</span></span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>union :: ConstraintSet -&gt; ConstraintSet -&gt; ConstraintSet
+<span class="lineno">   93 </span><span class="decl"><span class="istickedoff">union s1 s2 = ConstraintSet $ DM.unionWithKey combineConstrs (getMap s1) (getMap s2)</span></span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>traverse :: Applicative t =&gt; (forall c. Tag c -&gt; TypeConstraint c -&gt; t ()) -&gt; ConstraintSet -&gt; t ()
+<span class="lineno">   96 </span><span class="decl"><span class="istickedoff">traverse f = DM.traverseWithKey_ f . getMap</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>type ConstraintsMap = IM.IntMap ConstraintSet
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>showConstraintsMap :: ConstraintsMap -&gt; String
+<span class="lineno">  101 </span><span class="decl"><span class="nottickedoff">showConstraintsMap m = &quot;[&quot; ++ fst (IM.foldrWithKey showVal (&quot;]&quot;, True) m)</span>
+<span class="lineno">  102 </span><span class="spaces">        </span><span class="nottickedoff">where showVal k v (acc, first) = (pretty (TVar k) ++ &quot;: &quot; ++ show v ++ (if first then &quot;&quot; else &quot;, &quot;) ++ acc, False)</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>emptyConstraintsMap :: ConstraintsMap
+<span class="lineno">  105 </span><span class="decl"><span class="istickedoff">emptyConstraintsMap = IM.empty</span></span>
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>lookupConstr :: Int -&gt; ConstraintsMap -&gt; Maybe ConstraintSet
+<span class="lineno">  108 </span><span class="decl"><span class="istickedoff">lookupConstr = IM.lookup</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>insertConstr :: Int -&gt; ConstraintSet -&gt; ConstraintsMap -&gt; ConstraintsMap
+<span class="lineno">  111 </span><span class="decl"><span class="istickedoff">insertConstr = IM.insert</span></span>
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>insertConstrWith :: (ConstraintSet -&gt; ConstraintSet -&gt; ConstraintSet) -&gt; Int -&gt; ConstraintSet -&gt; ConstraintsMap -&gt; ConstraintsMap
+<span class="lineno">  114 </span><span class="decl"><span class="istickedoff">insertConstrWith = IM.insertWith</span></span>
+
+</pre>
+</body>
+</html>

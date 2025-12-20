@@ -1,0 +1,119 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE RecursiveDo #-}
+<span class="lineno">    2 </span>module IR.CodeGen (genAST, genExpr) where
+<span class="lineno">    3 </span>
+<span class="lineno">    4 </span>import Data.String (IsString(..))
+<span class="lineno">    5 </span>import Control.Lens (use, (%=), view)
+<span class="lineno">    6 </span>
+<span class="lineno">    7 </span>import qualified LLVM.AST as L (Operand (..), mkName)
+<span class="lineno">    8 </span>import qualified LLVM.IRBuilder as L
+<span class="lineno">    9 </span>import qualified LLVM.AST.Type as L
+<span class="lineno">   10 </span>
+<span class="lineno">   11 </span>import Common.AST (Expr(..), ExprF (..), BinOp (..), LetDef (..), Def (FunDef), Param(..), NameDef (ide), AST)
+<span class="lineno">   12 </span>import Common.SymbolTable (mkFullTableEntry, insert, names, TableEntry (ParamEntry, FunEntry), query, optInfo)
+<span class="lineno">   13 </span>import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames)
+<span class="lineno">   14 </span>import Parser.ParserState (symbols)
+<span class="lineno">   15 </span>import Parser.ParserM (Parser, throwCGenError)
+<span class="lineno">   16 </span>import Semantics.Utils (SemanticTag (..), inst, getNodeType, getDefScheme)
+<span class="lineno">   17 </span>import IR.Utils
+<span class="lineno">   18 </span>import IR.LLVMUtils (function, named)
+<span class="lineno">   19 </span>import IR.TypeUtils
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>genAST :: AST SemanticTag -&gt; Parser ()
+<span class="lineno">   23 </span><span class="decl"><span class="nottickedoff">genAST [] = return ()</span>
+<span class="lineno">   24 </span><span class="spaces"></span><span class="nottickedoff">genAST (Left def:ast) = genDefs def &gt;&gt; genAST ast</span>
+<span class="lineno">   25 </span><span class="spaces"></span><span class="nottickedoff">genAST (Right _:ast) = genAST ast</span></span> -- TODO: Define types gen
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>genDefs :: LetDef SemanticTag -&gt; Parser ()
+<span class="lineno">   28 </span><span class="decl"><span class="nottickedoff">genDefs (Let defs _) = do</span>
+<span class="lineno">   29 </span><span class="spaces">    </span><span class="nottickedoff">gens &lt;- mapM genDef defs</span>
+<span class="lineno">   30 </span><span class="spaces">    </span><span class="nottickedoff">registerDefs defs gens</span>
+<span class="lineno">   31 </span><span class="spaces"></span><span class="nottickedoff">genDefs (LetRec defs _) = mdo</span>
+<span class="lineno">   32 </span><span class="spaces">    </span><span class="nottickedoff">registerDefs defs gens</span>
+<span class="lineno">   33 </span><span class="spaces">    </span><span class="nottickedoff">gens &lt;- mapM genDef defs</span>
+<span class="lineno">   34 </span><span class="spaces">    </span><span class="nottickedoff">return ()</span></span>
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>registerDefs :: [Def SemanticTag] -&gt; [L.Operand] -&gt; Parser ()
+<span class="lineno">   37 </span><span class="decl"><span class="nottickedoff">registerDefs [] _ = return ()</span>
+<span class="lineno">   38 </span><span class="spaces"></span><span class="nottickedoff">registerDefs (f@(FunDef fname params _ _):ds) ops = do -- TODO: Define register for the rest of the cases</span>
+<span class="lineno">   39 </span><span class="spaces">    </span><span class="nottickedoff">s &lt;- getDefScheme f</span>
+<span class="lineno">   40 </span><span class="spaces">    </span><span class="nottickedoff">symbols . names %= insert fname (mkFullTableEntry (FunEntry s (map ide params)) (Just (head ops)))</span>
+<span class="lineno">   41 </span><span class="spaces">    </span><span class="nottickedoff">registerDefs ds (tail ops)</span></span>
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>genParam :: Param SemanticTag -&gt; Parser (L.Type, L.ParameterName)
+<span class="lineno">   44 </span><span class="decl"><span class="nottickedoff">genParam p = do</span>
+<span class="lineno">   45 </span><span class="spaces">    </span><span class="nottickedoff">t &lt;- getNodeType p</span>
+<span class="lineno">   46 </span><span class="spaces">    </span><span class="nottickedoff">lt &lt;- genType t</span>
+<span class="lineno">   47 </span><span class="spaces">    </span><span class="nottickedoff">return (lt, fromString (ide p))</span></span>
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>genDef :: Def SemanticTag -&gt; Parser L.Operand
+<span class="lineno">   50 </span><span class="decl"><span class="nottickedoff">genDef n@(FunDef fname params body _) = do -- TODO: Define defs gen</span>
+<span class="lineno">   51 </span><span class="spaces">    </span><span class="nottickedoff">scheme &lt;- getDefScheme n</span>
+<span class="lineno">   52 </span><span class="spaces">    </span><span class="nottickedoff">st &lt;- inst scheme</span>
+<span class="lineno">   53 </span><span class="spaces">    </span><span class="nottickedoff">let retsty = getRetStType st</span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="nottickedoff">retty &lt;- genType retsty</span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="nottickedoff">genParams &lt;- mapM genParam params</span>
+<span class="lineno">   56 </span><span class="spaces">    </span><span class="nottickedoff">function (L.mkName fname) genParams retty genBody where</span>
+<span class="lineno">   57 </span><span class="spaces">        </span><span class="nottickedoff">registerFormalParam :: (Param SemanticTag, L.Operand) -&gt; Parser ()</span>
+<span class="lineno">   58 </span><span class="spaces">        </span><span class="nottickedoff">registerFormalParam (p, op) = do</span>
+<span class="lineno">   59 </span><span class="spaces">            </span><span class="nottickedoff">t &lt;- getNodeType p</span>
+<span class="lineno">   60 </span><span class="spaces">            </span><span class="nottickedoff">symbols . names %= insert (ide p) (mkFullTableEntry (ParamEntry t (ide p)) (Just op))</span>
+<span class="lineno">   61 </span><span class="spaces">        </span><span class="nottickedoff">genBody :: [L.Operand] -&gt; Parser ()</span>
+<span class="lineno">   62 </span><span class="spaces">        </span><span class="nottickedoff">genBody ops = do</span>
+<span class="lineno">   63 </span><span class="spaces">            </span><span class="nottickedoff">openScopeInNames</span>
+<span class="lineno">   64 </span><span class="spaces">            </span><span class="nottickedoff">let ps = zip params ops</span>
+<span class="lineno">   65 </span><span class="spaces">            </span><span class="nottickedoff">mapM_ registerFormalParam ps</span>
+<span class="lineno">   66 </span><span class="spaces">            </span><span class="nottickedoff">_entry &lt;- L.block `named` &quot;entry&quot;</span>
+<span class="lineno">   67 </span><span class="spaces">            </span><span class="nottickedoff">res &lt;- genExpr body</span>
+<span class="lineno">   68 </span><span class="spaces">            </span><span class="nottickedoff">L.ret res</span>
+<span class="lineno">   69 </span><span class="spaces">            </span><span class="nottickedoff">closeScopeInNames</span></span>
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>genExpr :: Expr SemanticTag -&gt; Parser L.Operand -- TODO: Define expr gen
+<span class="lineno">   72 </span><span class="decl"><span class="nottickedoff">genExpr (Expr ef _) = case ef of</span>
+<span class="lineno">   73 </span><span class="spaces">    </span><span class="nottickedoff">TrueCExpr    -&gt; return . boolConst $ True</span>
+<span class="lineno">   74 </span><span class="spaces">    </span><span class="nottickedoff">FalseCExpr   -&gt; return . boolConst $ False</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="nottickedoff">CharCExpr c  -&gt; return . charConst $ c</span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="nottickedoff">IntCExpr i   -&gt; return . intConst $ i</span>
+<span class="lineno">   77 </span><span class="spaces">    </span><span class="nottickedoff">FloatCExpr f -&gt; return . floatConst $ f</span>
+<span class="lineno">   78 </span><span class="spaces">    </span><span class="nottickedoff">BinOpExpr op e1 e2 -&gt; genBinOp op e1 e2</span>
+<span class="lineno">   79 </span><span class="spaces">    </span><span class="nottickedoff">ConstExpr x -&gt; do</span>
+<span class="lineno">   80 </span><span class="spaces">                </span><span class="nottickedoff">ns &lt;- use (symbols . names)</span>
+<span class="lineno">   81 </span><span class="spaces">                </span><span class="nottickedoff">case query x ns of</span>
+<span class="lineno">   82 </span><span class="spaces">                    </span><span class="nottickedoff">Just fte -&gt; case view optInfo fte of</span>
+<span class="lineno">   83 </span><span class="spaces">                        </span><span class="nottickedoff">Just o -&gt; return o</span>
+<span class="lineno">   84 </span><span class="spaces">                        </span><span class="nottickedoff">Nothing -&gt; throwCGenError $ &quot;Const: &quot; ++ x ++ &quot; is not yet generated&quot;</span>
+<span class="lineno">   85 </span><span class="spaces">                    </span><span class="nottickedoff">Nothing -&gt; throwCGenError $ &quot;Const: &quot; ++ x ++ &quot; is not yet in symbol table&quot;</span></span>
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>genBinOp :: BinOp -&gt; Expr SemanticTag -&gt; Expr SemanticTag -&gt; Parser L.Operand
+<span class="lineno">   88 </span><span class="decl"><span class="nottickedoff">genBinOp op lhs rhs = case op of</span>
+<span class="lineno">   89 </span><span class="spaces">    </span><span class="nottickedoff">PlusOp -&gt; do</span>
+<span class="lineno">   90 </span><span class="spaces">        </span><span class="nottickedoff">l &lt;- genExpr lhs</span>
+<span class="lineno">   91 </span><span class="spaces">        </span><span class="nottickedoff">r &lt;- genExpr rhs</span>
+<span class="lineno">   92 </span><span class="spaces">        </span><span class="nottickedoff">L.add l r</span>
+<span class="lineno">   93 </span><span class="spaces">    </span><span class="nottickedoff">MinusOp -&gt; do</span>
+<span class="lineno">   94 </span><span class="spaces">        </span><span class="nottickedoff">l &lt;- genExpr lhs</span>
+<span class="lineno">   95 </span><span class="spaces">        </span><span class="nottickedoff">r &lt;- genExpr rhs</span>
+<span class="lineno">   96 </span><span class="spaces">        </span><span class="nottickedoff">L.sub l r</span></span>
+
+</pre>
+</body>
+</html>

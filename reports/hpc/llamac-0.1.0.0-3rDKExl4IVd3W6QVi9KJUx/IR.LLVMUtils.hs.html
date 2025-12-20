@@ -1,0 +1,137 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module IR.LLVMUtils (named, function) where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import Data.String (fromString)
+<span class="lineno">    4 </span>import Control.Lens (view, use)
+<span class="lineno">    5 </span>import Control.Lens.Combinators (set)
+<span class="lineno">    6 </span>import qualified Data.Bifunctor as B
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>import LLVM.AST (Operand (..), Parameter (..), Definition (..), BasicBlock, Name (..), mkName)
+<span class="lineno">    9 </span>import LLVM.AST.Type (Type (FunctionType), ptr)
+<span class="lineno">   10 </span>import LLVM.AST.Global (Global(..))
+<span class="lineno">   11 </span>import qualified LLVM.AST.Constant as C
+<span class="lineno">   12 </span>import qualified LLVM.AST.Linkage as L
+<span class="lineno">   13 </span>import qualified LLVM.AST.Visibility as V
+<span class="lineno">   14 </span>import qualified LLVM.AST.CallingConvention as CC
+<span class="lineno">   15 </span>import qualified LLVM.IRBuilder as IR
+<span class="lineno">   16 </span>import LLVM.IRBuilder.Internal.SnocList (getSnocList)
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>import Parser.ParserT (runParserT, ParserT, parserT)
+<span class="lineno">   19 </span>import Parser.ParserM (Parser)
+<span class="lineno">   20 </span>import Parser.ParserState (cgen_state, ParserState)
+<span class="lineno">   21 </span>import IR.CodeGenState (irState)
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>{-
+<span class="lineno">   24 </span>  This module contains re-implementations
+<span class="lineno">   25 </span>  of some functions from the llvm-hs-pure
+<span class="lineno">   26 </span>  library with minor modifications to fit
+<span class="lineno">   27 </span>  the project's need
+<span class="lineno">   28 </span>-}
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>-- Utility for assigning names
+<span class="lineno">   31 </span>infixl 7 `named`
+<span class="lineno">   32 </span>named :: IR.MonadIRBuilder m =&gt; m r -&gt; String -&gt; m r
+<span class="lineno">   33 </span><span class="decl"><span class="nottickedoff">m `named` nm = IR.named m (fromString nm)</span></span>
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>-- byteStrName :: String -&gt; ShortByteString
+<span class="lineno">   36 </span>-- byteStrName = fromString
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>-- Utility for easily building global functions
+<span class="lineno">   39 </span>functionDefaults :: L.Linkage -&gt; Name -&gt; [(Type, Name)] -&gt; Type -&gt; [BasicBlock] -&gt; Global
+<span class="lineno">   40 </span><span class="decl"><span class="nottickedoff">functionDefaults l n ps ret bbs =</span>
+<span class="lineno">   41 </span><span class="spaces">  </span><span class="nottickedoff">Function {</span>
+<span class="lineno">   42 </span><span class="spaces">    </span><span class="nottickedoff">linkage = l,</span>
+<span class="lineno">   43 </span><span class="spaces">    </span><span class="nottickedoff">visibility = V.Default,</span>
+<span class="lineno">   44 </span><span class="spaces">    </span><span class="nottickedoff">dllStorageClass = Nothing,</span>
+<span class="lineno">   45 </span><span class="spaces">    </span><span class="nottickedoff">callingConvention = CC.C,</span>
+<span class="lineno">   46 </span><span class="spaces">    </span><span class="nottickedoff">returnAttributes = [],</span>
+<span class="lineno">   47 </span><span class="spaces">    </span><span class="nottickedoff">returnType = ret,</span>
+<span class="lineno">   48 </span><span class="spaces">    </span><span class="nottickedoff">name = n,</span>
+<span class="lineno">   49 </span><span class="spaces">    </span><span class="nottickedoff">parameters = ([Parameter ty pn [] | (ty, pn) &lt;- ps], False),</span>
+<span class="lineno">   50 </span><span class="spaces">    </span><span class="nottickedoff">functionAttributes = [],</span>
+<span class="lineno">   51 </span><span class="spaces">    </span><span class="nottickedoff">section = Nothing,</span>
+<span class="lineno">   52 </span><span class="spaces">    </span><span class="nottickedoff">comdat = Nothing,</span>
+<span class="lineno">   53 </span><span class="spaces">    </span><span class="nottickedoff">alignment = 0,</span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="nottickedoff">garbageCollectorName = Nothing,</span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="nottickedoff">prefix = Nothing,</span>
+<span class="lineno">   56 </span><span class="spaces">    </span><span class="nottickedoff">basicBlocks = bbs,</span>
+<span class="lineno">   57 </span><span class="spaces">    </span><span class="nottickedoff">personalityFunction = Nothing,</span>
+<span class="lineno">   58 </span><span class="spaces">    </span><span class="nottickedoff">metadata = []</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>-- Utility for declaring external functions
+<span class="lineno">   62 </span>extern
+<span class="lineno">   63 </span>  :: IR.MonadModuleBuilder m
+<span class="lineno">   64 </span>  =&gt; String           -- ^ Definition identifier
+<span class="lineno">   65 </span>  -&gt; [(Type, String)] -- ^ Parameter types and identifiers pairs
+<span class="lineno">   66 </span>  -&gt; Type             -- ^ Type
+<span class="lineno">   67 </span>  -&gt; m Operand
+<span class="lineno">   68 </span><span class="decl"><span class="nottickedoff">extern nm argtys retty = do</span>
+<span class="lineno">   69 </span><span class="spaces">  </span><span class="nottickedoff">let funty = ptr $ FunctionType retty (map fst argtys) False</span>
+<span class="lineno">   70 </span><span class="spaces">  </span><span class="nottickedoff">IR.emitDefn $ GlobalDefinition (functionDefaults L.External (mkName nm) (map (B.second mkName) argtys) retty [])</span>
+<span class="lineno">   71 </span><span class="spaces">  </span><span class="nottickedoff">pure $ ConstantOperand $ C.GlobalReference funty (mkName nm)</span></span>
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>-- Util to run a parser within a parser
+<span class="lineno">   74 </span>-- with a given initial IRBuilderState
+<span class="lineno">   75 </span>-- This is used to generate the basic blocks
+<span class="lineno">   76 </span>-- from a parser
+<span class="lineno">   77 </span>runIRBuilder :: Monad m =&gt; IR.IRBuilderState -&gt; ParserT e ParserState m a -&gt; ParserT e ParserState m (a, [BasicBlock])
+<span class="lineno">   78 </span><span class="decl"><span class="nottickedoff">runIRBuilder irs p = parserT $ \ps -&gt; do</span>
+<span class="lineno">   79 </span><span class="spaces">  </span><span class="nottickedoff">~(eitherNames, s') &lt;- runParserT (p &lt;* IR.block) (set (cgen_state . irState) irs ps)</span>
+<span class="lineno">   80 </span><span class="spaces">  </span><span class="nottickedoff">case eitherNames of</span>
+<span class="lineno">   81 </span><span class="spaces">    </span><span class="nottickedoff">Left e  -&gt; return (Left e, s')</span>
+<span class="lineno">   82 </span><span class="spaces">    </span><span class="nottickedoff">Right a -&gt; do</span>
+<span class="lineno">   83 </span><span class="spaces">      </span><span class="nottickedoff">let blocks = getSnocList . IR.builderBlocks . view (cgen_state . irState) $ s'</span>
+<span class="lineno">   84 </span><span class="spaces">      </span><span class="nottickedoff">return (Right (a, blocks), s')</span></span>
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>-- Utility for emitting a function
+<span class="lineno">   87 </span>function
+<span class="lineno">   88 </span>  :: Name                       -- ^ Function name
+<span class="lineno">   89 </span>  -&gt; [(Type, IR.ParameterName)] -- ^ Parameter types and name suggestions
+<span class="lineno">   90 </span>  -&gt; Type                       -- ^ Return type
+<span class="lineno">   91 </span>  -&gt; ([Operand] -&gt; Parser ())   -- ^ Function body builder
+<span class="lineno">   92 </span>  -&gt; Parser Operand
+<span class="lineno">   93 </span><span class="decl"><span class="nottickedoff">function label argtys retty body = do</span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="nottickedoff">flabel &lt;- case label of</span>
+<span class="lineno">   95 </span><span class="spaces">    </span><span class="nottickedoff">Name l   -&gt; IR.fresh `IR.named` l</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="nottickedoff">UnName _ -&gt; IR.fresh</span>
+<span class="lineno">   97 </span><span class="spaces">  </span><span class="nottickedoff">irs &lt;- use (cgen_state . irState)</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="nottickedoff">let irs' = IR.emptyIRBuilder{</span>
+<span class="lineno">   99 </span><span class="spaces">                  </span><span class="nottickedoff">IR.builderUsedNames = IR.builderUsedNames irs,</span>
+<span class="lineno">  100 </span><span class="spaces">                  </span><span class="nottickedoff">IR.builderNameSuggestion = IR.builderNameSuggestion irs}</span>
+<span class="lineno">  101 </span><span class="spaces">  </span><span class="nottickedoff">~(tyNamePairs, blocks) &lt;- runIRBuilder irs' $ do</span>
+<span class="lineno">  102 </span><span class="spaces">      </span><span class="nottickedoff">(formalVars, tyNamePairs) &lt;- genParams argtys</span>
+<span class="lineno">  103 </span><span class="spaces">      </span><span class="nottickedoff">body formalVars</span>
+<span class="lineno">  104 </span><span class="spaces">      </span><span class="nottickedoff">return tyNamePairs</span>
+<span class="lineno">  105 </span><span class="spaces">  </span><span class="nottickedoff">let def = GlobalDefinition (functionDefaults L.Internal flabel tyNamePairs retty blocks)</span>
+<span class="lineno">  106 </span><span class="spaces">      </span><span class="nottickedoff">funty = ptr $ FunctionType retty (fst &lt;$&gt; argtys) False</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">IR.emitDefn def</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="nottickedoff">pure $ ConstantOperand $ C.GlobalReference funty flabel where</span>
+<span class="lineno">  109 </span><span class="spaces">    </span><span class="nottickedoff">genParams [] = return ([], [])</span>
+<span class="lineno">  110 </span><span class="spaces">    </span><span class="nottickedoff">genParams ((ty, n):ps) = do</span>
+<span class="lineno">  111 </span><span class="spaces">      </span><span class="nottickedoff">param &lt;- case n of</span>
+<span class="lineno">  112 </span><span class="spaces">          </span><span class="nottickedoff">IR.NoParameterName -&gt; IR.fresh</span>
+<span class="lineno">  113 </span><span class="spaces">          </span><span class="nottickedoff">IR.ParameterName p -&gt; IR.fresh `IR.named` p</span>
+<span class="lineno">  114 </span><span class="spaces">      </span><span class="nottickedoff">(\(x, y) (xs, ys) -&gt; (x:xs, y:ys)) (LocalReference ty param, (ty, param)) &lt;$&gt; genParams ps</span></span>
+
+</pre>
+</body>
+</html>

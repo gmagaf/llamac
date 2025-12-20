@@ -1,0 +1,225 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE DeriveTraversable #-}
+<span class="lineno">    2 </span>{-# LANGUAGE TupleSections #-}
+<span class="lineno">    3 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">    4 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">    5 </span>module Common.SymbolTable (Context,
+<span class="lineno">    6 </span>                           SymbolTable,
+<span class="lineno">    7 </span>                           names,
+<span class="lineno">    8 </span>                           types,
+<span class="lineno">    9 </span>                           FullTableEntry,
+<span class="lineno">   10 </span>                           mkFullTableEntry,
+<span class="lineno">   11 </span>                           mkBasicEntry,
+<span class="lineno">   12 </span>                           basicInfo,
+<span class="lineno">   13 </span>                           optInfo,
+<span class="lineno">   14 </span>                           generated,
+<span class="lineno">   15 </span>                           NameSpace,
+<span class="lineno">   16 </span>                           TypeSpace,
+<span class="lineno">   17 </span>                           TableEntry(..),
+<span class="lineno">   18 </span>                           TypeTableEntry(..),
+<span class="lineno">   19 </span>                           emptySymbolTable,
+<span class="lineno">   20 </span>                           query,
+<span class="lineno">   21 </span>                           partialQuery,
+<span class="lineno">   22 </span>                           insert,
+<span class="lineno">   23 </span>                           partialInsert,
+<span class="lineno">   24 </span>                           update,
+<span class="lineno">   25 </span>                           partialUpdate,
+<span class="lineno">   26 </span>                           openScope,
+<span class="lineno">   27 </span>                           closeScope) where
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>import qualified Data.Map as M
+<span class="lineno">   30 </span>import Data.List (intercalate)
+<span class="lineno">   31 </span>import Data.Bifunctor (bimap)
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>import Control.Lens.Prism (Prism', prism')
+<span class="lineno">   34 </span>import Control.Lens (Lens', makeLenses, lens, preview)
+<span class="lineno">   35 </span>import Control.Lens.Getter (Getter, to, view)
+<span class="lineno">   36 </span>import qualified LLVM.AST as L (Operand)
+<span class="lineno">   37 </span>import qualified LLVM.AST.Type as L
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>import Common.Token (Identifier, ConstrIdentifier)
+<span class="lineno">   40 </span>import Common.PrintAST (Pretty (pretty))
+<span class="lineno">   41 </span>import Common.SymbolType (SymbolType, TypeScheme, ConstType)
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>-- This module contains the defintion of the Symbol table for the compiler
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>type Scope = M.Map
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>newtype Context k e = Context [Scope k e]
+<span class="lineno">   48 </span>    deriving (<span class="decl"><span class="nottickedoff">Show</span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff">Traversable</span></span>)
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>-- Symbol table operations
+<span class="lineno">   51 </span>emptyContext :: Context k e
+<span class="lineno">   52 </span><span class="decl"><span class="istickedoff">emptyContext = Context []</span></span>
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>partialQuery :: Ord k =&gt; Getter e e' -&gt; k -&gt; Context k e -&gt; Maybe e'
+<span class="lineno">   55 </span><span class="decl"><span class="istickedoff">partialQuery _ _ (Context []) = Nothing</span>
+<span class="lineno">   56 </span><span class="spaces"></span><span class="istickedoff">partialQuery l k (Context (scope:scopes)) =</span>
+<span class="lineno">   57 </span><span class="spaces">    </span><span class="istickedoff">case M.lookup k scope of</span>
+<span class="lineno">   58 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; partialQuery l k (Context scopes)</span>
+<span class="lineno">   59 </span><span class="spaces">        </span><span class="istickedoff">Just e  -&gt; Just (view l e)</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>query :: Ord k =&gt; k -&gt; Context k e -&gt; Maybe e
+<span class="lineno">   62 </span><span class="decl"><span class="nottickedoff">query = partialQuery (to id)</span></span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>partialInsert :: Ord k =&gt; (e' -&gt; e) -&gt; k -&gt; e' -&gt; Context k e -&gt; Context k e
+<span class="lineno">   65 </span><span class="decl"><span class="istickedoff">partialInsert mk k e (Context scopes) = case scopes of</span>
+<span class="lineno">   66 </span><span class="spaces">    </span><span class="istickedoff">[]   -&gt; <span class="nottickedoff">Context [M.insert k (mk e) M.empty]</span></span>
+<span class="lineno">   67 </span><span class="spaces">    </span><span class="istickedoff">s:tl -&gt; Context $ updated:tl where</span>
+<span class="lineno">   68 </span><span class="spaces">        </span><span class="istickedoff">updated = M.insert k (mk e) s</span></span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>insert :: Ord k =&gt; k -&gt; e -&gt; Context k e -&gt; Context k e
+<span class="lineno">   71 </span><span class="decl"><span class="istickedoff">insert = partialInsert id</span></span>
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>partialUpdate :: Ord k =&gt; (e' -&gt; e -&gt; e) -&gt; k -&gt; e' -&gt; Context k e -&gt; Context k e
+<span class="lineno">   74 </span><span class="decl"><span class="istickedoff">partialUpdate f k e' (Context s) = Context (aux s) where</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">aux [] = <span class="nottickedoff">[]</span></span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">aux (scope:scopes) = if M.member k scope</span>
+<span class="lineno">   77 </span><span class="spaces">        </span><span class="istickedoff">then M.update (Just . f e') k scope : scopes</span>
+<span class="lineno">   78 </span><span class="spaces">        </span><span class="istickedoff">else scope : aux scopes</span></span>
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>update :: Ord k =&gt; k -&gt; e -&gt; Context k e -&gt; Context k e
+<span class="lineno">   81 </span><span class="decl"><span class="nottickedoff">update = partialUpdate const</span></span>
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>openScope :: Context k e -&gt; Context k e
+<span class="lineno">   84 </span><span class="decl"><span class="istickedoff">openScope (Context scopes) = Context $ M.empty:scopes</span></span>
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>closeScope :: Context k e -&gt; Context k e
+<span class="lineno">   87 </span><span class="decl"><span class="istickedoff">closeScope (Context scopes) = Context s where</span>
+<span class="lineno">   88 </span><span class="spaces">    </span><span class="istickedoff">s = if <span class="tickonlyfalse">null scopes</span> then <span class="nottickedoff">[]</span> else tail scopes</span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>-- Definitions for symbol table and table entries
+<span class="lineno">   91 </span>data FullTableEntry e g = FullTableEntry {
+<span class="lineno">   92 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">_basicInfo</span></span></span> :: e,
+<span class="lineno">   93 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_optInfo</span></span></span> :: Maybe g
+<span class="lineno">   94 </span>    } deriving <span class="decl"><span class="nottickedoff">Show</span></span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>mkFullTableEntry :: e -&gt; Maybe g -&gt; FullTableEntry e g
+<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">mkFullTableEntry = FullTableEntry</span></span>
+<span class="lineno">   98 </span>
+<span class="lineno">   99 </span>mkBasicEntry :: e -&gt; FullTableEntry e g
+<span class="lineno">  100 </span><span class="decl"><span class="istickedoff">mkBasicEntry = flip FullTableEntry <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>basicInfo :: Lens' (FullTableEntry e g) e
+<span class="lineno">  103 </span><span class="decl"><span class="istickedoff">basicInfo = lens _basicInfo (\e b -&gt; e{_basicInfo = b})</span></span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>optInfo :: Lens' (FullTableEntry e g) (Maybe g)
+<span class="lineno">  106 </span><span class="decl"><span class="nottickedoff">optInfo = lens _optInfo (\e g -&gt; e{_optInfo = g})</span></span>
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>generated :: Prism' (FullTableEntry e g) (e, g)
+<span class="lineno">  109 </span><span class="decl"><span class="nottickedoff">generated = prism' (\(e, g) -&gt; FullTableEntry e (Just g)) (\(FullTableEntry e g) -&gt; fmap (e,) g)</span></span>
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>data TableEntry
+<span class="lineno">  112 </span>    = MutableEntry SymbolType                     -- Type of the mutable variable
+<span class="lineno">  113 </span>    | ArrayEntry SymbolType Int                   -- Type of the entries, num of dimensions
+<span class="lineno">  114 </span>    | FunEntry TypeScheme [Identifier]            -- TypeScheme of the function, params
+<span class="lineno">  115 </span>    | ParamEntry SymbolType Identifier            -- Type of the param, function of the param
+<span class="lineno">  116 </span>    | PatternEntry SymbolType                     -- Type of the pattern
+<span class="lineno">  117 </span>    | ConstrEntry ConstType [ConstType] ConstType -- Type of constructor, params, output type
+<span class="lineno">  118 </span>        deriving <span class="decl"><span class="nottickedoff">Show</span></span>
+<span class="lineno">  119 </span>
+<span class="lineno">  120 </span>newtype TypeTableEntry
+<span class="lineno">  121 </span>    = TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
+<span class="lineno">  122 </span>        deriving <span class="decl"><span class="nottickedoff">Show</span></span>
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>type NameSpace = Context String (FullTableEntry TableEntry L.Operand)
+<span class="lineno">  125 </span>type TypeSpace = Context String (FullTableEntry TypeTableEntry L.Type)
+<span class="lineno">  126 </span>data SymbolTable = SymbolTable {
+<span class="lineno">  127 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_names</span></span></span> :: NameSpace,
+<span class="lineno">  128 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_types</span></span></span> :: TypeSpace
+<span class="lineno">  129 </span>    }
+<span class="lineno">  130 </span>    deriving <span class="decl"><span class="nottickedoff">Show</span></span>
+<span class="lineno">  131 </span><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''SymbolTable</span></span></span></span></span>
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>emptySymbolTable :: SymbolTable
+<span class="lineno">  134 </span><span class="decl"><span class="istickedoff">emptySymbolTable = SymbolTable emptyContext emptyContext</span></span>
+<span class="lineno">  135 </span>
+<span class="lineno">  136 </span>-- Pretty printing of symbol table
+<span class="lineno">  137 </span>instance Pretty TableEntry where
+<span class="lineno">  138 </span>    <span class="decl"><span class="nottickedoff">pretty entry = case entry of</span>
+<span class="lineno">  139 </span><span class="spaces">        </span><span class="nottickedoff">MutableEntry t -&gt;</span>
+<span class="lineno">  140 </span><span class="spaces">            </span><span class="nottickedoff">&quot;Mutable var of type: &quot; ++ pretty t</span>
+<span class="lineno">  141 </span><span class="spaces">        </span><span class="nottickedoff">ArrayEntry t dim -&gt;</span>
+<span class="lineno">  142 </span><span class="spaces">            </span><span class="nottickedoff">show dim ++ &quot;-dimensional array of type: &quot; ++ pretty t</span>
+<span class="lineno">  143 </span><span class="spaces">        </span><span class="nottickedoff">FunEntry funType [] -&gt;</span>
+<span class="lineno">  144 </span><span class="spaces">            </span><span class="nottickedoff">&quot;Const of type: &quot; ++ pretty funType</span>
+<span class="lineno">  145 </span><span class="spaces">        </span><span class="nottickedoff">FunEntry funType params -&gt;</span>
+<span class="lineno">  146 </span><span class="spaces">            </span><span class="nottickedoff">&quot;Fun of type: &quot; ++ pretty funType ++ &quot; with params: &quot; ++ intercalate &quot;, &quot; params</span>
+<span class="lineno">  147 </span><span class="spaces">        </span><span class="nottickedoff">ParamEntry t f -&gt;</span>
+<span class="lineno">  148 </span><span class="spaces">            </span><span class="nottickedoff">&quot;Param of type: &quot; ++ pretty t ++ &quot; of function &quot; ++ f</span>
+<span class="lineno">  149 </span><span class="spaces">        </span><span class="nottickedoff">ConstrEntry constrType [] outputType -&gt;</span>
+<span class="lineno">  150 </span><span class="spaces">            </span><span class="nottickedoff">&quot;Constr of &quot; ++ pretty outputType ++</span>
+<span class="lineno">  151 </span><span class="spaces">            </span><span class="nottickedoff">&quot; with type: &quot; ++ pretty constrType</span>
+<span class="lineno">  152 </span><span class="spaces">        </span><span class="nottickedoff">PatternEntry t -&gt;</span>
+<span class="lineno">  153 </span><span class="spaces">            </span><span class="nottickedoff">&quot;Pattern of type &quot; ++ pretty t</span>
+<span class="lineno">  154 </span><span class="spaces">        </span><span class="nottickedoff">ConstrEntry constrType ts outputType -&gt;</span>
+<span class="lineno">  155 </span><span class="spaces">            </span><span class="nottickedoff">&quot;Constr of &quot; ++ pretty outputType ++</span>
+<span class="lineno">  156 </span><span class="spaces">            </span><span class="nottickedoff">&quot; with type: &quot; ++ pretty constrType ++</span>
+<span class="lineno">  157 </span><span class="spaces">            </span><span class="nottickedoff">&quot; with params: (&quot; ++ intercalate &quot;, &quot; (map pretty ts) ++ &quot;)&quot;</span></span>
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>instance (Pretty e, Show g) =&gt; Pretty (FullTableEntry e g) where
+<span class="lineno">  160 </span>    <span class="decl"><span class="nottickedoff">pretty entry = pretty (view basicInfo entry) ++</span>
+<span class="lineno">  161 </span><span class="spaces">                   </span><span class="nottickedoff">maybe &quot;&quot; (\(_, i) -&gt; &quot; additional info: &quot; ++ show i) (preview generated entry)</span></span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>instance Pretty TypeTableEntry where
+<span class="lineno">  164 </span>    <span class="decl"><span class="nottickedoff">pretty entry = case entry of</span>
+<span class="lineno">  165 </span><span class="spaces">        </span><span class="nottickedoff">TypeEntry constrs -&gt;</span>
+<span class="lineno">  166 </span><span class="spaces">            </span><span class="nottickedoff">&quot;Type with constrs: &quot; ++ cs where</span>
+<span class="lineno">  167 </span><span class="spaces">                </span><span class="nottickedoff">f (c, []) = c</span>
+<span class="lineno">  168 </span><span class="spaces">                </span><span class="nottickedoff">f (c, ps) = c ++ &quot; of &quot; ++ unwords (map pretty ps)</span>
+<span class="lineno">  169 </span><span class="spaces">                </span><span class="nottickedoff">cs = intercalate &quot;, &quot; (map f constrs)</span></span>
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>instance (Show k, Pretty e) =&gt; Pretty (Context k e) where
+<span class="lineno">  172 </span>    <span class="decl"><span class="nottickedoff">pretty (Context scopes) =</span>
+<span class="lineno">  173 </span><span class="spaces">        </span><span class="nottickedoff">let -- Utils for each record</span>
+<span class="lineno">  174 </span><span class="spaces">            </span><span class="nottickedoff">toString = bimap show pretty</span>
+<span class="lineno">  175 </span><span class="spaces">            </span><span class="nottickedoff">toLengths = bimap length length</span>
+<span class="lineno">  176 </span><span class="spaces">            </span><span class="nottickedoff">toPaddings (accK, accE) = bimap (max accK) (max accE)</span>
+<span class="lineno">  177 </span><span class="spaces">            </span><span class="nottickedoff">addPadding v l = v ++ replicate (max 0 (l - length v)) ' '</span>
+<span class="lineno">  178 </span><span class="spaces">            </span><span class="nottickedoff">-- Utils for each scope</span>
+<span class="lineno">  179 </span><span class="spaces">            </span><span class="nottickedoff">scopeToString = M.foldMapWithKey (\k e -&gt; [toString (k, e)])</span>
+<span class="lineno">  180 </span><span class="spaces">            </span><span class="nottickedoff">stringsToLengths = map toLengths</span>
+<span class="lineno">  181 </span><span class="spaces">            </span><span class="nottickedoff">lengthsToPaddings = foldr toPaddings (0, 0)</span>
+<span class="lineno">  182 </span><span class="spaces">            </span><span class="nottickedoff">-- Compute values for all context</span>
+<span class="lineno">  183 </span><span class="spaces">            </span><span class="nottickedoff">strings = map scopeToString scopes</span>
+<span class="lineno">  184 </span><span class="spaces">            </span><span class="nottickedoff">lengths = map stringsToLengths strings</span>
+<span class="lineno">  185 </span><span class="spaces">            </span><span class="nottickedoff">paddings = map lengthsToPaddings lengths</span>
+<span class="lineno">  186 </span><span class="spaces">            </span><span class="nottickedoff">-- Compute total lengths</span>
+<span class="lineno">  187 </span><span class="spaces">            </span><span class="nottickedoff">(lk', le') = lengthsToPaddings paddings</span>
+<span class="lineno">  188 </span><span class="spaces">            </span><span class="nottickedoff">(lk, le) = (max lk' $ length &quot;Keys&quot;, max le' $ length &quot;Entries&quot;)</span>
+<span class="lineno">  189 </span><span class="spaces">            </span><span class="nottickedoff">totalLength = 1 + 1 + lk + 1 + 1 + 1 + le + 1 + 1</span>
+<span class="lineno">  190 </span><span class="spaces">            </span><span class="nottickedoff">line = replicate totalLength '-' ++ &quot;\n&quot;</span>
+<span class="lineno">  191 </span><span class="spaces">            </span><span class="nottickedoff">-- Utils for printing a line</span>
+<span class="lineno">  192 </span><span class="spaces">            </span><span class="nottickedoff">printLine (k, e) acc = &quot;| &quot; ++ addPadding k lk ++ &quot; | &quot; ++ addPadding e le ++ &quot; |\n&quot; ++ acc</span>
+<span class="lineno">  193 </span><span class="spaces">            </span><span class="nottickedoff">printScope scope acc = foldr printLine (line ++ acc) scope</span>
+<span class="lineno">  194 </span><span class="spaces">            </span><span class="nottickedoff">scopesTables = foldr printScope &quot;&quot; strings</span>
+<span class="lineno">  195 </span><span class="spaces">        </span><span class="nottickedoff">in line ++ printLine (&quot;Keys&quot;, &quot;Entries&quot;)  (line ++ scopesTables)</span></span>
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>instance Pretty SymbolTable where
+<span class="lineno">  198 </span>    <span class="decl"><span class="nottickedoff">pretty st =</span>
+<span class="lineno">  199 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Types Namespace\n&quot; ++</span>
+<span class="lineno">  200 </span><span class="spaces">        </span><span class="nottickedoff">pretty (view types st) ++</span>
+<span class="lineno">  201 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Names Namespace\n&quot; ++</span>
+<span class="lineno">  202 </span><span class="spaces">        </span><span class="nottickedoff">pretty (view names st)</span></span>
+
+</pre>
+</body>
+</html>

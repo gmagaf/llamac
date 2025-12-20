@@ -1,0 +1,112 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Parser.Utils (parseAnalyzeM, initParseAnalyzeM, parseString,
+<span class="lineno">    2 </span>                     parse, analyze, parseAndAnalyze,
+<span class="lineno">    3 </span>                     readFileB, safeReadFile, parseFile,
+<span class="lineno">    4 </span>                     debug, debugRepl) where
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>import qualified Data.ByteString    as B
+<span class="lineno">    7 </span>import qualified Data.Text          as T
+<span class="lineno">    8 </span>import qualified Data.Text.Encoding as T
+<span class="lineno">    9 </span>import Control.Lens (view)
+<span class="lineno">   10 </span>import Data.Text.Lazy (Text)
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>import Common.AST (AST)
+<span class="lineno">   13 </span>import Common.PrintAST (pretty, debugPrint)
+<span class="lineno">   14 </span>import Lexer.Lexer (AlexPosn)
+<span class="lineno">   15 </span>import Parser.Parser (calc)
+<span class="lineno">   16 </span>import Parser.ParserM (Error, Parser, runParser)
+<span class="lineno">   17 </span>import Parser.ParserState (ParserState, sem_state, symbols, cgen_state, initParserState)
+<span class="lineno">   18 </span>import Semantics.Utils (SemanticTag)
+<span class="lineno">   19 </span>import Semantics.Semantics (analyzeAST)
+<span class="lineno">   20 </span>import Control.Exception (IOException, handle)
+<span class="lineno">   21 </span>import RunTime.LibHeaders (initSymbolTable)
+<span class="lineno">   22 </span>import IR.CodeGen (genAST)
+<span class="lineno">   23 </span>import IR.Utils (codegenProgram)
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>-- Various useful parsers
+<span class="lineno">   26 </span>parseAnalyzeM :: Parser (AST SemanticTag)
+<span class="lineno">   27 </span><span class="decl"><span class="nottickedoff">parseAnalyzeM = calc &gt;&gt;= analyzeAST</span></span>
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>initParseAnalyzeM :: Parser (AST SemanticTag)
+<span class="lineno">   30 </span><span class="decl"><span class="istickedoff">initParseAnalyzeM = initSymbolTable &gt;&gt; calc &gt;&gt;= analyzeAST</span></span>
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>initParseAnalyzeGenM :: String -&gt; Parser Text
+<span class="lineno">   33 </span><span class="decl"><span class="nottickedoff">initParseAnalyzeGenM s = initSymbolTable &gt;&gt; calc &gt;&gt;= analyzeAST &gt;&gt;= genAST &gt;&gt; codegenProgram s</span></span>
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>-- Util that initilizes a parser state and runs a parser monad
+<span class="lineno">   36 </span>parseString :: Parser a -&gt; String -&gt; (Either Error a, ParserState)
+<span class="lineno">   37 </span><span class="decl"><span class="istickedoff">parseString m s = runParser initState m where</span>
+<span class="lineno">   38 </span><span class="spaces">  </span><span class="istickedoff">initState :: ParserState</span>
+<span class="lineno">   39 </span><span class="spaces">  </span><span class="istickedoff">initState = initParserState s</span></span>
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>  -- The parsing function
+<span class="lineno">   42 </span>parse :: String -&gt; Either Error (AST AlexPosn)
+<span class="lineno">   43 </span><span class="decl"><span class="istickedoff">parse = fst . parseString calc</span></span>
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>analyze :: String -&gt; Either Error (AST SemanticTag)
+<span class="lineno">   46 </span><span class="decl"><span class="istickedoff">analyze = fst . parseAndAnalyze</span></span>
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>-- The parsing and semantic analysis function
+<span class="lineno">   49 </span>parseAndAnalyze :: String -&gt; (Either Error (AST SemanticTag), ParserState)
+<span class="lineno">   50 </span><span class="decl"><span class="istickedoff">parseAndAnalyze = parseString initParseAnalyzeM</span></span>
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>-- Util function for debugging end to end
+<span class="lineno">   53 </span>debug :: String -&gt; IO ()
+<span class="lineno">   54 </span><span class="decl"><span class="nottickedoff">debug s = do</span>
+<span class="lineno">   55 </span><span class="spaces">  </span><span class="nottickedoff">let (res, state) = parseString (initParseAnalyzeGenM &quot;debug from ghci&quot;) s</span>
+<span class="lineno">   56 </span><span class="spaces">  </span><span class="nottickedoff">putStrLn &quot;Semantic State&quot;</span>
+<span class="lineno">   57 </span><span class="spaces">  </span><span class="nottickedoff">print (view sem_state state)</span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="nottickedoff">putStrLn &quot;Code Gen State&quot;</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">print (view cgen_state state)</span>
+<span class="lineno">   60 </span><span class="spaces">  </span><span class="nottickedoff">putStrLn &quot;Symbol Table&quot;</span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="nottickedoff">putStrLn $ pretty (view symbols state)</span>
+<span class="lineno">   62 </span><span class="spaces">  </span><span class="nottickedoff">case res of</span>
+<span class="lineno">   63 </span><span class="spaces">    </span><span class="nottickedoff">Left err  -&gt; print err</span>
+<span class="lineno">   64 </span><span class="spaces">    </span><span class="nottickedoff">Right ast -&gt; debugPrint ast</span></span>
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>debugRepl :: IO ()
+<span class="lineno">   67 </span><span class="decl"><span class="nottickedoff">debugRepl = do</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="nottickedoff">s &lt;- getLine</span>
+<span class="lineno">   69 </span><span class="spaces">  </span><span class="nottickedoff">debug s</span>
+<span class="lineno">   70 </span><span class="spaces">  </span><span class="nottickedoff">debugRepl</span></span>
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>-- Parsing utils for files
+<span class="lineno">   73 </span>readFileB :: String -&gt; IO String
+<span class="lineno">   74 </span><span class="decl"><span class="istickedoff">readFileB fileName = do</span>
+<span class="lineno">   75 </span><span class="spaces">  </span><span class="istickedoff">bts &lt;- B.readFile fileName</span>
+<span class="lineno">   76 </span><span class="spaces">  </span><span class="istickedoff">return (T.unpack . T.decodeUtf8 $ bts)</span></span>
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>safeReadFile :: String -&gt; IO (Either String String)
+<span class="lineno">   79 </span><span class="decl"><span class="nottickedoff">safeReadFile fileName = handle handleEx (Right &lt;$&gt; readFileB fileName)</span>
+<span class="lineno">   80 </span><span class="spaces">  </span><span class="nottickedoff">where handleEx :: IOException -&gt; IO (Either String String)</span>
+<span class="lineno">   81 </span><span class="spaces">        </span><span class="nottickedoff">handleEx e = return (Left (show e))</span></span>
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>parseFile :: FilePath -&gt; IO ()
+<span class="lineno">   84 </span><span class="decl"><span class="nottickedoff">parseFile f = do</span>
+<span class="lineno">   85 </span><span class="spaces">  </span><span class="nottickedoff">s &lt;- readFileB f</span>
+<span class="lineno">   86 </span><span class="spaces">  </span><span class="nottickedoff">let res = parse s</span>
+<span class="lineno">   87 </span><span class="spaces">  </span><span class="nottickedoff">case res of</span>
+<span class="lineno">   88 </span><span class="spaces">    </span><span class="nottickedoff">Left err -&gt; print err</span>
+<span class="lineno">   89 </span><span class="spaces">    </span><span class="nottickedoff">Right p  -&gt; print p</span></span>
+
+</pre>
+</body>
+</html>

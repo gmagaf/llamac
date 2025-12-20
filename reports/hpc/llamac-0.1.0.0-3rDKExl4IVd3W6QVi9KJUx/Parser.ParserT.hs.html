@@ -1,0 +1,146 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE InstanceSigs #-}
+<span class="lineno">    2 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">    3 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">    4 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">    5 </span>module Parser.ParserT (ParserT(..),
+<span class="lineno">    6 </span>                       parserT, pureParserT,
+<span class="lineno">    7 </span>                       evalParserT, runParserT,
+<span class="lineno">    8 </span>                       throw, withExcept, catch
+<span class="lineno">    9 </span>                       ) where
+<span class="lineno">   10 </span>
+<span class="lineno">   11 </span>import Control.Monad.Trans.Class (MonadTrans(lift))
+<span class="lineno">   12 </span>import Control.Monad.State (MonadState (..))
+<span class="lineno">   13 </span>import qualified Control.Monad.Trans.Except as Except (ExceptT(ExceptT), throwE, catchE, runExceptT, withExceptT)
+<span class="lineno">   14 </span>import qualified Control.Monad.Trans.State as State (StateT(StateT), State, get, put, evalStateT, runState)
+<span class="lineno">   15 </span>import qualified Control.Monad.Trans.State.Strict as S (State, runState)
+<span class="lineno">   16 </span>import Control.Monad.Fix (MonadFix (mfix))
+<span class="lineno">   17 </span>import Control.Monad.IO.Class (MonadIO (liftIO))
+<span class="lineno">   18 </span>import Control.Lens (use, (.=))
+<span class="lineno">   19 </span>import LLVM.IRBuilder (MonadIRBuilder (liftIRState),
+<span class="lineno">   20 </span>                       MonadModuleBuilder (liftModuleState), ModuleBuilderState,)
+<span class="lineno">   21 </span>import LLVM.IRBuilder.Monad (IRBuilderState)
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>import Parser.ParserState (ParserState, cgen_state)
+<span class="lineno">   24 </span>import IR.CodeGenState (moduleState, irState)
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>-- This module defines the Parser monad transformer
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>-- The monad transformer definition
+<span class="lineno">   29 </span>newtype ParserT e s m a = ParserT { <span class="istickedoff"><span class="decl"><span class="istickedoff">getParserT</span></span></span> :: Except.ExceptT e (State.StateT s m) a }
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>-- Constructors
+<span class="lineno">   32 </span>parserT :: (s -&gt; m (Either e a, s)) -&gt; ParserT e s m a
+<span class="lineno">   33 </span><span class="decl"><span class="istickedoff">parserT = ParserT . Except.ExceptT . State.StateT</span></span>
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>pureParserT :: Monad m =&gt; (s -&gt; (Either e a, s)) -&gt; ParserT e s m a
+<span class="lineno">   36 </span><span class="decl"><span class="nottickedoff">pureParserT f = ParserT . Except.ExceptT . State.StateT $ (return . f)</span></span>
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>-- State related
+<span class="lineno">   39 </span>evalParserT :: Monad m =&gt; ParserT e s m a -&gt; s -&gt; m (Either e a)
+<span class="lineno">   40 </span><span class="decl"><span class="istickedoff">evalParserT p = State.evalStateT (Except.runExceptT (getParserT p))</span></span>
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>runParserT :: ParserT e s m a -&gt; s -&gt; m (Either e a, s)
+<span class="lineno">   43 </span><span class="decl"><span class="istickedoff">runParserT ~(ParserT (Except.ExceptT (State.StateT f))) = f</span></span>
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>-- Exception related
+<span class="lineno">   46 </span>throw :: Monad m =&gt; e -&gt; ParserT e s m a
+<span class="lineno">   47 </span><span class="decl"><span class="istickedoff">throw = ParserT . Except.throwE</span></span>
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>withExcept :: Monad m =&gt; (e -&gt; e') -&gt; ParserT e s m a -&gt; ParserT e' s m a
+<span class="lineno">   50 </span><span class="decl"><span class="istickedoff">withExcept f = ParserT . Except.withExceptT <span class="nottickedoff">f</span> . getParserT</span></span>
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>catch :: Monad m =&gt; (e -&gt; ParserT e' s m a) -&gt; ParserT e s m a -&gt; ParserT e' s m a
+<span class="lineno">   53 </span><span class="decl"><span class="istickedoff">catch handle p = ParserT $ Except.catchE (getParserT p) (getParserT . handle)</span></span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>instance Functor f =&gt; Functor (ParserT e s f) where
+<span class="lineno">   56 </span>  fmap :: forall a b. (a -&gt; b) -&gt; ParserT e s f a -&gt; ParserT e s f b
+<span class="lineno">   57 </span>  <span class="decl"><span class="istickedoff">fmap f p = parserT (fmap g . runParserT p) where</span>
+<span class="lineno">   58 </span><span class="spaces">    </span><span class="istickedoff">g :: (Either e a, s) -&gt; (Either e b, s)</span>
+<span class="lineno">   59 </span><span class="spaces">    </span><span class="istickedoff">g ~(a, s) = (fmap f a, s)</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>instance (Functor m, Monad m) =&gt; Applicative (ParserT e s m) where
+<span class="lineno">   62 </span>  pure :: a -&gt; ParserT e s m a
+<span class="lineno">   63 </span>  <span class="decl"><span class="istickedoff">pure a = parserT $ \s -&gt; return (Right a, s)</span></span>
+<span class="lineno">   64 </span>  (&lt;*&gt;) :: forall a b. ParserT e s m (a -&gt; b) -&gt; ParserT e s m a -&gt; ParserT e s m b
+<span class="lineno">   65 </span>  <span class="decl"><span class="istickedoff">pf &lt;*&gt; pa = parserT $ \s -&gt; do</span>
+<span class="lineno">   66 </span><span class="spaces">    </span><span class="istickedoff">~(ef, s') &lt;- runParserT pf s</span>
+<span class="lineno">   67 </span><span class="spaces">    </span><span class="istickedoff">case ef of</span>
+<span class="lineno">   68 </span><span class="spaces">      </span><span class="istickedoff">Left e  -&gt; return (Left <span class="nottickedoff">e</span>, <span class="nottickedoff">s'</span>)</span>
+<span class="lineno">   69 </span><span class="spaces">      </span><span class="istickedoff">Right f -&gt; do</span>
+<span class="lineno">   70 </span><span class="spaces">        </span><span class="istickedoff">~(ea, s'') &lt;- runParserT pa s'</span>
+<span class="lineno">   71 </span><span class="spaces">        </span><span class="istickedoff">case ea of</span>
+<span class="lineno">   72 </span><span class="spaces">          </span><span class="istickedoff">Left e  -&gt; return (Left <span class="nottickedoff">e</span>, <span class="nottickedoff">s''</span>)</span>
+<span class="lineno">   73 </span><span class="spaces">          </span><span class="istickedoff">Right a -&gt; return (Right (f a), s'')</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>instance Monad m =&gt; Monad (ParserT e s m) where
+<span class="lineno">   76 </span>  return :: a -&gt; ParserT e s m a
+<span class="lineno">   77 </span>  <span class="decl"><span class="istickedoff">return a = parserT $ \s -&gt; return (Right a, s)</span></span>
+<span class="lineno">   78 </span>  (&gt;&gt;=) :: ParserT e s m a -&gt; (a -&gt; ParserT e s m b) -&gt; ParserT e s m b
+<span class="lineno">   79 </span>  <span class="decl"><span class="istickedoff">p &gt;&gt;= f = parserT $ \s -&gt; do</span>
+<span class="lineno">   80 </span><span class="spaces">              </span><span class="istickedoff">~(ea, s') &lt;- runParserT p s</span>
+<span class="lineno">   81 </span><span class="spaces">              </span><span class="istickedoff">case ea of</span>
+<span class="lineno">   82 </span><span class="spaces">                </span><span class="istickedoff">Left e  -&gt; return (Left <span class="nottickedoff">e</span>, <span class="nottickedoff">s'</span>)</span>
+<span class="lineno">   83 </span><span class="spaces">                </span><span class="istickedoff">Right a -&gt; runParserT (f a) s'</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>instance (MonadFix m, Show e) =&gt; MonadFix (ParserT e s m) where
+<span class="lineno">   86 </span>  mfix :: forall a. (a -&gt; ParserT e s m a) -&gt; ParserT e s m a
+<span class="lineno">   87 </span>  <span class="decl"><span class="nottickedoff">mfix f = parserT mf where</span>
+<span class="lineno">   88 </span><span class="spaces">    </span><span class="nottickedoff">mf :: s -&gt; m (Either e a, s)</span>
+<span class="lineno">   89 </span><span class="spaces">    </span><span class="nottickedoff">mf s = mfix (\ ~(ea, _) -&gt; runParserT (f (either bomb id ea)) s)</span>
+<span class="lineno">   90 </span><span class="spaces">    </span><span class="nottickedoff">bomb = error . (&quot;mfix (ParserT): recursive computation returned Left value: &quot; ++) . show</span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>instance MonadIO m =&gt; MonadIO (ParserT e s m) where
+<span class="lineno">   93 </span>  liftIO :: IO a -&gt; ParserT e s m a
+<span class="lineno">   94 </span>  <span class="decl"><span class="nottickedoff">liftIO io = ParserT (liftIO io)</span></span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>instance Monad m =&gt; MonadState s (ParserT e s m) where
+<span class="lineno">   97 </span>  get :: ParserT e s m s
+<span class="lineno">   98 </span>  <span class="decl"><span class="istickedoff">get = ParserT $ lift State.get</span></span>
+<span class="lineno">   99 </span>  put :: s -&gt; ParserT e s m ()
+<span class="lineno">  100 </span>  <span class="decl"><span class="istickedoff">put s = ParserT $ lift (State.put s)</span></span>
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>instance MonadTrans (ParserT e s) where
+<span class="lineno">  103 </span>  lift :: Monad m =&gt; m a -&gt; ParserT e s m a
+<span class="lineno">  104 </span>  <span class="decl"><span class="nottickedoff">lift ma = parserT f where</span>
+<span class="lineno">  105 </span><span class="spaces">    </span><span class="nottickedoff">f s = do</span>
+<span class="lineno">  106 </span><span class="spaces">      </span><span class="nottickedoff">a &lt;- ma</span>
+<span class="lineno">  107 </span><span class="spaces">      </span><span class="nottickedoff">return (Right a, s)</span></span>
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>instance (Monad m) =&gt; MonadIRBuilder (ParserT e ParserState m) where
+<span class="lineno">  110 </span>  liftIRState :: S.State IRBuilderState a -&gt; ParserT e ParserState m a
+<span class="lineno">  111 </span>  <span class="decl"><span class="nottickedoff">liftIRState s = do</span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="nottickedoff">irs &lt;- use (cgen_state . irState)</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="nottickedoff">let (a, irs') = S.runState s irs</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="nottickedoff">cgen_state . irState .= irs'</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="nottickedoff">return a</span></span>
+<span class="lineno">  116 </span>
+<span class="lineno">  117 </span>instance Monad m =&gt; MonadModuleBuilder (ParserT e ParserState m) where
+<span class="lineno">  118 </span>  liftModuleState :: State.State ModuleBuilderState a -&gt; ParserT e ParserState m a
+<span class="lineno">  119 </span>  <span class="decl"><span class="istickedoff">liftModuleState s = do</span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff">ms &lt;- use <span class="nottickedoff">(cgen_state . moduleState)</span></span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff">let ~(a, ms') = <span class="nottickedoff">State.runState s ms</span></span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">cgen_state . <span class="nottickedoff">moduleState</span> .= <span class="nottickedoff">ms'</span></span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">return <span class="nottickedoff">a</span></span></span>
+
+</pre>
+</body>
+</html>

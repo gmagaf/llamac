@@ -1,0 +1,805 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Semantics.ExprAnalysis(analyzeLet, analyzeExpr) where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import Control.Monad (when)
+<span class="lineno">    4 </span>import qualified Data.Set as S
+<span class="lineno">    5 </span>import qualified Data.Bifunctor as B
+<span class="lineno">    6 </span>
+<span class="lineno">    7 </span>import Common.Token (Identifier, ConstrIdentifier)
+<span class="lineno">    8 </span>import Common.AST
+<span class="lineno">    9 </span>import Common.PrintAST
+<span class="lineno">   10 </span>import Common.SymbolTable
+<span class="lineno">   11 </span>import Common.SymbolType (TypeScheme(..), SymbolType(..), ConstType(..),
+<span class="lineno">   12 </span>                          constTypeToSymbolType, typeTo, tvarsInType,
+<span class="lineno">   13 </span>                          funToArgs, stCoAlg, paramsToFun )
+<span class="lineno">   14 </span>import Lexer.Lexer (AlexPosn)
+<span class="lineno">   15 </span>import Parser.ParserM (Parser, stackTrace, throwInternalError)
+<span class="lineno">   16 </span>import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames, insertNameP)
+<span class="lineno">   17 </span>import Semantics.TypeConstraints (TypeConstraint(..), mkAllowedTypes)
+<span class="lineno">   18 </span>import Semantics.Utils
+<span class="lineno">   19 </span>import Semantics.Unifier (checkConstraint, unify)
+<span class="lineno">   20 </span>import Semantics.TypeAnalysis (analyzeType)
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>-- Semantic analysis of definitions
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>-- function alias
+<span class="lineno">   25 </span>insertName :: String -&gt; TableEntry -&gt; Parser ()
+<span class="lineno">   26 </span><span class="decl"><span class="istickedoff">insertName = insertNameP</span></span>
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>{-
+<span class="lineno">   29 </span>    Analyze let statements
+<span class="lineno">   30 </span>    It will analyze all defs in the current typespace
+<span class="lineno">   31 </span>    Generalize all function types
+<span class="lineno">   32 </span>    Open a new namespace and write them in
+<span class="lineno">   33 </span>-}
+<span class="lineno">   34 </span>analyzeLet :: LetDef AlexPosn -&gt; Parser (LetDef SemanticTag)
+<span class="lineno">   35 </span><span class="decl"><span class="istickedoff">analyzeLet (Let defs p) = do</span>
+<span class="lineno">   36 </span><span class="spaces">    </span><span class="istickedoff">-- Analyze the signatures of the definitions</span>
+<span class="lineno">   37 </span><span class="spaces">    </span><span class="istickedoff">sigAnalysisResults &lt;- mapM analyzeDefSig defs</span>
+<span class="lineno">   38 </span><span class="spaces">    </span><span class="istickedoff">-- Analyze the body of the definitions</span>
+<span class="lineno">   39 </span><span class="spaces">    </span><span class="istickedoff">semDefEntries &lt;- mapM analyzeDefBody sigAnalysisResults</span>
+<span class="lineno">   40 </span><span class="spaces">    </span><span class="istickedoff">-- Get all the free variables from the outer scope and update them</span>
+<span class="lineno">   41 </span><span class="spaces">    </span><span class="istickedoff">outerScopeVars &lt;- getFreeTVars &gt;&gt;= resolveFreeVars</span>
+<span class="lineno">   42 </span><span class="spaces">    </span><span class="istickedoff">-- Add free vars of mutables in outerScopeVars</span>
+<span class="lineno">   43 </span><span class="spaces">    </span><span class="istickedoff">let mutVar (UntypedMutSig st _ _) acc   = tvarsInType st ++ acc</span>
+<span class="lineno">   44 </span><span class="spaces">        </span><span class="istickedoff">mutVar (UntypedArrSig st _ _ _) acc = tvarsInType st ++ acc</span>
+<span class="lineno">   45 </span><span class="spaces">        </span><span class="istickedoff">mutVar _ acc                        = acc</span>
+<span class="lineno">   46 </span><span class="spaces">    </span><span class="istickedoff">let thisScopeTVars = foldr mutVar [] sigAnalysisResults</span>
+<span class="lineno">   47 </span><span class="spaces">    </span><span class="istickedoff">let newFreeTVars = foldr S.insert outerScopeVars thisScopeTVars</span>
+<span class="lineno">   48 </span><span class="spaces">    </span><span class="istickedoff">putFreeTVars newFreeTVars</span>
+<span class="lineno">   49 </span><span class="spaces">    </span><span class="istickedoff">-- Generalize the results (using only outer scope tvars)</span>
+<span class="lineno">   50 </span><span class="spaces">    </span><span class="istickedoff">finalRes &lt;- mapM (genResult outerScopeVars) semDefEntries</span>
+<span class="lineno">   51 </span><span class="spaces">    </span><span class="istickedoff">-- Open the scope</span>
+<span class="lineno">   52 </span><span class="spaces">    </span><span class="istickedoff">openScopeInNames</span>
+<span class="lineno">   53 </span><span class="spaces">    </span><span class="istickedoff">-- Insert the definitions in the scope</span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="istickedoff">mapM_ (uncurry insertName . B.first ide) finalRes</span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="istickedoff">-- Second analysis of the definitions to get the most general signatures</span>
+<span class="lineno">   56 </span><span class="spaces">    </span><span class="istickedoff">let finalSemDefs = map fst finalRes</span>
+<span class="lineno">   57 </span><span class="spaces">    </span><span class="istickedoff">return $ Let finalSemDefs (cpPosn p)</span>
+<span class="lineno">   58 </span><span class="spaces"></span><span class="istickedoff">analyzeLet (LetRec defs p) = do</span>
+<span class="lineno">   59 </span><span class="spaces">    </span><span class="istickedoff">-- Analyze the signatures of the definitions</span>
+<span class="lineno">   60 </span><span class="spaces">    </span><span class="istickedoff">sigAnalysisResults &lt;- mapM analyzeDefSig defs</span>
+<span class="lineno">   61 </span><span class="spaces">    </span><span class="istickedoff">-- Open the scope</span>
+<span class="lineno">   62 </span><span class="spaces">    </span><span class="istickedoff">openScopeInNames</span>
+<span class="lineno">   63 </span><span class="spaces">    </span><span class="istickedoff">-- Insert the definitions in the scope with placeholder type vars</span>
+<span class="lineno">   64 </span><span class="spaces">    </span><span class="istickedoff">mapM_ (uncurry insertName . entryPair) sigAnalysisResults</span>
+<span class="lineno">   65 </span><span class="spaces">    </span><span class="istickedoff">-- Analyze the body of the definitions</span>
+<span class="lineno">   66 </span><span class="spaces">    </span><span class="istickedoff">semDefEntries &lt;- mapM analyzeDefBody sigAnalysisResults</span>
+<span class="lineno">   67 </span><span class="spaces">    </span><span class="istickedoff">-- Get all the free variables from the outer scope</span>
+<span class="lineno">   68 </span><span class="spaces">    </span><span class="istickedoff">outerScopeVars &lt;- getFreeTVars</span>
+<span class="lineno">   69 </span><span class="spaces">    </span><span class="istickedoff">-- Add free vars of mutables in outerScopeVars</span>
+<span class="lineno">   70 </span><span class="spaces">    </span><span class="istickedoff">let mutVar (UntypedMutSig st _ _) acc   = tvarsInType st ++ acc</span>
+<span class="lineno">   71 </span><span class="spaces">        </span><span class="istickedoff">mutVar (UntypedArrSig st _ _ _) acc = tvarsInType st ++ acc</span>
+<span class="lineno">   72 </span><span class="spaces">        </span><span class="istickedoff">mutVar _ acc                        = acc</span>
+<span class="lineno">   73 </span><span class="spaces">    </span><span class="istickedoff">let thisScopeTVars = foldr mutVar [] sigAnalysisResults</span>
+<span class="lineno">   74 </span><span class="spaces">    </span><span class="istickedoff">let newFreeTVars = foldr S.insert outerScopeVars thisScopeTVars</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">-- Update the tvars in symbol table and in freeVars</span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">updatedEntries &lt;- mapM (findName . ide . fst) semDefEntries</span>
+<span class="lineno">   77 </span><span class="spaces">    </span><span class="istickedoff">freeVars &lt;- resolveFreeVars newFreeTVars</span>
+<span class="lineno">   78 </span><span class="spaces">    </span><span class="istickedoff">putFreeTVars freeVars</span>
+<span class="lineno">   79 </span><span class="spaces">    </span><span class="istickedoff">-- Second analysis of the definitions to get the most general signatures</span>
+<span class="lineno">   80 </span><span class="spaces">    </span><span class="istickedoff">let semDefs = map fst semDefEntries</span>
+<span class="lineno">   81 </span><span class="spaces">    </span><span class="istickedoff">let genInput = zip3 semDefs defs updatedEntries</span>
+<span class="lineno">   82 </span><span class="spaces">    </span><span class="istickedoff">res &lt;- mapM secondAnalysis genInput</span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="istickedoff">-- Generalize the results</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="istickedoff">finalRes &lt;- mapM (genResult freeVars) res</span>
+<span class="lineno">   85 </span><span class="spaces">    </span><span class="istickedoff">let finalSemDefs = map fst finalRes</span>
+<span class="lineno">   86 </span><span class="spaces">    </span><span class="istickedoff">-- Final update in scope</span>
+<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">mapM_ (uncurry updateName . B.first ide) finalRes</span>
+<span class="lineno">   88 </span><span class="spaces">    </span><span class="istickedoff">return $ LetRec finalSemDefs (cpPosn p)</span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>{-
+<span class="lineno">   91 </span>    In Second analysis we only analyze Untyped fun definitions
+<span class="lineno">   92 </span>    in order to get the most general unifier principal type
+<span class="lineno">   93 </span>-}
+<span class="lineno">   94 </span>secondAnalysis :: (Def SemanticTag, Def AlexPosn, TableEntry) -&gt; Parser (Def SemanticTag, TableEntry)
+<span class="lineno">   95 </span><span class="decl"><span class="istickedoff">secondAnalysis (_, d@(FunDef {}), FunEntry _ _) = do</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="istickedoff">sigRes &lt;- analyzeDefSig d</span>
+<span class="lineno">   97 </span><span class="spaces">    </span><span class="istickedoff">analyzeDefBody sigRes</span>
+<span class="lineno">   98 </span><span class="spaces"></span><span class="istickedoff">secondAnalysis (d, _, e) = return (d, e)</span></span>
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>{-
+<span class="lineno">  101 </span>    We generalize second analysis results to
+<span class="lineno">  102 </span>    get polymorphic functions
+<span class="lineno">  103 </span>-}
+<span class="lineno">  104 </span>genResult :: S.Set Int -&gt; (Def SemanticTag, TableEntry) -&gt; Parser (Def SemanticTag, TableEntry)
+<span class="lineno">  105 </span><span class="decl"><span class="istickedoff">genResult freeVars (FunDef i ps e tg, FunEntry (MonoType t) params) = do</span>
+<span class="lineno">  106 </span><span class="spaces">    </span><span class="istickedoff">let scheme = gen freeVars t</span>
+<span class="lineno">  107 </span><span class="spaces">    </span><span class="istickedoff">return (FunDef i ps e tg{typeInfo = DefType scheme}, FunEntry scheme params)</span>
+<span class="lineno">  108 </span><span class="spaces"></span><span class="istickedoff">genResult _ pair = return pair</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>-- Util definitions for sig analysis
+<span class="lineno">  111 </span>type KeyEntryPair = (Identifier, TableEntry)
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>data SigAnalysisRes =
+<span class="lineno">  114 </span>    TypedMutSig (Type SemanticTag) KeyEntryPair AlexPosn
+<span class="lineno">  115 </span>  | TypedArrSig (Type SemanticTag) [Expr AlexPosn] KeyEntryPair AlexPosn
+<span class="lineno">  116 </span>  | TypedFunSig (Type SemanticTag) [Param SemanticTag] (Expr AlexPosn) KeyEntryPair AlexPosn
+<span class="lineno">  117 </span>  | UntypedMutSig SymbolType KeyEntryPair AlexPosn
+<span class="lineno">  118 </span>  | UntypedArrSig SymbolType [Expr AlexPosn] KeyEntryPair AlexPosn
+<span class="lineno">  119 </span>  | UnTypedFunSig SymbolType [Param SemanticTag] (Expr AlexPosn) KeyEntryPair AlexPosn
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>entryPair :: SigAnalysisRes -&gt; KeyEntryPair
+<span class="lineno">  122 </span><span class="decl"><span class="istickedoff">entryPair (TypedMutSig _ pair _)       = pair</span>
+<span class="lineno">  123 </span><span class="spaces"></span><span class="istickedoff">entryPair (TypedArrSig _ _ pair _)     = pair</span>
+<span class="lineno">  124 </span><span class="spaces"></span><span class="istickedoff">entryPair (TypedFunSig _ _ _ pair _)   = pair</span>
+<span class="lineno">  125 </span><span class="spaces"></span><span class="istickedoff">entryPair (UntypedMutSig _ pair _)     = pair</span>
+<span class="lineno">  126 </span><span class="spaces"></span><span class="istickedoff">entryPair (UntypedArrSig _ _ pair _)   = pair</span>
+<span class="lineno">  127 </span><span class="spaces"></span><span class="istickedoff">entryPair (UnTypedFunSig _ _ _ pair _) = pair</span></span>
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span>typeToSymbolType :: Type b -&gt; SymbolType
+<span class="lineno">  130 </span><span class="decl"><span class="istickedoff">typeToSymbolType = typeTo SymType</span></span>
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>{-
+<span class="lineno">  133 </span>    Analysis of the signature of a definition
+<span class="lineno">  134 </span>-}
+<span class="lineno">  135 </span>analyzeDefSig :: Def AlexPosn -&gt; Parser SigAnalysisRes
+<span class="lineno">  136 </span><span class="decl"><span class="istickedoff">analyzeDefSig (VarDef x p) = do</span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">tv &lt;- freshTVar</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff">let varType = SymType . RefType $ tv</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">return $ UntypedMutSig varType (x, MutableEntry varType) p</span>
+<span class="lineno">  140 </span><span class="spaces"></span><span class="istickedoff">analyzeDefSig (VarDefTyped x t p) = do</span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">semT &lt;- stackTrace <span class="nottickedoff">(&quot;while analyzing mut var &quot; ++ x)</span> $ analyzeType t</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">let varType = SymType . RefType $ typeToSymbolType semT</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">return $ TypedMutSig semT (x, MutableEntry varType) p</span>
+<span class="lineno">  144 </span><span class="spaces"></span><span class="istickedoff">analyzeDefSig (ArrayDef i es p) = do</span>
+<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff">let dims = length es</span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">tv &lt;- freshTVar</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">let arrayType = SymType . ArrayType dims $ tv</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">return $ UntypedArrSig arrayType es (i, ArrayEntry arrayType dims) p</span>
+<span class="lineno">  149 </span><span class="spaces"></span><span class="istickedoff">analyzeDefSig (ArrayDefTyped i es t p) = do</span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">let dims = length es</span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">semT &lt;- stackTrace <span class="nottickedoff">(&quot;while analyzing array &quot; ++ i)</span> $ analyzeType t</span>
+<span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff">let arrayType = SymType . ArrayType dims $ typeToSymbolType semT</span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">return $ TypedArrSig semT es (i, ArrayEntry arrayType dims) p</span>
+<span class="lineno">  154 </span><span class="spaces"></span><span class="istickedoff">analyzeDefSig (FunDef i ps e p) = do</span>
+<span class="lineno">  155 </span><span class="spaces">    </span><span class="istickedoff">let paramNames = map ide ps</span>
+<span class="lineno">  156 </span><span class="spaces">    </span><span class="istickedoff">when (hasDuplicates paramNames) $</span>
+<span class="lineno">  157 </span><span class="spaces">        </span><span class="istickedoff">throwSemAtPosn <span class="nottickedoff">(&quot;Fun &quot; ++ i ++ &quot; cannot have duplicate params&quot;)</span> <span class="nottickedoff">p</span></span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff">-- Analyze params in the current scope</span>
+<span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff">semPs &lt;- mapM (stackTrace <span class="nottickedoff">(&quot;while analyzing the params of &quot; ++ i)</span> . analyzeParam) ps</span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">putSemPosn <span class="nottickedoff">p</span></span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">paramTypes &lt;- mapM getNodeType semPs</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">-- Fresh outV is the output type of the function</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">outV &lt;- freshTVar</span>
+<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">let fType = paramsToFun SymType paramTypes outV</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">-- fScheme &lt;- gen fType</span>
+<span class="lineno">  166 </span><span class="spaces">    </span><span class="istickedoff">return $ UnTypedFunSig fType semPs e (i, FunEntry (MonoType fType) paramNames) p</span>
+<span class="lineno">  167 </span><span class="spaces"></span><span class="istickedoff">analyzeDefSig (FunDefTyped i ps t e p) = do</span>
+<span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">let paramNames = map ide ps</span>
+<span class="lineno">  169 </span><span class="spaces">    </span><span class="istickedoff">-- First we make sure that there are no duplicates in params</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">when (hasDuplicates paramNames) $</span>
+<span class="lineno">  171 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwSemAtPosn (&quot;Fun &quot; ++ i ++ &quot; cannot have duplicate params&quot;) p</span></span>
+<span class="lineno">  172 </span><span class="spaces">    </span><span class="istickedoff">-- We analyze the overall type of the function</span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">semT &lt;- stackTrace <span class="nottickedoff">(&quot;while analyzing fun &quot; ++ i)</span> $ analyzeType t</span>
+<span class="lineno">  174 </span><span class="spaces">    </span><span class="istickedoff">-- Analyze params and body in the current scope</span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">semPs &lt;- mapM (stackTrace <span class="nottickedoff">(&quot;while analyzing the params of &quot; ++ i)</span> . analyzeParam) ps</span>
+<span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">eT &lt;- freshTVar</span>
+<span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">-- Collect the results: the new param types, the expr type and unify tv with the result fun type</span>
+<span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff">putSemPosn <span class="nottickedoff">p</span></span>
+<span class="lineno">  179 </span><span class="spaces">    </span><span class="istickedoff">paramTypes &lt;- mapM getNodeType semPs</span>
+<span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff">let fType = paramsToFun SymType paramTypes eT</span>
+<span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">unify (typeToSymbolType semT, fType)</span>
+<span class="lineno">  182 </span><span class="spaces">    </span><span class="istickedoff">let fScheme = MonoType $ typeToSymbolType semT</span>
+<span class="lineno">  183 </span><span class="spaces">    </span><span class="istickedoff">return $ TypedFunSig semT semPs e (i, FunEntry fScheme paramNames) p</span></span>
+<span class="lineno">  184 </span>
+<span class="lineno">  185 </span>{-
+<span class="lineno">  186 </span>    Analyzes params by writting them to
+<span class="lineno">  187 </span>    the symbol table
+<span class="lineno">  188 </span>    - Checks the explicit types of params
+<span class="lineno">  189 </span>-}
+<span class="lineno">  190 </span>analyzeParam :: Param AlexPosn -&gt; Parser (Param SemanticTag)
+<span class="lineno">  191 </span><span class="decl"><span class="istickedoff">analyzeParam (TypedParam param t p) = do</span>
+<span class="lineno">  192 </span><span class="spaces">    </span><span class="istickedoff">semT &lt;- stackTrace <span class="nottickedoff">(&quot;while analyzing param &quot; ++ param)</span> $ analyzeType t</span>
+<span class="lineno">  193 </span><span class="spaces">    </span><span class="istickedoff">putSemPosn <span class="nottickedoff">p</span></span>
+<span class="lineno">  194 </span><span class="spaces">    </span><span class="istickedoff">let st = typeToSymbolType t</span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="istickedoff">return $ TypedParam param semT SemTag{posn = p, typeInfo = NodeType st}</span>
+<span class="lineno">  196 </span><span class="spaces"></span><span class="istickedoff">analyzeParam (Param param p) = do</span>
+<span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">putSemPosn <span class="nottickedoff">p</span></span>
+<span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff">vt &lt;- freshTVar</span>
+<span class="lineno">  199 </span><span class="spaces">    </span><span class="istickedoff">return $ Param param SemTag{posn = p, typeInfo = NodeType vt}</span></span>
+<span class="lineno">  200 </span>
+<span class="lineno">  201 </span>{-
+<span class="lineno">  202 </span>    Analysis of the body of a definition
+<span class="lineno">  203 </span>-}
+<span class="lineno">  204 </span>analyzeDefBody :: SigAnalysisRes -&gt; Parser (Def SemanticTag, TableEntry)
+<span class="lineno">  205 </span><span class="decl"><span class="istickedoff">analyzeDefBody (UntypedMutSig st (i, entry) p) =</span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff">let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}</span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">in return (VarDef i tg, entry)</span>
+<span class="lineno">  208 </span><span class="spaces"></span><span class="istickedoff">analyzeDefBody (TypedMutSig semT (i, entry) p) =</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">in return (VarDefTyped i semT tg, entry)</span>
+<span class="lineno">  211 </span><span class="spaces"></span><span class="istickedoff">analyzeDefBody (UntypedArrSig st es (i, entry) p) = do</span>
+<span class="lineno">  212 </span><span class="spaces">    </span><span class="istickedoff">semEs &lt;- mapM (stackTrace <span class="nottickedoff">(&quot;while analyzing the dimensions of array &quot; ++ i)</span> . analyzeExpr) es</span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff">typesEs &lt;- mapM getNodeType semEs</span>
+<span class="lineno">  214 </span><span class="spaces">    </span><span class="istickedoff">putSemPosn <span class="nottickedoff">p</span></span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="istickedoff">mapM_ (unify . (,) (SymType IntType)) typesEs</span>
+<span class="lineno">  216 </span><span class="spaces">    </span><span class="istickedoff">rSemEs &lt;- mapM resolveNodeType semEs</span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}</span>
+<span class="lineno">  218 </span><span class="spaces">    </span><span class="istickedoff">return (ArrayDef i rSemEs tg, entry)</span>
+<span class="lineno">  219 </span><span class="spaces"></span><span class="istickedoff">analyzeDefBody (TypedArrSig semT es (i, entry) p) = do</span>
+<span class="lineno">  220 </span><span class="spaces">    </span><span class="istickedoff">semEs &lt;- mapM (stackTrace <span class="nottickedoff">(&quot;while analyzing the dimensions of array &quot; ++ i)</span> . analyzeExpr) es</span>
+<span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">typesEs &lt;- mapM getNodeType semEs</span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">putSemPosn <span class="nottickedoff">p</span></span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">mapM_ (unify . (,) (SymType IntType)) typesEs</span>
+<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff">rSemEs &lt;- mapM resolveNodeType semEs</span>
+<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}</span>
+<span class="lineno">  226 </span><span class="spaces">    </span><span class="istickedoff">return (ArrayDefTyped i rSemEs semT tg, entry)</span>
+<span class="lineno">  227 </span><span class="spaces"></span><span class="istickedoff">analyzeDefBody (UnTypedFunSig st semPs e (i, _) p) = do</span>
+<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">-- Hold the free vars outside the body</span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">outerScopeVars &lt;- getFreeTVars</span>
+<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">-- Open scope for params names and their types</span>
+<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">openScopeInNames</span>
+<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">-- Insert params in the current scope</span>
+<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">let insertParam param = do</span>
+<span class="lineno">  234 </span><span class="spaces">          </span><span class="istickedoff">t &lt;- getNodeType param</span>
+<span class="lineno">  235 </span><span class="spaces">          </span><span class="istickedoff">addFreeTVars t</span>
+<span class="lineno">  236 </span><span class="spaces">          </span><span class="istickedoff">insertName (ide param) (ParamEntry t <span class="nottickedoff">i</span>)</span>
+<span class="lineno">  237 </span><span class="spaces">          </span><span class="istickedoff">return t</span>
+<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">paramTypes &lt;- mapM insertParam semPs</span>
+<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">semE &lt;- stackTrace <span class="nottickedoff">(&quot;while analyzing the body of &quot; ++ i)</span> (analyzeExpr e)</span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">-- Collect the results: the new param types, the expr type and unify tv with the result fun type</span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">putSemPosn <span class="nottickedoff">p</span></span>
+<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">eT &lt;- getNodeType semE</span>
+<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">let fType = paramsToFun SymType paramTypes eT</span>
+<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">unify (st, fType)</span>
+<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">rSemPs &lt;- mapM resolveNodeType semPs</span>
+<span class="lineno">  246 </span><span class="spaces">    </span><span class="istickedoff">rSemE &lt;- resolveNodeType semE</span>
+<span class="lineno">  247 </span><span class="spaces">    </span><span class="istickedoff">reT &lt;- getNodeType rSemE</span>
+<span class="lineno">  248 </span><span class="spaces">    </span><span class="istickedoff">checkConstraint reT (NotAllowedFunType $ <span class="nottickedoff">&quot;Function &quot; ++ i ++ &quot; cannot return function type: &quot; ++ pretty reT</span>)</span>
+<span class="lineno">  249 </span><span class="spaces">    </span><span class="istickedoff">rst &lt;- resolveType st</span>
+<span class="lineno">  250 </span><span class="spaces">    </span><span class="istickedoff">-- Close scope</span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="istickedoff">closeScopeInNames</span>
+<span class="lineno">  252 </span><span class="spaces">    </span><span class="istickedoff">putFreeTVars outerScopeVars</span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">let fScheme = MonoType rst</span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">let tg = SemTag{posn = p, typeInfo = <span class="nottickedoff">DefType fScheme</span>}</span>
+<span class="lineno">  255 </span><span class="spaces">    </span><span class="istickedoff">return (FunDef i rSemPs rSemE tg, FunEntry fScheme (map <span class="nottickedoff">ide</span> rSemPs))</span>
+<span class="lineno">  256 </span><span class="spaces"></span><span class="istickedoff">analyzeDefBody (TypedFunSig semT semPs e (i, _) p) = do</span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">-- Hold the free vars outside the body</span>
+<span class="lineno">  258 </span><span class="spaces">    </span><span class="istickedoff">outerScopeVars &lt;- getFreeTVars</span>
+<span class="lineno">  259 </span><span class="spaces">    </span><span class="istickedoff">-- Open scope for params names and their types</span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">openScopeInNames</span>
+<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">-- Insert params in the current scope</span>
+<span class="lineno">  262 </span><span class="spaces">    </span><span class="istickedoff">let insertParam param = do</span>
+<span class="lineno">  263 </span><span class="spaces">          </span><span class="istickedoff">t &lt;- getNodeType param</span>
+<span class="lineno">  264 </span><span class="spaces">          </span><span class="istickedoff">addFreeTVars t</span>
+<span class="lineno">  265 </span><span class="spaces">          </span><span class="istickedoff">insertName (ide param) (ParamEntry t <span class="nottickedoff">i</span>)</span>
+<span class="lineno">  266 </span><span class="spaces">          </span><span class="istickedoff">return t</span>
+<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">paramTypes &lt;- mapM insertParam semPs</span>
+<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">semE &lt;- stackTrace <span class="nottickedoff">(&quot;while analyzing the body of &quot; ++ i)</span> (analyzeExpr e)</span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">-- Collect the results: the new param types, the expr type and unify tv with the result fun type</span>
+<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">putSemPosn <span class="nottickedoff">p</span></span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">eT &lt;- getNodeType semE</span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">let fType = paramsToFun SymType paramTypes eT</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">let st = typeToSymbolType semT</span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">unify (st, fType)</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">rSemPs &lt;- mapM resolveNodeType semPs</span>
+<span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff">rSemE &lt;- resolveNodeType semE</span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">reT &lt;- getNodeType rSemE</span>
+<span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff">checkConstraint reT (NotAllowedFunType $ <span class="nottickedoff">&quot;Function &quot; ++ i ++ &quot; cannot return function type: &quot; ++ pretty reT</span>)</span>
+<span class="lineno">  279 </span><span class="spaces">    </span><span class="istickedoff">-- Close scope</span>
+<span class="lineno">  280 </span><span class="spaces">    </span><span class="istickedoff">closeScopeInNames</span>
+<span class="lineno">  281 </span><span class="spaces">    </span><span class="istickedoff">putFreeTVars outerScopeVars</span>
+<span class="lineno">  282 </span><span class="spaces">    </span><span class="istickedoff">let fScheme = MonoType st</span>
+<span class="lineno">  283 </span><span class="spaces">    </span><span class="istickedoff">let tg = SemTag{posn = p, typeInfo = DefType fScheme}</span>
+<span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">return (FunDefTyped i rSemPs semT rSemE tg, FunEntry fScheme (map <span class="nottickedoff">ide</span> rSemPs))</span></span>
+<span class="lineno">  285 </span>
+<span class="lineno">  286 </span>-- Semantic analysis of expressions
+<span class="lineno">  287 </span>
+<span class="lineno">  288 </span>analyzeExpr :: Expr AlexPosn -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  289 </span><span class="decl"><span class="istickedoff">analyzeExpr = recSemExpr indSemExpr</span></span>
+<span class="lineno">  290 </span>
+<span class="lineno">  291 </span>-- Inductively analyze expressions using mapM for expression functor
+<span class="lineno">  292 </span>recSemExpr :: (ExprF (Expr SemanticTag) -&gt; Parser (Expr SemanticTag))
+<span class="lineno">  293 </span>         -&gt; Expr AlexPosn
+<span class="lineno">  294 </span>         -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  295 </span><span class="decl"><span class="istickedoff">recSemExpr g expr =</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">let aexpr = stackTrace <span class="nottickedoff">(&quot;while analyzing expr &quot; ++ pretty expr)</span> . recSemExpr g</span>
+<span class="lineno">  297 </span><span class="spaces">        </span><span class="istickedoff">atype = stackTrace <span class="nottickedoff">(&quot;while analyzing expr &quot; ++ pretty expr)</span> . analyzeType</span>
+<span class="lineno">  298 </span><span class="spaces">        </span><span class="istickedoff">alet = stackTrace <span class="nottickedoff">(&quot;while analyzing expr &quot; ++ pretty expr)</span> . analyzeLet</span>
+<span class="lineno">  299 </span><span class="spaces">        </span><span class="istickedoff">aclause = stackTrace <span class="nottickedoff">(&quot;while analyzing expr &quot; ++ pretty expr)</span> . analyzeClause</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">in case expr of</span>
+<span class="lineno">  301 </span><span class="spaces">        </span><span class="istickedoff">Expr (ForExpr i l u e) p -&gt; do</span>
+<span class="lineno">  302 </span><span class="spaces">            </span><span class="istickedoff">semL &lt;- aexpr l</span>
+<span class="lineno">  303 </span><span class="spaces">            </span><span class="istickedoff">semU &lt;- aexpr u</span>
+<span class="lineno">  304 </span><span class="spaces">            </span><span class="istickedoff">openScopeInNames</span>
+<span class="lineno">  305 </span><span class="spaces">            </span><span class="istickedoff">insertName i (FunEntry (MonoType . SymType $ IntType) <span class="nottickedoff">[]</span>)</span>
+<span class="lineno">  306 </span><span class="spaces">            </span><span class="istickedoff">semE &lt;- aexpr e</span>
+<span class="lineno">  307 </span><span class="spaces">            </span><span class="istickedoff">closeScopeInNames</span>
+<span class="lineno">  308 </span><span class="spaces">            </span><span class="istickedoff">putSemPosn p</span>
+<span class="lineno">  309 </span><span class="spaces">            </span><span class="istickedoff">g (ForExpr i semL semU semE)</span>
+<span class="lineno">  310 </span><span class="spaces">        </span><span class="istickedoff">Expr (ForDownExpr i u l e) p -&gt; do</span>
+<span class="lineno">  311 </span><span class="spaces">            </span><span class="istickedoff">semU &lt;- aexpr u</span>
+<span class="lineno">  312 </span><span class="spaces">            </span><span class="istickedoff">semL &lt;- aexpr l</span>
+<span class="lineno">  313 </span><span class="spaces">            </span><span class="istickedoff">openScopeInNames</span>
+<span class="lineno">  314 </span><span class="spaces">            </span><span class="istickedoff">insertName i (FunEntry (MonoType . SymType $ IntType) <span class="nottickedoff">[]</span>)</span>
+<span class="lineno">  315 </span><span class="spaces">            </span><span class="istickedoff">semE &lt;- aexpr e</span>
+<span class="lineno">  316 </span><span class="spaces">            </span><span class="istickedoff">closeScopeInNames</span>
+<span class="lineno">  317 </span><span class="spaces">            </span><span class="istickedoff">putSemPosn p</span>
+<span class="lineno">  318 </span><span class="spaces">            </span><span class="istickedoff">g (ForDownExpr i semU semL semE)</span>
+<span class="lineno">  319 </span><span class="spaces">        </span><span class="istickedoff">Expr ef p -&gt; do</span>
+<span class="lineno">  320 </span><span class="spaces">            </span><span class="istickedoff">semEf &lt;- mapM aexpr ef</span>
+<span class="lineno">  321 </span><span class="spaces">            </span><span class="istickedoff">putSemPosn p</span>
+<span class="lineno">  322 </span><span class="spaces">            </span><span class="istickedoff">g semEf</span>
+<span class="lineno">  323 </span><span class="spaces">        </span><span class="istickedoff">NewType t p -&gt; do</span>
+<span class="lineno">  324 </span><span class="spaces">            </span><span class="istickedoff">semT &lt;- atype t</span>
+<span class="lineno">  325 </span><span class="spaces">            </span><span class="istickedoff">putSemPosn p</span>
+<span class="lineno">  326 </span><span class="spaces">            </span><span class="istickedoff">semNewType semT</span>
+<span class="lineno">  327 </span><span class="spaces">        </span><span class="istickedoff">LetIn l e p -&gt; do</span>
+<span class="lineno">  328 </span><span class="spaces">            </span><span class="istickedoff">semL &lt;- alet l</span>
+<span class="lineno">  329 </span><span class="spaces">            </span><span class="istickedoff">semE &lt;- aexpr e</span>
+<span class="lineno">  330 </span><span class="spaces">            </span><span class="istickedoff">putSemPosn p</span>
+<span class="lineno">  331 </span><span class="spaces">            </span><span class="istickedoff">semLetIn semL semE</span>
+<span class="lineno">  332 </span><span class="spaces">        </span><span class="istickedoff">MatchExpr e cs p -&gt; do</span>
+<span class="lineno">  333 </span><span class="spaces">            </span><span class="istickedoff">semE &lt;- aexpr e</span>
+<span class="lineno">  334 </span><span class="spaces">            </span><span class="istickedoff">semCs &lt;- mapM aclause cs</span>
+<span class="lineno">  335 </span><span class="spaces">            </span><span class="istickedoff">putSemPosn <span class="nottickedoff">p</span></span>
+<span class="lineno">  336 </span><span class="spaces">            </span><span class="istickedoff">semMatchExpr semE semCs</span></span>
+<span class="lineno">  337 </span>
+<span class="lineno">  338 </span>-- Util for returning the result expression by updating its node type
+<span class="lineno">  339 </span>retE :: ExprF (Expr SemanticTag) -&gt; SymbolType -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  340 </span><span class="decl"><span class="istickedoff">retE ef t = do</span>
+<span class="lineno">  341 </span><span class="spaces">    </span><span class="istickedoff">p &lt;- getSemPosn</span>
+<span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">return $ Expr ef SemTag{posn = p, typeInfo = NodeType t}</span></span>
+<span class="lineno">  343 </span>
+<span class="lineno">  344 </span>indSemExpr :: ExprF (Expr SemanticTag) -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  345 </span><span class="decl"><span class="istickedoff">indSemExpr (IntCExpr c)           = retE (IntCExpr c) (SymType IntType)</span>
+<span class="lineno">  346 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (FloatCExpr c)         = retE (FloatCExpr c) (SymType FloatType)</span>
+<span class="lineno">  347 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (CharCExpr c)          = retE (CharCExpr c) (SymType CharType)</span>
+<span class="lineno">  348 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (StringCExpr c)        = retE (StringCExpr c) (SymType (ArrayType 1 (SymType CharType)))</span>
+<span class="lineno">  349 </span><span class="spaces"></span><span class="istickedoff">indSemExpr TrueCExpr              = retE TrueCExpr (SymType BoolType)</span>
+<span class="lineno">  350 </span><span class="spaces"></span><span class="istickedoff">indSemExpr FalseCExpr             = retE FalseCExpr (SymType BoolType)</span>
+<span class="lineno">  351 </span><span class="spaces"></span><span class="istickedoff">indSemExpr UnitCExpr              = retE UnitCExpr (SymType UnitType)</span>
+<span class="lineno">  352 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (ConstExpr i)          = semConstExpr i</span>
+<span class="lineno">  353 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (ConstConstrExpr i)    = semConstConstrExpr i</span>
+<span class="lineno">  354 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (FunAppExpr i es)      = semFunAppExpr i es</span>
+<span class="lineno">  355 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (ConstrAppExpr i es)   = semConstrAppExpr i es</span>
+<span class="lineno">  356 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (ArrayDim i dim)       = semArrayDim i dim</span>
+<span class="lineno">  357 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (UnOpExpr op e)        = semUnOp op e</span>
+<span class="lineno">  358 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (BinOpExpr op d e)     = semBinOp op d e</span>
+<span class="lineno">  359 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (ArrayAccess i es)     = semArrayAccess i es</span>
+<span class="lineno">  360 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (DeleteExpr e)         = semDeleteExpr e</span>
+<span class="lineno">  361 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (BeginExpr e)          = getNodeType e &gt;&gt;= retE (BeginExpr e)</span>
+<span class="lineno">  362 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (IfThenElseExpr c d e) = semIfThenElseExpr c d e</span>
+<span class="lineno">  363 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (IfThenExpr c e)       = semIfThenExpr c e</span>
+<span class="lineno">  364 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (WhileExpr c e)        = semWhileExpr c e</span>
+<span class="lineno">  365 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (ForExpr i l u e)      = semForExpr i l u e</span>
+<span class="lineno">  366 </span><span class="spaces"></span><span class="istickedoff">indSemExpr (ForDownExpr i u l e)  = semForDownExpr i u l e</span></span>
+<span class="lineno">  367 </span>
+<span class="lineno">  368 </span>-- All functions implementing the inductive step
+<span class="lineno">  369 </span>-- of the analysis of the expression for each case
+<span class="lineno">  370 </span>
+<span class="lineno">  371 </span>semConstExpr :: Identifier -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  372 </span><span class="decl"><span class="istickedoff">semConstExpr i = do</span>
+<span class="lineno">  373 </span><span class="spaces">    </span><span class="istickedoff">entry &lt;- findName i</span>
+<span class="lineno">  374 </span><span class="spaces">    </span><span class="istickedoff">case entry of</span>
+<span class="lineno">  375 </span><span class="spaces">        </span><span class="istickedoff">FunEntry ft _ -&gt; do</span>
+<span class="lineno">  376 </span><span class="spaces">            </span><span class="istickedoff">t &lt;- inst ft</span>
+<span class="lineno">  377 </span><span class="spaces">            </span><span class="istickedoff">retE (ConstExpr i) t</span>
+<span class="lineno">  378 </span><span class="spaces">        </span><span class="istickedoff">ParamEntry t _ -&gt; do</span>
+<span class="lineno">  379 </span><span class="spaces">            </span><span class="istickedoff">retE (ConstExpr i) t</span>
+<span class="lineno">  380 </span><span class="spaces">        </span><span class="istickedoff">MutableEntry t -&gt; do</span>
+<span class="lineno">  381 </span><span class="spaces">            </span><span class="istickedoff">retE (ConstExpr i) t</span>
+<span class="lineno">  382 </span><span class="spaces">        </span><span class="istickedoff">ArrayEntry t _ -&gt; do</span>
+<span class="lineno">  383 </span><span class="spaces">            </span><span class="istickedoff">retE (ConstExpr i) t</span>
+<span class="lineno">  384 </span><span class="spaces">        </span><span class="istickedoff">PatternEntry t -&gt; do</span>
+<span class="lineno">  385 </span><span class="spaces">            </span><span class="istickedoff">retE (ConstExpr <span class="nottickedoff">i</span>) t</span>
+<span class="lineno">  386 </span><span class="spaces">        </span><span class="istickedoff">ConstrEntry {} -&gt; <span class="nottickedoff">throwInternalError $</span></span>
+<span class="lineno">  387 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot;Constr entry: &quot; ++ show entry ++ &quot; is not expected for identifier key &quot; ++ i</span></span></span>
+<span class="lineno">  388 </span>
+<span class="lineno">  389 </span>semConstConstrExpr :: ConstrIdentifier -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  390 </span><span class="decl"><span class="istickedoff">semConstConstrExpr i = do</span>
+<span class="lineno">  391 </span><span class="spaces">    </span><span class="istickedoff">entry &lt;- findName i</span>
+<span class="lineno">  392 </span><span class="spaces">    </span><span class="istickedoff">case entry of</span>
+<span class="lineno">  393 </span><span class="spaces">        </span><span class="istickedoff">ConstrEntry t _ _ -&gt; retE (ConstConstrExpr i) (constTypeToSymbolType t)</span>
+<span class="lineno">  394 </span><span class="spaces">        </span><span class="istickedoff">_                 -&gt; <span class="nottickedoff">throwInternalError $</span></span>
+<span class="lineno">  395 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot;Entry: &quot; ++ show entry ++ &quot; is not expected for constructor identifier key &quot; ++ i</span></span></span>
+<span class="lineno">  396 </span>
+<span class="lineno">  397 </span>semFunAppExpr :: Identifier -&gt; [Expr SemanticTag] -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  398 </span><span class="decl"><span class="istickedoff">semFunAppExpr i es = let funTypeToArgTypes = funToArgs stCoAlg in do</span>
+<span class="lineno">  399 </span><span class="spaces">    </span><span class="istickedoff">entry &lt;- findName i</span>
+<span class="lineno">  400 </span><span class="spaces">    </span><span class="istickedoff">case entry of</span>
+<span class="lineno">  401 </span><span class="spaces">        </span><span class="istickedoff">FunEntry ft ps -&gt;</span>
+<span class="lineno">  402 </span><span class="spaces">            </span><span class="istickedoff">case compare (length es) (length ps) of</span>
+<span class="lineno">  403 </span><span class="spaces">                </span><span class="istickedoff">LT -&gt; <span class="nottickedoff">throwSem $ &quot;Function &quot; ++ i ++ &quot; is applied to too few arguments&quot;</span></span>
+<span class="lineno">  404 </span><span class="spaces">                </span><span class="istickedoff">GT -&gt; <span class="nottickedoff">throwSem $ &quot;Function &quot; ++ i ++ &quot; is applied to too many arguments&quot;</span></span>
+<span class="lineno">  405 </span><span class="spaces">                </span><span class="istickedoff">EQ -&gt; do</span>
+<span class="lineno">  406 </span><span class="spaces">                    </span><span class="istickedoff">ts &lt;- mapM getNodeType es</span>
+<span class="lineno">  407 </span><span class="spaces">                    </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  408 </span><span class="spaces">                    </span><span class="istickedoff">t &lt;- inst ft</span>
+<span class="lineno">  409 </span><span class="spaces">                    </span><span class="istickedoff">let inf = paramsToFun SymType ts v</span>
+<span class="lineno">  410 </span><span class="spaces">                    </span><span class="istickedoff">unify (t, inf)</span>
+<span class="lineno">  411 </span><span class="spaces">                    </span><span class="istickedoff">res &lt;- mapM resolveNodeType es</span>
+<span class="lineno">  412 </span><span class="spaces">                    </span><span class="istickedoff">rv &lt;- resolveType v</span>
+<span class="lineno">  413 </span><span class="spaces">                    </span><span class="istickedoff">checkConstraint rv (NotAllowedFunType $ <span class="nottickedoff">&quot;Function &quot; ++ i ++ &quot; cannot return function type: &quot; ++ pretty rv</span>)</span>
+<span class="lineno">  414 </span><span class="spaces">                    </span><span class="istickedoff">retE (FunAppExpr i res) rv</span>
+<span class="lineno">  415 </span><span class="spaces">        </span><span class="istickedoff">ParamEntry t _ -&gt; do</span>
+<span class="lineno">  416 </span><span class="spaces">            </span><span class="istickedoff">ts &lt;- mapM getNodeType es</span>
+<span class="lineno">  417 </span><span class="spaces">            </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  418 </span><span class="spaces">            </span><span class="istickedoff">let inf = paramsToFun SymType ts v</span>
+<span class="lineno">  419 </span><span class="spaces">            </span><span class="istickedoff">unify (t, inf)</span>
+<span class="lineno">  420 </span><span class="spaces">            </span><span class="istickedoff">res &lt;- mapM resolveNodeType es</span>
+<span class="lineno">  421 </span><span class="spaces">            </span><span class="istickedoff">rv &lt;- resolveType v</span>
+<span class="lineno">  422 </span><span class="spaces">            </span><span class="istickedoff">rt &lt;- resolveType t</span>
+<span class="lineno">  423 </span><span class="spaces">            </span><span class="istickedoff">let argTypes = funTypeToArgTypes rt</span>
+<span class="lineno">  424 </span><span class="spaces">            </span><span class="istickedoff">case compare (length es) (length argTypes) of</span>
+<span class="lineno">  425 </span><span class="spaces">                </span><span class="istickedoff">LT -&gt; <span class="nottickedoff">throwSem $ &quot;Param &quot; ++ i ++ &quot; of type &quot; ++ pretty t ++ &quot; is applied to too few arguments&quot;</span></span>
+<span class="lineno">  426 </span><span class="spaces">                </span><span class="istickedoff">GT -&gt; <span class="nottickedoff">throwSem $ &quot;Param &quot; ++ i ++ &quot; of type &quot; ++ pretty t ++ &quot; is applied to too many arguments&quot;</span></span>
+<span class="lineno">  427 </span><span class="spaces">                </span><span class="istickedoff">EQ -&gt; retE (FunAppExpr i res) rv</span>
+<span class="lineno">  428 </span><span class="spaces">        </span><span class="istickedoff">PatternEntry t -&gt; do</span>
+<span class="lineno">  429 </span><span class="spaces">            </span><span class="istickedoff">ts &lt;- mapM getNodeType es</span>
+<span class="lineno">  430 </span><span class="spaces">            </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  431 </span><span class="spaces">            </span><span class="istickedoff">let inf = paramsToFun SymType ts v</span>
+<span class="lineno">  432 </span><span class="spaces">            </span><span class="istickedoff">unify (t, inf)</span>
+<span class="lineno">  433 </span><span class="spaces">            </span><span class="istickedoff">res &lt;- mapM resolveNodeType es</span>
+<span class="lineno">  434 </span><span class="spaces">            </span><span class="istickedoff">rv &lt;- resolveType v</span>
+<span class="lineno">  435 </span><span class="spaces">            </span><span class="istickedoff">rt &lt;- resolveType t</span>
+<span class="lineno">  436 </span><span class="spaces">            </span><span class="istickedoff">let argTypes = funTypeToArgTypes rt</span>
+<span class="lineno">  437 </span><span class="spaces">            </span><span class="istickedoff">case compare (length es) (length argTypes) of</span>
+<span class="lineno">  438 </span><span class="spaces">                </span><span class="istickedoff">LT -&gt; <span class="nottickedoff">throwSem $ &quot;Pattern &quot; ++ i ++ &quot; of type &quot; ++ pretty t ++ &quot; is applied to too few arguments&quot;</span></span>
+<span class="lineno">  439 </span><span class="spaces">                </span><span class="istickedoff">GT -&gt; <span class="nottickedoff">throwSem $ &quot;Pattern &quot; ++ i ++ &quot; of type &quot; ++ pretty t ++ &quot; is applied to too many arguments&quot;</span></span>
+<span class="lineno">  440 </span><span class="spaces">                </span><span class="istickedoff">EQ -&gt; retE <span class="nottickedoff">(FunAppExpr i res)</span> rv</span>
+<span class="lineno">  441 </span><span class="spaces">        </span><span class="istickedoff">MutableEntry _    -&gt; throwSem $ <span class="nottickedoff">&quot;Cannot apply arguments to the mutable variable &quot; ++ i</span></span>
+<span class="lineno">  442 </span><span class="spaces">        </span><span class="istickedoff">ArrayEntry _ _    -&gt; <span class="nottickedoff">throwSem $ &quot;Cannot apply arguments to array &quot; ++ i</span></span>
+<span class="lineno">  443 </span><span class="spaces">        </span><span class="istickedoff">ConstrEntry {}    -&gt; <span class="nottickedoff">throwSem $ &quot;Cannot apply function arguments to constr &quot; ++ i</span></span></span>
+<span class="lineno">  444 </span>
+<span class="lineno">  445 </span>semConstrAppExpr :: ConstrIdentifier -&gt; [Expr SemanticTag] -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  446 </span><span class="decl"><span class="istickedoff">semConstrAppExpr i es = do</span>
+<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">entry &lt;- findName i</span>
+<span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">case entry of</span>
+<span class="lineno">  449 </span><span class="spaces">        </span><span class="istickedoff">ConstrEntry t psT _ -&gt;</span>
+<span class="lineno">  450 </span><span class="spaces">            </span><span class="istickedoff">case compare (length es) (length psT) of</span>
+<span class="lineno">  451 </span><span class="spaces">                </span><span class="istickedoff">LT -&gt; throwSem $ <span class="nottickedoff">&quot;Constructor &quot; ++ i ++ &quot; is applied to too few arguments&quot;</span></span>
+<span class="lineno">  452 </span><span class="spaces">                </span><span class="istickedoff">GT -&gt; <span class="nottickedoff">throwSem $ &quot;Constructor &quot; ++ i ++ &quot; is applied to too many arguments&quot;</span></span>
+<span class="lineno">  453 </span><span class="spaces">                </span><span class="istickedoff">EQ -&gt; do</span>
+<span class="lineno">  454 </span><span class="spaces">                    </span><span class="istickedoff">ts &lt;- mapM getNodeType es</span>
+<span class="lineno">  455 </span><span class="spaces">                    </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  456 </span><span class="spaces">                    </span><span class="istickedoff">let inf = paramsToFun SymType ts v</span>
+<span class="lineno">  457 </span><span class="spaces">                    </span><span class="istickedoff">unify (constTypeToSymbolType t, inf)</span>
+<span class="lineno">  458 </span><span class="spaces">                    </span><span class="istickedoff">res &lt;- mapM resolveNodeType es</span>
+<span class="lineno">  459 </span><span class="spaces">                    </span><span class="istickedoff">rv &lt;- resolveType v</span>
+<span class="lineno">  460 </span><span class="spaces">                    </span><span class="istickedoff">checkConstraint rv (NotAllowedFunType $ <span class="nottickedoff">&quot;Constructor &quot; ++ i ++ &quot; cannot return function type: &quot; ++ pretty rv</span>)</span>
+<span class="lineno">  461 </span><span class="spaces">                    </span><span class="istickedoff">retE (ConstrAppExpr i res) rv</span>
+<span class="lineno">  462 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwInternalError $</span></span>
+<span class="lineno">  463 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot;Entry: &quot; ++ show entry ++ &quot; is not expected for constructor identifier key &quot; ++ i</span></span></span>
+<span class="lineno">  464 </span>
+<span class="lineno">  465 </span>semArrayDim :: Identifier -&gt; Int -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  466 </span><span class="decl"><span class="istickedoff">semArrayDim i dim | dim &lt; 1 = throwSem $ <span class="nottickedoff">&quot;Cannot compute the &quot; ++ show dim ++ &quot; dimension of array &quot; ++ i</span></span>
+<span class="lineno">  467 </span><span class="spaces"></span><span class="istickedoff">semArrayDim i dim = findName i &gt;&gt;= run where</span>
+<span class="lineno">  468 </span><span class="spaces">    </span><span class="istickedoff">run (ArrayEntry _ dims)</span>
+<span class="lineno">  469 </span><span class="spaces">      </span><span class="istickedoff">| dims &lt; dim = throwSem $ <span class="nottickedoff">&quot;Cannot compute the &quot; ++ show dim ++ &quot; dimension of &quot; ++ show dims ++ &quot;-dim array &quot; ++ i</span></span>
+<span class="lineno">  470 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = retE (ArrayDim i dim) (SymType IntType)</span>
+<span class="lineno">  471 </span><span class="spaces">    </span><span class="istickedoff">run (ParamEntry t _) = do</span>
+<span class="lineno">  472 </span><span class="spaces">        </span><span class="istickedoff">checkConstraint t (ArrayOfAtLeastDim dim $ <span class="nottickedoff">&quot;Cannot compute the dimension &quot; ++ show dim ++ &quot; for type &quot; ++ pretty t</span>)</span>
+<span class="lineno">  473 </span><span class="spaces">        </span><span class="istickedoff">retE (ArrayDim i dim) (SymType IntType)</span>
+<span class="lineno">  474 </span><span class="spaces">    </span><span class="istickedoff">run (FunEntry sch []) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  475 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">t &lt;- inst sch</span></span>
+<span class="lineno">  476 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">checkConstraint t (ArrayOfAtLeastDim dim $ &quot;Cannot compute the dimension &quot; ++ show dim ++ &quot; for type &quot; ++ pretty t)</span></span>
+<span class="lineno">  477 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">retE (ArrayDim i dim) (SymType IntType)</span></span>
+<span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">run (PatternEntry t) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  479 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">checkConstraint t (ArrayOfAtLeastDim dim $ &quot;Cannot compute the dimension &quot; ++ show dim ++ &quot; for type &quot; ++ pretty t)</span></span>
+<span class="lineno">  480 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">retE (ArrayDim i dim) (SymType IntType)</span></span>
+<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">run _ = <span class="nottickedoff">throwSem $ &quot;No array &quot; ++ i ++ &quot; in scope&quot;</span></span></span>
+<span class="lineno">  482 </span>
+<span class="lineno">  483 </span>semLetIn :: LetDef SemanticTag -&gt; Expr SemanticTag -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  484 </span><span class="decl"><span class="istickedoff">semLetIn l e = do</span>
+<span class="lineno">  485 </span><span class="spaces">    </span><span class="istickedoff">p &lt;- getSemPosn</span>
+<span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff">closeScopeInNames</span>
+<span class="lineno">  487 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- getNodeType e</span>
+<span class="lineno">  488 </span><span class="spaces">    </span><span class="istickedoff">return $ LetIn l e SemTag{posn = p, typeInfo = NodeType t}</span></span>
+<span class="lineno">  489 </span>
+<span class="lineno">  490 </span>semUnOp :: UnOp -&gt; Expr SemanticTag -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  491 </span><span class="decl"><span class="istickedoff">semUnOp op e = do</span>
+<span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- getNodeType e</span>
+<span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  494 </span><span class="spaces">    </span><span class="istickedoff">case op of</span>
+<span class="lineno">  495 </span><span class="spaces">        </span><span class="istickedoff">BangOp         -&gt; unify (SymType (RefType v), t)</span>
+<span class="lineno">  496 </span><span class="spaces">        </span><span class="istickedoff">PlusUnOp       -&gt; unify (SymType IntType, t)</span>
+<span class="lineno">  497 </span><span class="spaces">        </span><span class="istickedoff">MinusUnOp      -&gt; unify (SymType IntType, t)</span>
+<span class="lineno">  498 </span><span class="spaces">        </span><span class="istickedoff">PlusFloatUnOp  -&gt; unify (SymType FloatType, t)</span>
+<span class="lineno">  499 </span><span class="spaces">        </span><span class="istickedoff">MinusFloatUnOp -&gt; unify (SymType FloatType, t)</span>
+<span class="lineno">  500 </span><span class="spaces">        </span><span class="istickedoff">NotOp          -&gt; unify (SymType BoolType, t)</span>
+<span class="lineno">  501 </span><span class="spaces">    </span><span class="istickedoff">rE &lt;- resolveNodeType e</span>
+<span class="lineno">  502 </span><span class="spaces">    </span><span class="istickedoff">rt &lt;- resolveType t</span>
+<span class="lineno">  503 </span><span class="spaces">    </span><span class="istickedoff">let finalT = if op == BangOp then v else rt</span>
+<span class="lineno">  504 </span><span class="spaces">    </span><span class="istickedoff">retE (UnOpExpr op rE) finalT</span></span>
+<span class="lineno">  505 </span>
+<span class="lineno">  506 </span>semBinOp :: BinOp -&gt; Expr SemanticTag -&gt; Expr SemanticTag -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  507 </span><span class="decl"><span class="istickedoff">semBinOp op d e = do</span>
+<span class="lineno">  508 </span><span class="spaces">    </span><span class="istickedoff">s &lt;- getNodeType d</span>
+<span class="lineno">  509 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- getNodeType e</span>
+<span class="lineno">  510 </span><span class="spaces">    </span><span class="istickedoff">outT &lt;- freshTVar</span>
+<span class="lineno">  511 </span><span class="spaces">    </span><span class="istickedoff">case op of</span>
+<span class="lineno">  512 </span><span class="spaces">        </span><span class="istickedoff">PlusOp          -&gt; unifyAll (SymType IntType) s t outT</span>
+<span class="lineno">  513 </span><span class="spaces">        </span><span class="istickedoff">MinusOp         -&gt; unifyAll (SymType IntType) s t outT</span>
+<span class="lineno">  514 </span><span class="spaces">        </span><span class="istickedoff">TimesOp         -&gt; unifyAll (SymType IntType) s t outT</span>
+<span class="lineno">  515 </span><span class="spaces">        </span><span class="istickedoff">DivOp           -&gt; unifyAll (SymType IntType) s t outT</span>
+<span class="lineno">  516 </span><span class="spaces">        </span><span class="istickedoff">ModOp           -&gt; unifyAll (SymType IntType) s t outT</span>
+<span class="lineno">  517 </span><span class="spaces">        </span><span class="istickedoff">PlusFloatOp     -&gt; unifyAll (SymType FloatType) s t outT</span>
+<span class="lineno">  518 </span><span class="spaces">        </span><span class="istickedoff">MinusFloatOp    -&gt; unifyAll (SymType FloatType) s t outT</span>
+<span class="lineno">  519 </span><span class="spaces">        </span><span class="istickedoff">TimesFloatOp    -&gt; unifyAll (SymType FloatType) s t outT</span>
+<span class="lineno">  520 </span><span class="spaces">        </span><span class="istickedoff">DivFloatOp      -&gt; unifyAll (SymType FloatType) s t outT</span>
+<span class="lineno">  521 </span><span class="spaces">        </span><span class="istickedoff">ExpOp           -&gt; unifyAll (SymType FloatType) s t outT</span>
+<span class="lineno">  522 </span><span class="spaces">        </span><span class="istickedoff">AndOp           -&gt; unifyAll (SymType BoolType) s t outT</span>
+<span class="lineno">  523 </span><span class="spaces">        </span><span class="istickedoff">OrOp            -&gt; unifyAll (SymType BoolType) s t outT</span>
+<span class="lineno">  524 </span><span class="spaces">        </span><span class="istickedoff">SemicolonOp     -&gt; unify (t, outT)</span>
+<span class="lineno">  525 </span><span class="spaces">        </span><span class="istickedoff">AssignMutableOp -&gt; do</span>
+<span class="lineno">  526 </span><span class="spaces">            </span><span class="istickedoff">unify (s, SymType (RefType t))</span>
+<span class="lineno">  527 </span><span class="spaces">            </span><span class="istickedoff">unify (SymType UnitType, outT)</span>
+<span class="lineno">  528 </span><span class="spaces">        </span><span class="istickedoff">EqOp            -&gt; unifyEq s t outT</span>
+<span class="lineno">  529 </span><span class="spaces">        </span><span class="istickedoff">NotEqOp         -&gt; unifyEq s t outT</span>
+<span class="lineno">  530 </span><span class="spaces">        </span><span class="istickedoff">NatEqOp         -&gt; unifyEq s t outT</span>
+<span class="lineno">  531 </span><span class="spaces">        </span><span class="istickedoff">NotNatEqOp      -&gt; unifyEq s t outT</span>
+<span class="lineno">  532 </span><span class="spaces">        </span><span class="istickedoff">LTOp            -&gt; unifyComp s t outT</span>
+<span class="lineno">  533 </span><span class="spaces">        </span><span class="istickedoff">GTOp            -&gt; unifyComp s t outT</span>
+<span class="lineno">  534 </span><span class="spaces">        </span><span class="istickedoff">LEqOp           -&gt; unifyComp s t outT</span>
+<span class="lineno">  535 </span><span class="spaces">        </span><span class="istickedoff">GEqOp           -&gt; unifyComp s t outT</span>
+<span class="lineno">  536 </span><span class="spaces">    </span><span class="istickedoff">rd &lt;- resolveNodeType d</span>
+<span class="lineno">  537 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- resolveNodeType e</span>
+<span class="lineno">  538 </span><span class="spaces">    </span><span class="istickedoff">retE (BinOpExpr op rd re) outT where</span>
+<span class="lineno">  539 </span><span class="spaces">        </span><span class="istickedoff">unifyAll expected s' t' outT' = do</span>
+<span class="lineno">  540 </span><span class="spaces">            </span><span class="istickedoff">unify (expected, s')</span>
+<span class="lineno">  541 </span><span class="spaces">            </span><span class="istickedoff">unify (expected, t')</span>
+<span class="lineno">  542 </span><span class="spaces">            </span><span class="istickedoff">unify (expected, outT')</span>
+<span class="lineno">  543 </span><span class="spaces">        </span><span class="istickedoff">unifyEq s' t' outT' = do</span>
+<span class="lineno">  544 </span><span class="spaces">            </span><span class="istickedoff">checkConstraint s' (NotAllowedFunType $ <span class="nottickedoff">&quot;Cannot apply operator &quot; ++ pretty op ++ &quot; to fun types&quot;</span>)</span>
+<span class="lineno">  545 </span><span class="spaces">            </span><span class="istickedoff">checkConstraint s' (NotAllowedArrayType $ <span class="nottickedoff">&quot;Cannot apply operator &quot; ++ pretty op ++ &quot; to array types&quot;</span>)</span>
+<span class="lineno">  546 </span><span class="spaces">            </span><span class="istickedoff">checkConstraint t' (NotAllowedFunType $ <span class="nottickedoff">&quot;Cannot apply operator &quot; ++ pretty op ++ &quot; to fun types&quot;</span>)</span>
+<span class="lineno">  547 </span><span class="spaces">            </span><span class="istickedoff">checkConstraint t' (NotAllowedArrayType $ <span class="nottickedoff">&quot;Cannot apply operator &quot; ++ pretty op ++ &quot; to array types&quot;</span>)</span>
+<span class="lineno">  548 </span><span class="spaces">            </span><span class="istickedoff">unify (s', t')</span>
+<span class="lineno">  549 </span><span class="spaces">            </span><span class="istickedoff">unify (SymType BoolType, outT')</span>
+<span class="lineno">  550 </span><span class="spaces">        </span><span class="istickedoff">unifyComp s' t' outT' = do</span>
+<span class="lineno">  551 </span><span class="spaces">            </span><span class="istickedoff">let c = mkAllowedTypes [ConstType IntType, ConstType FloatType, ConstType CharType]</span>
+<span class="lineno">  552 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">(&quot;Operator &quot; ++ pretty op ++ &quot; can only be applied to int, float or char&quot;)</span></span>
+<span class="lineno">  553 </span><span class="spaces">            </span><span class="istickedoff">checkConstraint s' c</span>
+<span class="lineno">  554 </span><span class="spaces">            </span><span class="istickedoff">checkConstraint t' c</span>
+<span class="lineno">  555 </span><span class="spaces">            </span><span class="istickedoff">unify (s', t')</span>
+<span class="lineno">  556 </span><span class="spaces">            </span><span class="istickedoff">unify (SymType BoolType, outT')</span></span>
+<span class="lineno">  557 </span>
+<span class="lineno">  558 </span>semArrayAccess :: Identifier -&gt; [Expr SemanticTag] -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  559 </span><span class="decl"><span class="istickedoff">semArrayAccess i es = do</span>
+<span class="lineno">  560 </span><span class="spaces">    </span><span class="istickedoff">entry &lt;- findName i</span>
+<span class="lineno">  561 </span><span class="spaces">    </span><span class="istickedoff">case entry of</span>
+<span class="lineno">  562 </span><span class="spaces">        </span><span class="istickedoff">ArrayEntry t dims -&gt;</span>
+<span class="lineno">  563 </span><span class="spaces">            </span><span class="istickedoff">case compare (length es) dims of</span>
+<span class="lineno">  564 </span><span class="spaces">                </span><span class="istickedoff">LT -&gt; throwSem $ <span class="nottickedoff">&quot;Array &quot; ++ i ++ &quot; is applied to too few arguments&quot;</span></span>
+<span class="lineno">  565 </span><span class="spaces">                </span><span class="istickedoff">GT -&gt; throwSem $ <span class="nottickedoff">&quot;Array &quot; ++ i ++ &quot; is applied to too many arguments&quot;</span></span>
+<span class="lineno">  566 </span><span class="spaces">                </span><span class="istickedoff">EQ -&gt; do</span>
+<span class="lineno">  567 </span><span class="spaces">                    </span><span class="istickedoff">ts &lt;- mapM getNodeType es</span>
+<span class="lineno">  568 </span><span class="spaces">                    </span><span class="istickedoff">mapM_ (\et -&gt; unify (SymType IntType, et)) ts</span>
+<span class="lineno">  569 </span><span class="spaces">                    </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  570 </span><span class="spaces">                    </span><span class="istickedoff">let inf = SymType (ArrayType dims v)</span>
+<span class="lineno">  571 </span><span class="spaces">                    </span><span class="istickedoff">unify (t, inf)</span>
+<span class="lineno">  572 </span><span class="spaces">                    </span><span class="istickedoff">res &lt;- mapM resolveNodeType es</span>
+<span class="lineno">  573 </span><span class="spaces">                    </span><span class="istickedoff">rv &lt;- resolveType v</span>
+<span class="lineno">  574 </span><span class="spaces">                    </span><span class="istickedoff">retE (ArrayAccess i res) (SymType (RefType rv))</span>
+<span class="lineno">  575 </span><span class="spaces">        </span><span class="istickedoff">ParamEntry t _ -&gt; do</span>
+<span class="lineno">  576 </span><span class="spaces">            </span><span class="istickedoff">ts &lt;- mapM getNodeType es</span>
+<span class="lineno">  577 </span><span class="spaces">            </span><span class="istickedoff">mapM_ (\et -&gt; unify (SymType IntType, et)) ts</span>
+<span class="lineno">  578 </span><span class="spaces">            </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  579 </span><span class="spaces">            </span><span class="istickedoff">let inf = SymType (ArrayType (length es) v)</span>
+<span class="lineno">  580 </span><span class="spaces">            </span><span class="istickedoff">unify (t, inf)</span>
+<span class="lineno">  581 </span><span class="spaces">            </span><span class="istickedoff">res &lt;- mapM resolveNodeType es</span>
+<span class="lineno">  582 </span><span class="spaces">            </span><span class="istickedoff">rv &lt;- resolveType v</span>
+<span class="lineno">  583 </span><span class="spaces">            </span><span class="istickedoff">retE (ArrayAccess i res) (SymType (RefType rv))</span>
+<span class="lineno">  584 </span><span class="spaces">        </span><span class="istickedoff">FunEntry s []  -&gt; do</span>
+<span class="lineno">  585 </span><span class="spaces">            </span><span class="istickedoff">ts &lt;- mapM getNodeType es</span>
+<span class="lineno">  586 </span><span class="spaces">            </span><span class="istickedoff">mapM_ (\et -&gt; unify (SymType IntType, et)) ts</span>
+<span class="lineno">  587 </span><span class="spaces">            </span><span class="istickedoff">t &lt;- inst s</span>
+<span class="lineno">  588 </span><span class="spaces">            </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  589 </span><span class="spaces">            </span><span class="istickedoff">let inf = SymType (ArrayType <span class="nottickedoff">(length es)</span> v)</span>
+<span class="lineno">  590 </span><span class="spaces">            </span><span class="istickedoff">unify (t, inf)</span>
+<span class="lineno">  591 </span><span class="spaces">            </span><span class="istickedoff">res &lt;- <span class="nottickedoff">mapM resolveNodeType es</span></span>
+<span class="lineno">  592 </span><span class="spaces">            </span><span class="istickedoff">rv &lt;- <span class="nottickedoff">resolveType v</span></span>
+<span class="lineno">  593 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">retE (ArrayAccess i res) (SymType (RefType rv))</span></span>
+<span class="lineno">  594 </span><span class="spaces">        </span><span class="istickedoff">PatternEntry t -&gt; do</span>
+<span class="lineno">  595 </span><span class="spaces">            </span><span class="istickedoff">ts &lt;- mapM getNodeType es</span>
+<span class="lineno">  596 </span><span class="spaces">            </span><span class="istickedoff">mapM_ (\et -&gt; unify (SymType IntType, et)) ts</span>
+<span class="lineno">  597 </span><span class="spaces">            </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  598 </span><span class="spaces">            </span><span class="istickedoff">let inf = SymType (ArrayType <span class="nottickedoff">(length es)</span> v)</span>
+<span class="lineno">  599 </span><span class="spaces">            </span><span class="istickedoff">unify (t, inf)</span>
+<span class="lineno">  600 </span><span class="spaces">            </span><span class="istickedoff">res &lt;- mapM resolveNodeType es</span>
+<span class="lineno">  601 </span><span class="spaces">            </span><span class="istickedoff">rv &lt;- resolveType v</span>
+<span class="lineno">  602 </span><span class="spaces">            </span><span class="istickedoff">retE <span class="nottickedoff">(ArrayAccess i res)</span> <span class="nottickedoff">(SymType (RefType rv))</span></span>
+<span class="lineno">  603 </span><span class="spaces">        </span><span class="istickedoff">_    -&gt; <span class="nottickedoff">throwSem $ &quot;No array &quot; ++ i ++ &quot; found in scope&quot;</span></span></span>
+<span class="lineno">  604 </span>
+<span class="lineno">  605 </span>semNewType :: Type SemanticTag -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  606 </span><span class="decl"><span class="istickedoff">semNewType (Type (ArrayType {}) _) = throwSem <span class="nottickedoff">&quot;Cannot dynamically allocate memory for array types&quot;</span></span>
+<span class="lineno">  607 </span><span class="spaces"></span><span class="istickedoff">semNewType t = do</span>
+<span class="lineno">  608 </span><span class="spaces">    </span><span class="istickedoff">p &lt;- getSemPosn</span>
+<span class="lineno">  609 </span><span class="spaces">    </span><span class="istickedoff">let nt = SymType . RefType $ typeToSymbolType t</span>
+<span class="lineno">  610 </span><span class="spaces">    </span><span class="istickedoff">return $ NewType t SemTag{posn = p, typeInfo = NodeType nt}</span></span>
+<span class="lineno">  611 </span>
+<span class="lineno">  612 </span>semDeleteExpr :: Expr SemanticTag -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  613 </span><span class="decl"><span class="istickedoff">semDeleteExpr e = do</span>
+<span class="lineno">  614 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- getNodeType e</span>
+<span class="lineno">  615 </span><span class="spaces">    </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  616 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType (RefType v), t)</span>
+<span class="lineno">  617 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- resolveNodeType e</span>
+<span class="lineno">  618 </span><span class="spaces">    </span><span class="istickedoff">retE (DeleteExpr re) (SymType UnitType)</span></span>
+<span class="lineno">  619 </span>
+<span class="lineno">  620 </span>semIfThenElseExpr :: Expr SemanticTag
+<span class="lineno">  621 </span>                  -&gt; Expr SemanticTag
+<span class="lineno">  622 </span>                  -&gt; Expr SemanticTag
+<span class="lineno">  623 </span>                  -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  624 </span><span class="decl"><span class="istickedoff">semIfThenElseExpr c d e = do</span>
+<span class="lineno">  625 </span><span class="spaces">    </span><span class="istickedoff">ct &lt;- getNodeType c</span>
+<span class="lineno">  626 </span><span class="spaces">    </span><span class="istickedoff">dt &lt;- getNodeType d</span>
+<span class="lineno">  627 </span><span class="spaces">    </span><span class="istickedoff">et &lt;- getNodeType e</span>
+<span class="lineno">  628 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType BoolType, ct)</span>
+<span class="lineno">  629 </span><span class="spaces">    </span><span class="istickedoff">unify (dt, et)</span>
+<span class="lineno">  630 </span><span class="spaces">    </span><span class="istickedoff">rc &lt;- resolveNodeType c</span>
+<span class="lineno">  631 </span><span class="spaces">    </span><span class="istickedoff">rd &lt;- resolveNodeType d</span>
+<span class="lineno">  632 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- resolveNodeType e</span>
+<span class="lineno">  633 </span><span class="spaces">    </span><span class="istickedoff">outT &lt;- resolveType dt</span>
+<span class="lineno">  634 </span><span class="spaces">    </span><span class="istickedoff">retE (IfThenElseExpr rc rd re) outT</span></span>
+<span class="lineno">  635 </span>
+<span class="lineno">  636 </span>semIfThenExpr :: Expr SemanticTag
+<span class="lineno">  637 </span>              -&gt; Expr SemanticTag
+<span class="lineno">  638 </span>              -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  639 </span><span class="decl"><span class="istickedoff">semIfThenExpr c e = do</span>
+<span class="lineno">  640 </span><span class="spaces">    </span><span class="istickedoff">ct &lt;- getNodeType c</span>
+<span class="lineno">  641 </span><span class="spaces">    </span><span class="istickedoff">et &lt;- getNodeType e</span>
+<span class="lineno">  642 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType BoolType, ct)</span>
+<span class="lineno">  643 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType UnitType, et)</span>
+<span class="lineno">  644 </span><span class="spaces">    </span><span class="istickedoff">rc &lt;- resolveNodeType c</span>
+<span class="lineno">  645 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- resolveNodeType e</span>
+<span class="lineno">  646 </span><span class="spaces">    </span><span class="istickedoff">retE (IfThenExpr rc re) (SymType UnitType)</span></span>
+<span class="lineno">  647 </span>
+<span class="lineno">  648 </span>semWhileExpr :: Expr SemanticTag
+<span class="lineno">  649 </span>             -&gt; Expr SemanticTag
+<span class="lineno">  650 </span>             -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  651 </span><span class="decl"><span class="istickedoff">semWhileExpr c e = do</span>
+<span class="lineno">  652 </span><span class="spaces">    </span><span class="istickedoff">ct &lt;- getNodeType c</span>
+<span class="lineno">  653 </span><span class="spaces">    </span><span class="istickedoff">et &lt;- getNodeType e</span>
+<span class="lineno">  654 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType BoolType, ct)</span>
+<span class="lineno">  655 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType UnitType, et)</span>
+<span class="lineno">  656 </span><span class="spaces">    </span><span class="istickedoff">rc &lt;- resolveNodeType c</span>
+<span class="lineno">  657 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- resolveNodeType e</span>
+<span class="lineno">  658 </span><span class="spaces">    </span><span class="istickedoff">retE (WhileExpr rc re) (SymType UnitType)</span></span>
+<span class="lineno">  659 </span>
+<span class="lineno">  660 </span>semForExpr :: Identifier
+<span class="lineno">  661 </span>           -&gt; Expr SemanticTag
+<span class="lineno">  662 </span>           -&gt; Expr SemanticTag
+<span class="lineno">  663 </span>           -&gt; Expr SemanticTag
+<span class="lineno">  664 </span>           -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  665 </span><span class="decl"><span class="istickedoff">semForExpr i l u e = do</span>
+<span class="lineno">  666 </span><span class="spaces">    </span><span class="istickedoff">lt &lt;- getNodeType l</span>
+<span class="lineno">  667 </span><span class="spaces">    </span><span class="istickedoff">ut &lt;- getNodeType u</span>
+<span class="lineno">  668 </span><span class="spaces">    </span><span class="istickedoff">et &lt;- getNodeType e</span>
+<span class="lineno">  669 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType IntType, lt)</span>
+<span class="lineno">  670 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType IntType, ut)</span>
+<span class="lineno">  671 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType UnitType, et)</span>
+<span class="lineno">  672 </span><span class="spaces">    </span><span class="istickedoff">rl &lt;- resolveNodeType l</span>
+<span class="lineno">  673 </span><span class="spaces">    </span><span class="istickedoff">ru &lt;- resolveNodeType u</span>
+<span class="lineno">  674 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- resolveNodeType e</span>
+<span class="lineno">  675 </span><span class="spaces">    </span><span class="istickedoff">retE (ForExpr i rl ru re) (SymType UnitType)</span></span>
+<span class="lineno">  676 </span>
+<span class="lineno">  677 </span>semForDownExpr :: Identifier
+<span class="lineno">  678 </span>               -&gt; Expr SemanticTag
+<span class="lineno">  679 </span>               -&gt; Expr SemanticTag
+<span class="lineno">  680 </span>               -&gt; Expr SemanticTag
+<span class="lineno">  681 </span>               -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  682 </span><span class="decl"><span class="istickedoff">semForDownExpr i u l e = do</span>
+<span class="lineno">  683 </span><span class="spaces">    </span><span class="istickedoff">ut &lt;- getNodeType u</span>
+<span class="lineno">  684 </span><span class="spaces">    </span><span class="istickedoff">lt &lt;- getNodeType l</span>
+<span class="lineno">  685 </span><span class="spaces">    </span><span class="istickedoff">et &lt;- getNodeType e</span>
+<span class="lineno">  686 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType IntType, ut)</span>
+<span class="lineno">  687 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType IntType, lt)</span>
+<span class="lineno">  688 </span><span class="spaces">    </span><span class="istickedoff">unify (SymType UnitType, et)</span>
+<span class="lineno">  689 </span><span class="spaces">    </span><span class="istickedoff">ru &lt;- resolveNodeType u</span>
+<span class="lineno">  690 </span><span class="spaces">    </span><span class="istickedoff">rl &lt;- resolveNodeType l</span>
+<span class="lineno">  691 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- resolveNodeType e</span>
+<span class="lineno">  692 </span><span class="spaces">    </span><span class="istickedoff">retE (ForDownExpr i ru rl re) (SymType UnitType)</span></span>
+<span class="lineno">  693 </span>
+<span class="lineno">  694 </span>semMatchExpr :: Expr SemanticTag
+<span class="lineno">  695 </span>             -&gt; [Clause SemanticTag]
+<span class="lineno">  696 </span>             -&gt; Parser (Expr SemanticTag)
+<span class="lineno">  697 </span><span class="decl"><span class="istickedoff">semMatchExpr e cs = do</span>
+<span class="lineno">  698 </span><span class="spaces">    </span><span class="istickedoff">p &lt;- getSemPosn</span>
+<span class="lineno">  699 </span><span class="spaces">    </span><span class="istickedoff">et &lt;- getNodeType e</span>
+<span class="lineno">  700 </span><span class="spaces">    </span><span class="istickedoff">checkConstraint et (AllowedUserDefinedType <span class="nottickedoff">&quot;Can only apply pattern matching to user defined type&quot;</span>)</span>
+<span class="lineno">  701 </span><span class="spaces">    </span><span class="istickedoff">let getPat (Match pat _ _) = pat</span>
+<span class="lineno">  702 </span><span class="spaces">    </span><span class="istickedoff">let pats = map getPat cs</span>
+<span class="lineno">  703 </span><span class="spaces">    </span><span class="istickedoff">patTs &lt;- mapM getNodeType pats</span>
+<span class="lineno">  704 </span><span class="spaces">    </span><span class="istickedoff">mapM_ (\t -&gt; unify (et, t)) patTs</span>
+<span class="lineno">  705 </span><span class="spaces">    </span><span class="istickedoff">outT &lt;- freshTVar</span>
+<span class="lineno">  706 </span><span class="spaces">    </span><span class="istickedoff">let getExp (Match _ expr _) = expr</span>
+<span class="lineno">  707 </span><span class="spaces">    </span><span class="istickedoff">let patExps = map getExp cs</span>
+<span class="lineno">  708 </span><span class="spaces">    </span><span class="istickedoff">patExpTs &lt;- mapM getNodeType patExps</span>
+<span class="lineno">  709 </span><span class="spaces">    </span><span class="istickedoff">mapM_ (\t -&gt; unify (outT, t)) patExpTs</span>
+<span class="lineno">  710 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- resolveNodeType e</span>
+<span class="lineno">  711 </span><span class="spaces">    </span><span class="istickedoff">rcs &lt;- mapM resClause cs</span>
+<span class="lineno">  712 </span><span class="spaces">    </span><span class="istickedoff">routT &lt;- resolveType outT</span>
+<span class="lineno">  713 </span><span class="spaces">    </span><span class="istickedoff">return $ MatchExpr re rcs SemTag{posn = <span class="nottickedoff">p</span>, typeInfo = NodeType routT} where</span>
+<span class="lineno">  714 </span><span class="spaces">        </span><span class="istickedoff">resClause (Match pat expr t) = do</span>
+<span class="lineno">  715 </span><span class="spaces">            </span><span class="istickedoff">rPat &lt;- resolveNodeType pat</span>
+<span class="lineno">  716 </span><span class="spaces">            </span><span class="istickedoff">rExp &lt;- resolveNodeType expr</span>
+<span class="lineno">  717 </span><span class="spaces">            </span><span class="istickedoff">return (Match rPat rExp t)</span></span>
+<span class="lineno">  718 </span>
+<span class="lineno">  719 </span>-- Semantic analysis of clauses
+<span class="lineno">  720 </span>
+<span class="lineno">  721 </span>analyzeClause :: Clause AlexPosn -&gt; Parser (Clause SemanticTag)
+<span class="lineno">  722 </span><span class="decl"><span class="istickedoff">analyzeClause c@(Match pat e p) = do</span>
+<span class="lineno">  723 </span><span class="spaces">    </span><span class="istickedoff">-- Hold the free vars outside the body</span>
+<span class="lineno">  724 </span><span class="spaces">    </span><span class="istickedoff">outerScopeVars &lt;- getFreeTVars</span>
+<span class="lineno">  725 </span><span class="spaces">    </span><span class="istickedoff">openScopeInNames</span>
+<span class="lineno">  726 </span><span class="spaces">    </span><span class="istickedoff">semP &lt;- stackTrace <span class="nottickedoff">(&quot;while analyzing clause &quot; ++ pretty c)</span> $ analyzePattern pat</span>
+<span class="lineno">  727 </span><span class="spaces">    </span><span class="istickedoff">semE &lt;- stackTrace <span class="nottickedoff">(&quot;while analyzing clause &quot; ++ pretty c)</span> $ analyzeExpr e</span>
+<span class="lineno">  728 </span><span class="spaces">    </span><span class="istickedoff">closeScopeInNames</span>
+<span class="lineno">  729 </span><span class="spaces">    </span><span class="istickedoff">-- Restore the free tVars</span>
+<span class="lineno">  730 </span><span class="spaces">    </span><span class="istickedoff">putFreeTVars <span class="nottickedoff">outerScopeVars</span></span>
+<span class="lineno">  731 </span><span class="spaces">    </span><span class="istickedoff">return $ Match semP semE (cpPosn <span class="nottickedoff">p</span>)</span></span>
+<span class="lineno">  732 </span>
+<span class="lineno">  733 </span>-- Semantic analysis of patterns
+<span class="lineno">  734 </span>
+<span class="lineno">  735 </span>analyzePattern :: Pattern AlexPosn -&gt; Parser (Pattern SemanticTag)
+<span class="lineno">  736 </span><span class="decl"><span class="istickedoff">analyzePattern = recSemPattern indSemPat</span></span>
+<span class="lineno">  737 </span>
+<span class="lineno">  738 </span>recSemPattern :: (PatternF (Pattern SemanticTag) -&gt; Parser (Pattern SemanticTag))
+<span class="lineno">  739 </span>    -&gt; Pattern AlexPosn
+<span class="lineno">  740 </span>    -&gt; Parser (Pattern SemanticTag)
+<span class="lineno">  741 </span><span class="decl"><span class="istickedoff">recSemPattern f p@(Pattern pf psn) = do</span>
+<span class="lineno">  742 </span><span class="spaces">    </span><span class="istickedoff">let aPattern = stackTrace <span class="nottickedoff">(&quot;while analyzing pattern &quot; ++ pretty p)</span> . recSemPattern f</span>
+<span class="lineno">  743 </span><span class="spaces">    </span><span class="istickedoff">semPf &lt;- mapM aPattern pf</span>
+<span class="lineno">  744 </span><span class="spaces">    </span><span class="istickedoff">putSemPosn <span class="nottickedoff">psn</span></span>
+<span class="lineno">  745 </span><span class="spaces">    </span><span class="istickedoff">f semPf</span></span>
+<span class="lineno">  746 </span>
+<span class="lineno">  747 </span>retP :: PatternF (Pattern SemanticTag) -&gt; SymbolType -&gt; Parser (Pattern SemanticTag)
+<span class="lineno">  748 </span><span class="decl"><span class="istickedoff">retP pat t = do</span>
+<span class="lineno">  749 </span><span class="spaces">    </span><span class="istickedoff">p &lt;- getSemPosn</span>
+<span class="lineno">  750 </span><span class="spaces">    </span><span class="istickedoff">return $ Pattern pat SemTag{posn = <span class="nottickedoff">p</span>, typeInfo = NodeType t}</span></span>
+<span class="lineno">  751 </span>
+<span class="lineno">  752 </span>indSemPat :: PatternF (Pattern SemanticTag) -&gt; Parser (Pattern SemanticTag)
+<span class="lineno">  753 </span><span class="decl"><span class="istickedoff">indSemPat p@(IntConstPattern {}) = retP <span class="nottickedoff">p</span> (SymType IntType)</span>
+<span class="lineno">  754 </span><span class="spaces"></span><span class="istickedoff">indSemPat p@(FloatConstPattern {}) = retP p (SymType FloatType)</span>
+<span class="lineno">  755 </span><span class="spaces"></span><span class="istickedoff">indSemPat p@(CharConstPattern {}) = <span class="nottickedoff">retP p (SymType CharType)</span></span>
+<span class="lineno">  756 </span><span class="spaces"></span><span class="istickedoff">indSemPat TruePattern = retP TruePattern (SymType BoolType)</span>
+<span class="lineno">  757 </span><span class="spaces"></span><span class="istickedoff">indSemPat FalsePattern = <span class="nottickedoff">retP FalsePattern (SymType BoolType)</span></span>
+<span class="lineno">  758 </span><span class="spaces"></span><span class="istickedoff">indSemPat (IdPattern x) = do</span>
+<span class="lineno">  759 </span><span class="spaces">    </span><span class="istickedoff">v &lt;- freshTVar</span>
+<span class="lineno">  760 </span><span class="spaces">    </span><span class="istickedoff">addFreeTVars v</span>
+<span class="lineno">  761 </span><span class="spaces">    </span><span class="istickedoff">insertName x (PatternEntry v)</span>
+<span class="lineno">  762 </span><span class="spaces">    </span><span class="istickedoff">retP (IdPattern <span class="nottickedoff">x</span>) v</span>
+<span class="lineno">  763 </span><span class="spaces"></span><span class="istickedoff">indSemPat (ConstrPattern i pats) = do</span>
+<span class="lineno">  764 </span><span class="spaces">    </span><span class="istickedoff">entry &lt;- findName i</span>
+<span class="lineno">  765 </span><span class="spaces">    </span><span class="istickedoff">case entry of</span>
+<span class="lineno">  766 </span><span class="spaces">        </span><span class="istickedoff">ConstrEntry _ argT outT -&gt;</span>
+<span class="lineno">  767 </span><span class="spaces">            </span><span class="istickedoff">case compare (length pats) (length argT) of</span>
+<span class="lineno">  768 </span><span class="spaces">                </span><span class="istickedoff">LT -&gt; <span class="nottickedoff">throwSem $ &quot;Constructor &quot; ++ i ++ &quot; is applied to too few patterns&quot;</span></span>
+<span class="lineno">  769 </span><span class="spaces">                </span><span class="istickedoff">GT -&gt; <span class="nottickedoff">throwSem $ &quot;Constructor &quot; ++ i ++ &quot; is applied to too many patterns&quot;</span></span>
+<span class="lineno">  770 </span><span class="spaces">                </span><span class="istickedoff">EQ -&gt; do</span>
+<span class="lineno">  771 </span><span class="spaces">                    </span><span class="istickedoff">patTs &lt;- mapM getNodeType pats</span>
+<span class="lineno">  772 </span><span class="spaces">                    </span><span class="istickedoff">mapM_ unify (zipWith (\ct t -&gt; (constTypeToSymbolType ct, t)) argT patTs)</span>
+<span class="lineno">  773 </span><span class="spaces">                    </span><span class="istickedoff">rpats &lt;- mapM resolveNodeType pats</span>
+<span class="lineno">  774 </span><span class="spaces">                    </span><span class="istickedoff">mapM_ verifyParamPat rpats</span>
+<span class="lineno">  775 </span><span class="spaces">                    </span><span class="istickedoff">retP (ConstrPattern <span class="nottickedoff">i</span> rpats) (constTypeToSymbolType outT)</span>
+<span class="lineno">  776 </span><span class="spaces">            </span><span class="istickedoff">where verifyParamPat (Pattern (ConstrPattern _ []) _) = <span class="nottickedoff">return ()</span></span>
+<span class="lineno">  777 </span><span class="spaces">                  </span><span class="istickedoff">verifyParamPat (Pattern (ConstrPattern p _) tg) =</span>
+<span class="lineno">  778 </span><span class="spaces">                    </span><span class="istickedoff">throwSemAtPosn <span class="nottickedoff">(&quot;Pattern param &quot; ++ p ++</span></span>
+<span class="lineno">  779 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot; cannot be a pattern of a constructor with parameters&quot;)</span> <span class="nottickedoff">(posn tg)</span></span>
+<span class="lineno">  780 </span><span class="spaces">                  </span><span class="istickedoff">verifyParamPat _ = return <span class="nottickedoff">()</span></span>
+<span class="lineno">  781 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwInternalError $</span></span>
+<span class="lineno">  782 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot;Entry: &quot; ++ show entry ++ &quot; is not expected for constructor identifier key &quot; ++ i</span></span></span>
+
+</pre>
+</body>
+</html>

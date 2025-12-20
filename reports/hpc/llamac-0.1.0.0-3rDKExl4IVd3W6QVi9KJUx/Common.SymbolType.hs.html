@@ -1,0 +1,174 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Common.SymbolType (module Common.SymbolType) where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import qualified Data.Set as S
+<span class="lineno">    4 </span>import Common.AST (Type(..), TypeF(..))
+<span class="lineno">    5 </span>import Common.PrintAST (Pretty(prettyPrec))
+<span class="lineno">    6 </span>
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>-- A representation for semantic types
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>-- Const types are types without type variables
+<span class="lineno">   11 </span>newtype ConstType = ConstType { <span class="istickedoff"><span class="decl"><span class="istickedoff">unConstType</span></span></span> :: TypeF ConstType }
+<span class="lineno">   12 </span>    deriving (<span class="decl"><span class="nottickedoff">Show</span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>instance Pretty ConstType where
+<span class="lineno">   15 </span>    <span class="decl"><span class="nottickedoff">prettyPrec d (ConstType t) = prettyPrec d t</span></span>
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>-- Some useful consts
+<span class="lineno">   18 </span>intConstType :: ConstType
+<span class="lineno">   19 </span><span class="decl"><span class="istickedoff">intConstType = ConstType IntType</span></span>
+<span class="lineno">   20 </span>floatConstType :: ConstType
+<span class="lineno">   21 </span><span class="decl"><span class="istickedoff">floatConstType = ConstType FloatType</span></span>
+<span class="lineno">   22 </span>boolConstType :: ConstType
+<span class="lineno">   23 </span><span class="decl"><span class="istickedoff">boolConstType = ConstType BoolType</span></span>
+<span class="lineno">   24 </span>charConstType :: ConstType
+<span class="lineno">   25 </span><span class="decl"><span class="istickedoff">charConstType = ConstType CharType</span></span>
+<span class="lineno">   26 </span>unitConstType :: ConstType
+<span class="lineno">   27 </span><span class="decl"><span class="istickedoff">unitConstType = ConstType UnitType</span></span>
+<span class="lineno">   28 </span>stringConstType :: ConstType
+<span class="lineno">   29 </span><span class="decl"><span class="istickedoff">stringConstType = ConstType (ArrayType 1 (ConstType CharType))</span></span>
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>-- Symbol Types are types including type variables
+<span class="lineno">   32 </span>data SymbolType = SymType (TypeF SymbolType)
+<span class="lineno">   33 </span>                | TVar Int
+<span class="lineno">   34 </span>    deriving (<span class="decl"><span class="nottickedoff">Show</span></span>, <span class="decl"><span class="istickedoff">Eq</span></span>)
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>instance Pretty SymbolType where
+<span class="lineno">   37 </span>    <span class="decl"><span class="nottickedoff">prettyPrec d (SymType t) = prettyPrec d t</span>
+<span class="lineno">   38 </span><span class="spaces">    </span><span class="nottickedoff">prettyPrec _ (TVar i)    = showString $ &quot;@&quot; ++ show i</span></span>
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>-- Some convertion utils
+<span class="lineno">   41 </span>typeTo :: (TypeF a -&gt; a) -&gt; Type b -&gt; a
+<span class="lineno">   42 </span><span class="decl"><span class="istickedoff">typeTo alg (Type tf _) = alg (fmap (typeTo alg) tf)</span></span>
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>constTypeToSymbolType :: ConstType -&gt; SymbolType
+<span class="lineno">   45 </span><span class="decl"><span class="istickedoff">constTypeToSymbolType (ConstType tf) = SymType $ fmap constTypeToSymbolType tf</span></span>
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>-- Type schemes are polymorphic types
+<span class="lineno">   48 </span>data TypeScheme = MonoType SymbolType
+<span class="lineno">   49 </span>                | AbsType Int TypeScheme
+<span class="lineno">   50 </span>    deriving (<span class="decl"><span class="nottickedoff">Show</span></span>, <span class="decl"><span class="istickedoff">Eq</span></span>)
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>instance Pretty TypeScheme where
+<span class="lineno">   53 </span>    <span class="decl"><span class="nottickedoff">prettyPrec d (MonoType t)  = prettyPrec d t</span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="nottickedoff">prettyPrec d (AbsType v t) =</span>
+<span class="lineno">   55 </span><span class="spaces">        </span><span class="nottickedoff">showString (&quot;forall @&quot; ++ show v ++ &quot;. &quot;) .</span>
+<span class="lineno">   56 </span><span class="spaces">        </span><span class="nottickedoff">prettyPrec d t</span></span>
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>-- Recursion Utils
+<span class="lineno">   59 </span>bottomUp :: (SymbolType -&gt; SymbolType) -&gt; SymbolType -&gt; SymbolType
+<span class="lineno">   60 </span><span class="decl"><span class="istickedoff">bottomUp f (SymType t) = f (SymType $ fmap (bottomUp f) t)</span>
+<span class="lineno">   61 </span><span class="spaces"></span><span class="istickedoff">bottomUp f v@(TVar _)  = f v</span></span>
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>-- bottomUpM :: Monad m =&gt; (SymbolType -&gt; m SymbolType) -&gt; SymbolType -&gt; m SymbolType
+<span class="lineno">   64 </span>-- bottomUpM f (SymType t) = mapM (bottomUpM f) t &gt;&gt;= f . SymType
+<span class="lineno">   65 </span>-- bottomUpM f v@(TVar _)  = f v
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>cataUn :: (t -&gt; TypeF t) -&gt; (TypeF a -&gt; a) -&gt; t -&gt; a
+<span class="lineno">   68 </span><span class="decl"><span class="nottickedoff">cataUn unT alg tf = alg (fmap (cataUn unT alg) (unT tf))</span></span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>cataUnM :: Monad m =&gt; (t -&gt; TypeF t) -&gt; (TypeF a -&gt; m a) -&gt; t -&gt; m a
+<span class="lineno">   71 </span><span class="decl"><span class="istickedoff">cataUnM unT alg tf = mapM (cataUnM unT alg) (unT tf) &gt;&gt;= alg</span></span>
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>cata :: (TypeF a -&gt; a, Int -&gt; a) -&gt; SymbolType -&gt; a
+<span class="lineno">   74 </span><span class="decl"><span class="istickedoff">cata alg@(f, _) (SymType t) = f $ fmap (cata alg) t</span>
+<span class="lineno">   75 </span><span class="spaces"></span><span class="istickedoff">cata (_, g) (TVar v) = g v</span></span>
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>cataM :: Monad m =&gt; (TypeF a -&gt; m a, Int -&gt; m a) -&gt; SymbolType -&gt; m a
+<span class="lineno">   78 </span><span class="decl"><span class="nottickedoff">cataM alg@(f, _) (SymType t) = mapM (cataM alg) t &gt;&gt;= f</span>
+<span class="lineno">   79 </span><span class="spaces"></span><span class="nottickedoff">cataM (_, g) (TVar v) = g v</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>-- Type theoretic utils
+<span class="lineno">   82 </span>subst :: Int -&gt; SymbolType -&gt; SymbolType -&gt; SymbolType
+<span class="lineno">   83 </span><span class="decl"><span class="istickedoff">subst v t = bottomUp f where</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="istickedoff">f :: SymbolType -&gt; SymbolType</span>
+<span class="lineno">   85 </span><span class="spaces">    </span><span class="istickedoff">f s'@(TVar u) | v == u = t</span>
+<span class="lineno">   86 </span><span class="spaces">                  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = s'</span>
+<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">f s' = s'</span></span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>substScheme :: Int -&gt; SymbolType -&gt; TypeScheme -&gt; TypeScheme
+<span class="lineno">   90 </span><span class="decl"><span class="istickedoff">substScheme v r (MonoType t) = MonoType $ subst v r t</span>
+<span class="lineno">   91 </span><span class="spaces"></span><span class="istickedoff">substScheme v r (AbsType u t) | <span class="tickonlyfalse">v == u</span>    = <span class="nottickedoff">AbsType u t</span></span>
+<span class="lineno">   92 </span><span class="spaces">                              </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = AbsType u $ substScheme v r t</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>tvarsInType :: SymbolType -&gt; [Int]
+<span class="lineno">   95 </span><span class="decl"><span class="istickedoff">tvarsInType st = cata (aux, (:)) st [] where</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="istickedoff">aux :: TypeF ([Int] -&gt; [Int]) -&gt; [Int] -&gt; [Int]</span>
+<span class="lineno">   97 </span><span class="spaces">    </span><span class="istickedoff">aux (FunType f g)   = f . g</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="istickedoff">aux (ArrayType _ f) = f</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="istickedoff">aux (RefType f)     = f</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">aux _               = id</span></span>
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>tvarsInScheme :: TypeScheme -&gt; [Int]
+<span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">tvarsInScheme (MonoType t)  = tvarsInType t</span>
+<span class="lineno">  104 </span><span class="spaces"></span><span class="nottickedoff">tvarsInScheme (AbsType _ t) = tvarsInScheme t</span></span>
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>freeVarsInScheme :: TypeScheme -&gt; [Int]
+<span class="lineno">  107 </span><span class="decl"><span class="nottickedoff">freeVarsInScheme t = S.toList $ S.difference allvars bound where</span>
+<span class="lineno">  108 </span><span class="spaces">    </span><span class="nottickedoff">allvars = S.fromList $ tvarsInScheme t</span>
+<span class="lineno">  109 </span><span class="spaces">    </span><span class="nottickedoff">bound = S.fromList (aux t)</span>
+<span class="lineno">  110 </span><span class="spaces">    </span><span class="nottickedoff">aux (MonoType _)  = []</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="nottickedoff">aux (AbsType v s) = v : aux s</span></span>
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>tvarInType :: Int -&gt; SymbolType -&gt; Bool
+<span class="lineno">  114 </span><span class="decl"><span class="istickedoff">tvarInType v (TVar u)</span>
+<span class="lineno">  115 </span><span class="spaces">                </span><span class="istickedoff">| <span class="tickonlyfalse">v == u</span> = <span class="nottickedoff">True</span></span>
+<span class="lineno">  116 </span><span class="spaces">                </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = False</span>
+<span class="lineno">  117 </span><span class="spaces"></span><span class="istickedoff">tvarInType v (SymType t) = any (tvarInType v) t</span></span>
+<span class="lineno">  118 </span>
+<span class="lineno">  119 </span>notVarInType :: Int -&gt; SymbolType -&gt; Bool
+<span class="lineno">  120 </span><span class="decl"><span class="istickedoff">notVarInType v = not . tvarInType v</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>-- Fun Types Utils
+<span class="lineno">  123 </span>paramsToFun :: (TypeF a -&gt; a) -&gt; [a] -&gt; a -&gt; a
+<span class="lineno">  124 </span><span class="decl"><span class="istickedoff">paramsToFun _ [] out       = out</span>
+<span class="lineno">  125 </span><span class="spaces"></span><span class="istickedoff">paramsToFun alg (t:ts) out = alg (FunType t (paramsToFun alg ts out))</span></span>
+<span class="lineno">  126 </span>
+<span class="lineno">  127 </span>funToTypes :: (a -&gt; Either (TypeF a) a) -&gt; a -&gt; [a]
+<span class="lineno">  128 </span><span class="decl"><span class="istickedoff">funToTypes coalg = reverse . aux [] where</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">aux acc t = case coalg t of</span>
+<span class="lineno">  130 </span><span class="spaces">        </span><span class="istickedoff">Left (FunType t1 t2) -&gt; aux (t1:acc) t2</span>
+<span class="lineno">  131 </span><span class="spaces">        </span><span class="istickedoff">_                    -&gt; t:acc</span></span>
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>funToArgs :: (a -&gt; Either (TypeF a) a) -&gt; a -&gt; [a]
+<span class="lineno">  134 </span><span class="decl"><span class="istickedoff">funToArgs coalg s =</span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">let ts = funToTypes coalg s</span>
+<span class="lineno">  136 </span><span class="spaces">        </span><span class="istickedoff">f [] = <span class="nottickedoff">[]</span></span>
+<span class="lineno">  137 </span><span class="spaces">        </span><span class="istickedoff">f [_] = []</span>
+<span class="lineno">  138 </span><span class="spaces">        </span><span class="istickedoff">f (x:xs) = x : f xs</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">in if <span class="tickonlyfalse">null ts</span> then <span class="nottickedoff">[]</span> else f ts</span></span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>outFunType :: (a -&gt; Either (TypeF a) a) -&gt; a -&gt; a
+<span class="lineno">  142 </span><span class="decl"><span class="istickedoff">outFunType out t = case out t of</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">Left (FunType _ t2) -&gt; outFunType out t2</span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; t</span></span>
+<span class="lineno">  145 </span>
+<span class="lineno">  146 </span>ctCoAlg :: ConstType -&gt; Either (TypeF ConstType) ConstType
+<span class="lineno">  147 </span><span class="decl"><span class="istickedoff">ctCoAlg (ConstType t) = Left t</span></span>
+<span class="lineno">  148 </span>
+<span class="lineno">  149 </span>stCoAlg :: SymbolType -&gt; Either (TypeF SymbolType) SymbolType
+<span class="lineno">  150 </span><span class="decl"><span class="istickedoff">stCoAlg (SymType t) = Left t</span>
+<span class="lineno">  151 </span><span class="spaces"></span><span class="istickedoff">stCoAlg st          = Right <span class="nottickedoff">st</span></span></span>
+
+</pre>
+</body>
+</html>

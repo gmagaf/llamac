@@ -13,7 +13,8 @@ import Common.SymbolTable (mkFullTableEntry, insert, names, TableEntry (ParamEnt
 import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames)
 import Parser.ParserState (symbols)
 import Parser.ParserM (Parser, throwCGenError)
-import Semantics.Utils (SemanticTag (..), inst, getNodeType, getDefScheme)
+import Semantics.Utils (SemanticTag (..), getNodeType, getDefScheme)
+import Semantics.Unifier (inst)
 import IR.Utils
 import IR.LLVMUtils (function, named)
 import IR.TypeUtils

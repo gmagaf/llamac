@@ -7,10 +7,9 @@ import Control.Monad ((>=>), when)
 import Control.Lens.Setter ((<~))
 
 import Common.Token (Identifier, ConstrIdentifier)
-import Common.AST (Node(..), TypeF(..))
+import Common.AST (Node(..))
 import Common.PrintAST
-import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..),
-                          substScheme, cataM, tvarsInType)
+import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..), tvarsInType)
 import Common.SymbolTable (Context, NameSpace, FullTableEntry, TableEntry(..), TypeTableEntry(..), names)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
@@ -18,7 +17,7 @@ import Parser.ParserM (Parser,
     throwSemanticError, throwAtPosn)
 import Parser.ParserState (symbols)
 import Parser.SymbolTableUtils (getNames, getTypes, queryP, updateP)
-import Semantics.TypeConstraints (ConstraintsMap, union, lookupConstr, insertConstr, insertConstrWith, lookupConstrTg, Tag (NotPolymorphicVarTg))
+import Semantics.TypeConstraints (ConstraintsMap)
 import Semantics.SemanticState (SemanticState(..), Unifier)
 
 -- This module contains semantic analysis tools
@@ -108,18 +107,6 @@ putConstraints c = do
     s <- getSemState
     putSemState s{constraints = c}
 
-copyConstraints :: (SymbolType, SymbolType) -> Parser ()
-copyConstraints (TVar v, TVar u) = do
-    c <- getConstraints
-    case (lookupConstr v c, lookupConstr u c) of
-        (Nothing, Nothing) -> return ()
-        (Nothing, Just cs) -> putConstraints $ insertConstr v cs c
-        (Just cs, Nothing) -> putConstraints $ insertConstr u cs c
-        (Just vc, Just uc) ->
-            let finalC = insertConstrWith union u vc (insertConstrWith union v uc c)
-            in putConstraints finalC
-copyConstraints _ = return ()
-
 -- Error handling functions
 throwSemAtPosn :: String -> AlexPosn -> Parser a
 throwSemAtPosn s p = throwAtPosn p (throwSemanticError s)
@@ -141,38 +128,6 @@ freshTVarC = do
 
 freshTVar :: Parser SymbolType
 freshTVar = fst <$> freshTVarC
-
--- instantiate a type scheme to a monotype
--- by substituting all bound variables with new free ones
-inst :: TypeScheme -> Parser SymbolType
-inst (MonoType t)  = return t
-inst (AbsType v t) = do
-    v' <- freshTVar
-    copyConstraints (TVar v, v')
-    let substt = substScheme v v' t
-    inst substt
-
--- generalize a monotype to a type scheme
--- by bounding all free variables not found
--- in scope
-gen :: SymbolType -> Parser TypeScheme
-gen t =
-    let varNotInScope :: Int -> Parser [Int]
-        varNotInScope v = do
-            isFree <- S.member v <$> getFreeTVars
-            if isFree then return []
-            else do
-                mCSet <- lookupConstrTg v NotPolymorphicVarTg <$> getConstraints
-                return $ maybe [v] (const []) mCSet
-        alg :: TypeF [Int] -> Parser [Int]
-        alg (FunType f1 f2) = return $ f1 ++ f2
-        alg (ArrayType _ f) = return f
-        alg (RefType f)     = return f
-        alg _               = return []
-    in do
-        varsNotInScope <- cataM (alg, varNotInScope) t
-        let varsToBound = removeDuplicates S.empty varsNotInScope
-        return $ foldr AbsType (MonoType t) varsToBound
 
 -- Parser symbol table utiles
 -- function aliases

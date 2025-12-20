@@ -15,7 +15,7 @@ import Parser.ParserM (Parser, stackTrace, throwInternalError)
 import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames, insertNameP)
 import Semantics.TypeConstraints (TypeConstraint(..), mkAllowedTypes)
 import Semantics.Utils
-import Semantics.Unifier (checkConstraint, unify)
+import Semantics.Unifier (inst, gen, checkConstraint, unify)
 import Semantics.TypeAnalysis (analyzeType)
 
 -- Semantic analysis of definitions

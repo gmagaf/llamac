@@ -152,3 +152,21 @@ test-suite test
                       -Wmissing-home-modules
                       -Wpartial-fields
                       -Wredundant-constraints
+
+benchmark bench
+ default-language:    Haskell2010
+ hs-source-dirs:      bench
+ type:                exitcode-stdio-1.0
+ main-is:             Main.hs
+ build-depends:       base >= 4.7 && < 5,
+                      criterion,
+                      llamac
+ ghc-options:         -Wall
+                      -Wcompat
+                      -Widentities
+                      -Wincomplete-record-updates
+                      -Wincomplete-uni-patterns
+                      -Wmissing-export-lists
+                      -Wmissing-home-modules
+                      -Wpartial-fields
+                      -Wredundant-constraints

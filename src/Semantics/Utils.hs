@@ -7,16 +7,16 @@ import Control.Monad ((>=>), when)
 import Control.Lens.Setter ((<~))
 
 import Common.Token (Identifier, ConstrIdentifier)
-import Common.AST (Node(..))
+import Common.AST (Node(..), Type)
 import Common.PrintAST
-import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..), tvarsInType)
+import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..), tvarsInType, typeTo)
 import Common.SymbolTable (Context, NameSpace, FullTableEntry, TableEntry(..), TypeTableEntry(..), names)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
     getSemState, putSemState,
     throwSemanticError, throwAtPosn)
 import Parser.ParserState (symbols)
-import Parser.SymbolTableUtils (getNames, getTypes, queryP, updateP)
+import Parser.SymbolTableUtils (getNames, getTypes, queryP, updateP, insertNameP, insertTypeP)
 import Semantics.TypeConstraints (ConstraintsMap)
 import Semantics.SemanticState (SemanticState(..), Unifier)
 
@@ -220,7 +220,17 @@ findType i = do
 checkTypeInScope :: Identifier -> Parser ()
 checkTypeInScope = findType >=> const (return ())
 
+-- function aliases
+insertType :: String -> TypeTableEntry -> Parser ()
+insertType = insertTypeP
+
+insertName :: String -> TableEntry -> Parser ()
+insertName = insertNameP
+
 -- Other util functions
+typeToSymbolType :: Type b -> SymbolType
+typeToSymbolType = typeTo SymType
+
 hasDuplicates :: (Ord a) => [a] -> Bool
 hasDuplicates list = length list /= length set
   where set = Set.fromList list

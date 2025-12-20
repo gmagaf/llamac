@@ -15,19 +15,11 @@ import Common.SymbolTable (TypeTableEntry(..), TableEntry(..))
 import Common.SymbolType (ConstType(..), typeTo, paramsToFun)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser, stackTrace)
-import Parser.SymbolTableUtils (openScopeInTypes, openScopeInNames, insertTypeP, insertNameP)
+import Parser.SymbolTableUtils (openScopeInTypes, openScopeInNames)
 import Semantics.Utils
 import Common.PrintAST (Pretty(pretty))
 
 -- Semantic analysis of type definitions
-
-
--- function aliases
-insertType :: String -> TypeTableEntry -> Parser ()
-insertType = insertTypeP
-
-insertName :: String -> TableEntry -> Parser ()
-insertName = insertNameP
 
 analyzeTypeDef :: TypeDef AlexPosn -> Parser (TypeDef SemanticTag)
 analyzeTypeDef (TypeDef tDefs p) =

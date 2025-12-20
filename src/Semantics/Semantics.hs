@@ -13,7 +13,8 @@ import Parser.ParserM (Parser)
 import Semantics.Utils (SemanticTag(..), TypeInfo (..), throwSemAtPosn,
     resolveTableEntry, resolveType, resolveTypeScheme)
 import Semantics.TypeAnalysis (analyzeTypeDef, analyzeType)
-import Semantics.LetAnalysis (analyzeLet, analyzeExpr)
+import Semantics.LetAnalysis (analyzeLet)
+import Semantics.ExprAnalysis (analyzeExpr)
 import Common.SymbolTable (basicInfo)
 import Parser.SymbolTableUtils (overNamesM)
 

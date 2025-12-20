@@ -40,6 +40,7 @@ library
                       Semantics.TypeConstraints
                       Semantics.Semantics
                       Semantics.TypeAnalysis
+                      Semantics.ExprAnalysis
                       Semantics.LetAnalysis
                       Semantics.Utils
                       Semantics.Unifier

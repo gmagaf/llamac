@@ -19,6 +19,20 @@ import Semantics.ExprAnalysis (analyzeExpr)
 
 -- Semantic analysis of definitions
 
+-- Util definitions for sig analysis
+type KeyEntryPair = (Identifier, TableEntry)
+
+data SigAnalyzedAST =
+   Mut
+ | Arr [Expr AlexPosn]
+ | Fun [Param SemanticTag] (Expr AlexPosn)
+
+data SigAnalyzedType =
+    Typed (Type SemanticTag)
+  | Untyped SymbolType
+
+data SigAnalysisRes = SigAnalysisRes SigAnalyzedType SigAnalyzedAST AlexPosn KeyEntryPair
+
 {-
     Analyze let statements
     It will analyze all defs in the current typespace
@@ -84,20 +98,6 @@ genResult (FunDef i ps Nothing e tg, FunEntry (MonoType t) params) = do
     scheme <- gen rt
     return (FunDef i ps Nothing e tg{typeInfo = DefType scheme}, FunEntry scheme params)
 genResult pair = return pair
-
--- Util definitions for sig analysis
-type KeyEntryPair = (Identifier, TableEntry)
-
-data SigAnalyzedAST =
-   Mut
- | Arr [Expr AlexPosn]
- | Fun [Param SemanticTag] (Expr AlexPosn)
-
-data SigAnalyzedType =
-    Typed (Type SemanticTag)
-  | Untyped SymbolType
-
-data SigAnalysisRes = SigAnalysisRes SigAnalyzedType SigAnalyzedAST AlexPosn KeyEntryPair
 
 entryPair :: SigAnalysisRes -> KeyEntryPair
 entryPair (SigAnalysisRes _ _ _ pair) = pair

@@ -1,4 +1,4 @@
-module Semantics.ExprAnalysis(analyzeLet, analyzeExpr) where
+module Semantics.LetAnalysis(analyzeLet, analyzeExpr) where
 
 import Control.Monad (when, zipWithM)
 import qualified Data.Bifunctor as B

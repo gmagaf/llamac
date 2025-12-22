@@ -5,6 +5,7 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import System.Console.Haskeline
     (defaultSettings, getInputLine, runInputT)
 
+import Common.FileUtils (safeReadFile)
 import Common.PrintAST (pretty)
 import qualified Common.AST as AST
 import Lexer.Lexer (AlexPosn)
@@ -12,7 +13,7 @@ import Parser.Parser (calcRepl)
 import Parser.ParserState (initAlexState, initParserState)
 import Parser.ParserM (putAlexState, throwInternalError, getSemState, getCGenState)
 import Parser.SymbolTableUtils (getSymbols)
-import Parser.Utils (safeReadFile, initParseAnalyzeM, parseAnalyzeM)
+import Parser.Utils (initAnalyzeM, analyzeM)
 import Semantics.Utils (findName, getNodeType, resolveType)
 import Semantics.Semantics (analyzeAST, Analyzable (sem), TypeAble (infer))
 
@@ -30,10 +31,10 @@ loadProgramOrExpr s = liftParser $ do
     calcRepl
 
 initSymbolsParseAnalyzeRun :: Interpreter ()
-initSymbolsParseAnalyzeRun = liftParser initParseAnalyzeM >>= runAST
+initSymbolsParseAnalyzeRun = liftParser initAnalyzeM >>= runAST
 
 parseAnalyzeRun :: Interpreter ()
-parseAnalyzeRun = liftParser parseAnalyzeM >>= runAST
+parseAnalyzeRun = liftParser analyzeM >>= runAST
 
 -- IO
 getSafeCodeFromFile :: String -> IO (Maybe String)

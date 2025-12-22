@@ -7,7 +7,8 @@ module Common.PrintAST (Pretty,
                         prettyPrecSepList) where
 
 import Text.Pretty.Simple (CheckColorTty(CheckColorTty),
-                          OutputOptions(outputOptionsIndentAmount),
+                          OutputOptions(outputOptionsIndentAmount, outputOptionsStringStyle),
+                          StringOutputStyle (Literal),
                           defaultOutputOptionsDarkBg,
                           pPrintOpt)
 
@@ -23,7 +24,7 @@ import Common.Token
 
 -- Debug printing utils
 debugPrint :: Show a => a -> IO ()
-debugPrint = let smallIndent = defaultOutputOptionsDarkBg {outputOptionsIndentAmount = 2}
+debugPrint = let smallIndent = defaultOutputOptionsDarkBg {outputOptionsIndentAmount = 2, outputOptionsStringStyle = Literal}
              in pPrintOpt CheckColorTty smallIndent
 
 

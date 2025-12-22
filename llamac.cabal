@@ -36,6 +36,7 @@ library
                       Common.PrintAST
                       Common.SymbolType
                       Common.SymbolTable
+                      Common.FileUtils
                       Semantics.SemanticState
                       Semantics.TypeConstraints
                       Semantics.Semantics
@@ -83,6 +84,7 @@ executable llamac
   hs-source-dirs:     exe
   main-is:            Main.hs
   build-depends:      base >= 4.7 && < 5,
+                      cmdargs >= 0.10,
                       llamac
   other-modules:
   ghc-options:        -Wall

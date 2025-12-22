@@ -6,7 +6,7 @@ module Parser.ParserM (Parser,
                        throwInternalError,
                        throwParsingError, throwSemanticError, throwCGenError,
                        runParser, evalParser,
-                       lexerWrap) where
+                       liftAlex, lexerWrap) where
 
 import Data.Functor.Identity (Identity (..))
 import Control.Lens.Setter ((.=))

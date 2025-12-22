@@ -1,36 +1,39 @@
-module Parser.Utils (parseAnalyzeM, initParseAnalyzeM, parseString,
-                     parse, analyze, parseAndAnalyze,
-                     readFileB, safeReadFile, parseFile,
+module Parser.Utils (scanM, parseM, analyzeM, initAnalyzeM, genM,
+                     parseString, parseFile, parseLine,
                      debug, debugRepl) where
 
-import qualified Data.ByteString    as B
-import qualified Data.Text          as T
-import qualified Data.Text.Encoding as T
 import Control.Lens (view)
 import Data.Text.Lazy (Text)
 
+import Common.Token (Token)
 import Common.AST (AST)
 import Common.PrintAST (pretty, debugPrint)
-import Lexer.Lexer (AlexPosn)
+import Common.FileUtils (readFileB)
+import Lexer.Lexer (AlexPosn, alexTokens)
 import Parser.Parser (calc)
-import Parser.ParserM (Error, Parser, runParser)
-import Parser.ParserState (ParserState, sem_state, symbols, cgen_state, initParserState)
+import Parser.ParserM (Error, Parser, runParser, liftAlex)
+import Parser.ParserState (ParserState, sem_state, symbols, initParserState)
 import Semantics.Utils (SemanticTag)
 import Semantics.Semantics (analyzeAST)
-import Control.Exception (IOException, handle)
 import RunTime.LibHeaders (initSymbolTable)
 import IR.CodeGen (genAST)
 import IR.Utils (codegenProgram)
 
 -- Various useful parsers
-parseAnalyzeM :: Parser (AST SemanticTag)
-parseAnalyzeM = calc >>= analyzeAST
+scanM :: Parser [Token]
+scanM = liftAlex alexTokens
 
-initParseAnalyzeM :: Parser (AST SemanticTag)
-initParseAnalyzeM = initSymbolTable >> calc >>= analyzeAST
+parseM :: Parser (AST AlexPosn)
+parseM = calc
 
-initParseAnalyzeGenM :: String -> Parser Text
-initParseAnalyzeGenM s = initSymbolTable >> calc >>= analyzeAST >>= genAST >> codegenProgram s
+analyzeM :: Parser (AST SemanticTag)
+analyzeM = calc >>= analyzeAST
+
+initAnalyzeM :: Parser (AST SemanticTag)
+initAnalyzeM = initSymbolTable >> calc >>= analyzeAST
+
+genM :: String -> Parser Text
+genM s = initSymbolTable >> calc >>= analyzeAST >>= genAST >> codegenProgram s
 
 -- Util that initilizes a parser state and runs a parser monad
 parseString :: Parser a -> String -> (Either Error a, ParserState)
@@ -38,21 +41,24 @@ parseString m s = runParser initState m where
   initState :: ParserState
   initState = initParserState s
 
-  -- The parsing function
-parse :: String -> Either Error (AST AlexPosn)
-parse = fst . parseString calc
+-- Parse a file
+parseFile :: Parser a -> FilePath -> IO (Either Error a)
+parseFile m f = do
+  inp <- readFileB f
+  let (res, _) = parseString m inp
+  return res
 
-analyze :: String -> Either Error (AST SemanticTag)
-analyze = fst . parseAndAnalyze
-
--- The parsing and semantic analysis function
-parseAndAnalyze :: String -> (Either Error (AST SemanticTag), ParserState)
-parseAndAnalyze = parseString initParseAnalyzeM
+-- Parse a line
+parseLine :: Parser a -> IO (Either Error a)
+parseLine m = do
+  line <- getLine
+  let (res, _) = parseString m line
+  return res
 
 -- Util function for debugging end to end
 debug :: String -> IO ()
 debug s = do
-  let (res, state) = parseAndAnalyze s
+  let (res, state) = parseString initAnalyzeM s
   -- let (res, state) = parseString (initParseAnalyzeGenM "debug from ghci") s
   putStrLn "Semantic State"
   print (view sem_state state)
@@ -69,22 +75,3 @@ debugRepl = do
   s <- getLine
   debug s
   debugRepl
-
--- Parsing utils for files
-readFileB :: String -> IO String
-readFileB fileName = do
-  bts <- B.readFile fileName
-  return (T.unpack . T.decodeUtf8 $ bts)
-
-safeReadFile :: String -> IO (Either String String)
-safeReadFile fileName = handle handleEx (Right <$> readFileB fileName)
-  where handleEx :: IOException -> IO (Either String String)
-        handleEx e = return (Left (show e))
-
-parseFile :: FilePath -> IO ()
-parseFile f = do
-  s <- readFileB f
-  let res = parse s
-  case res of
-    Left err -> print err
-    Right p  -> print p

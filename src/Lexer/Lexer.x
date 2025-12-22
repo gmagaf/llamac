@@ -2,7 +2,7 @@
 module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
                     alexStartPos, alexInitUserState, alexMonadScan,
                     printPosn, tokenPosnOfAlexState,
-                    lexer, lexerLine, scanFile, parseHex) where
+                    lexer, alexTokens) where
 
 import Common.Token (Token(..))
 import Text.Read (readMaybe)
@@ -315,26 +315,12 @@ endComment input@(posn, _, _, _) len = do
 -- Utils for running lexer
 -- Scan a string until EOF is encountered
 lexer :: String -> Either String [Token]
-lexer s = runAlex s gather where
-  gather :: Alex [Token]
-  gather = do
-     t <- alexMonadScan
-     case t of
-       EofT -> return [t]
-       _    -> (t:) <$> gather
+lexer s = runAlex s alexTokens
 
--- Scan a file
-scanFile :: FilePath -> IO (Either String [Token])
-scanFile f = do
-  inp <- readFile f
-  return $ lexer inp
-
--- Scan a line
-lexerLine :: IO ()
-lexerLine = do
-  line <- getLine
-  let res = lexer line
-  case res of
-    Left err     -> putStrLn err
-    Right tokens -> mapM_ (\t -> putStrLn $ "Token: " ++ show t) tokens
+alexTokens :: Alex [Token]
+alexTokens = do
+    t <- alexMonadScan
+    case t of
+      EofT -> return [t]
+      _    -> (t:) <$> alexTokens
 }

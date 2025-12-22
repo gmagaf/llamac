@@ -1,5 +1,6 @@
 module Parser.Utils (scanM, parseM, analyzeM, initAnalyzeM, genM,
                      parseString, parseFile, parseLine,
+                     parse, analyze,
                      debug, debugRepl) where
 
 import Control.Lens (view)
@@ -54,6 +55,13 @@ parseLine m = do
   line <- getLine
   let (res, _) = parseString m line
   return res
+
+-- Some util functions for parsing strings
+parse :: String -> Either Error (AST AlexPosn)
+parse = fst . parseString parseM
+
+analyze :: String -> Either Error (AST SemanticTag)
+analyze = fst . parseString initAnalyzeM
 
 -- Util function for debugging end to end
 debug :: String -> IO ()

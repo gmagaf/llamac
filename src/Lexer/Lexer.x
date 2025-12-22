@@ -2,7 +2,7 @@
 module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
                     alexStartPos, alexInitUserState, alexMonadScan,
                     printPosn, tokenPosnOfAlexState,
-                    lexer, alexTokens) where
+                    lexer, alexTokens, parseHex) where
 
 import Common.Token (Token(..))
 import Text.Read (readMaybe)

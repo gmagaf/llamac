@@ -8,9 +8,10 @@ import Test.QuickCheck (Gen, generate, vectorOf, elements)
 import Unit.Parser.ExpectedASTs
 import Unit.Semantics.SemanticTestSuites
 import Unit.Semantics.AnalyzedASTs
+import Common.FileUtils (readFileB)
 import Common.AST (AST)
 import Lexer.Lexer (AlexPosn)
-import Parser.Utils (parse, analyze, readFileB)
+import Parser.Utils (parse, analyze)
 import Semantics.Utils (SemanticTag)
 
 testGuidedParser :: (String, AST AlexPosn, FilePath) -> IO ()

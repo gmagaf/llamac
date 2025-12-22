@@ -1,14 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 module Main (main) where
 
+import Control.Monad (when)
 import System.Console.CmdArgs.Implicit hiding (args)
 
 import Common.FileUtils (safeReadFile)
-import Parser.Utils (scanM, parseM, initAnalyzeM, genM, parseString)
-import Control.Monad (when)
-import Parser.ParserState (ParserState)
-import Parser.ParserM (Parser)
 import Common.PrintAST (debugPrint)
+import Parser.ParserM (Parser)
+import Parser.ParserState (ParserState)
+import Parser.Utils (scanM, parseM, initAnalyzeM, genM, parseString)
 
 data Args = Args
   { stage :: Stage

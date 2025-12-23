@@ -12,11 +12,11 @@ import Parser.ParserState (ParserState)
 import Parser.Utils (scanM, parseM, initAnalyzeM, genM, parseString)
 
 data Args = Args
-  { stage :: Stage
-  , debug :: Bool
-  , optim :: Int
-  , file  :: FilePath
-  , output :: Maybe FilePath
+  { stageFlag        :: Stage
+  , debugFlag        :: Bool
+  , optimizationFlag :: Int
+  , fileArg          :: FilePath
+  , outputArg        :: Maybe FilePath
   }
   deriving (Show, Data, Typeable)
 
@@ -25,15 +25,15 @@ data Stage = Lex | Parse | Sem | Gen
 
 sample :: Args
 sample = Args
-  { stage  = enum [ Sem   &= ignore
-                  , Lex   &= help "Run the lexer"
-                  , Parse &= help "Run the parser"
-                  , Sem   &= help "Run the semantic analysis (default)"
-                  , Gen   &= help "Run the code generation" ]
-  , debug  = def &= help "Print debug information"
-  , optim  = def &= name "O" &= typ "NUM" &= help "The optimization level of the compiler"
-  , file   = def &= argPos 0 &= typFile
-  , output = def &= help "Output file" &= typFile
+  { stageFlag        = enum [ Sem   &= ignore
+                            , Lex   &= help "Run the lexer"
+                            , Parse &= help "Run the parser"
+                            , Sem   &= help "Run the semantic analysis (default)"
+                            , Gen   &= help "Run the code generation" ]
+  , debugFlag        = def &= help "Print debug information"
+  , optimizationFlag = def &= name "O" &= typ "NUM" &= help "The optimization level of the compiler"
+  , fileArg          = def &= argPos 0 &= typFile
+  , outputArg        = def &= help "Output file" &= typFile
   } &= program "llamac"
     &= summary "Llamac"
     &= help "A compiler for the language llama"
@@ -42,20 +42,20 @@ sample = Args
 main :: IO ()
 main = do
   args <- cmdArgs sample
-  let f = file args
-  let outF = output args
+  let f = fileArg args
+  let outF = outputArg args
   s <- safeReadFile f
   case s of
     Left err -> do
       putStrLn err
       exitFailure
     Right code -> do
-      (success, state) <- case stage args of
+      (success, state) <- case stageFlag args of
             Lex   -> parseAndPrint scanM "Tokens:\n" code outF
             Parse -> parseAndPrint parseM "AST:\n" code outF
             Sem   -> parseAndPrint initAnalyzeM "Annotated AST:\n" code outF
             Gen   -> parseAndPrint (genM f) "" code outF
-      when (debug args) $ print state
+      when (debugFlag args) $ print state
       unless success exitFailure
 
 parseAndPrint :: Show a => Parser a -> String -> String -> Maybe FilePath -> IO (Bool, ParserState)

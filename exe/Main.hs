@@ -1,7 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 module Main (main) where
 
-import Control.Monad (when)
+import Control.Monad (when, unless)
+import System.Exit (exitFailure)
 import System.Console.CmdArgs.Implicit hiding (args)
 
 import Common.FileUtils (safeReadFile)
@@ -24,10 +25,14 @@ data Stage = Lex | Parse | Sem | Gen
 
 sample :: Args
 sample = Args
-  { stage  = enum [Sem &= ignore, Lex &= help "Run the lexer",Parse &= help "Run the parser", Sem &= help "Run the semantic analysis (default)", Gen &= help "Run the code generation"]
+  { stage  = enum [ Sem   &= ignore
+                  , Lex   &= help "Run the lexer"
+                  , Parse &= help "Run the parser"
+                  , Sem   &= help "Run the semantic analysis (default)"
+                  , Gen   &= help "Run the code generation" ]
   , debug  = def &= help "Print debug information"
   , optim  = def &= name "O" &= typ "NUM" &= help "The optimization level of the compiler"
-  , file   = def  &= argPos 0 &= typFile
+  , file   = def &= argPos 0 &= typFile
   , output = def &= help "Output file" &= typFile
   } &= program "llamac"
     &= summary "Llamac"
@@ -41,24 +46,34 @@ main = do
   let outF = output args
   s <- safeReadFile f
   case s of
-    Left err -> putStrLn err
+    Left err -> do
+      putStrLn err
+      exitFailure
     Right code -> do
-      state <- case stage args of
-            Lex   -> printResult scanM "Tokens:\n" code outF
-            Parse -> printResult parseM "AST:\n" code outF
-            Sem   -> printResult initAnalyzeM "Annotated AST:\n" code outF
-            Gen   -> printResult (genM f) "" code outF
+      (success, state) <- case stage args of
+            Lex   -> parseAndPrint scanM "Tokens:\n" code outF
+            Parse -> parseAndPrint parseM "AST:\n" code outF
+            Sem   -> parseAndPrint initAnalyzeM "Annotated AST:\n" code outF
+            Gen   -> parseAndPrint (genM f) "" code outF
       when (debug args) $ print state
+      unless success exitFailure
 
-printResult :: Show a => Parser a -> String -> String -> Maybe FilePath -> IO ParserState
-printResult parserM msg code outF = do
+parseAndPrint :: Show a => Parser a -> String -> String -> Maybe FilePath -> IO (Bool, ParserState)
+parseAndPrint parserM msg code outF = do
   let (r, state) = parseString parserM code
   case r of
-    Left err  -> print err
+    Left err  -> do
+      print err
+      return (False, state)
     Right res -> do
-      case outF of
-        Nothing -> do
-          putStr msg
-          debugPrint res
-        Just f -> writeFile f (msg ++ show res)
-  return state
+      printOut outF msg res
+      return (True, state)
+
+printOut :: Show a => Maybe FilePath -> String -> a -> IO ()
+printOut outF msg res = do
+  case outF of
+    Nothing -> do
+      putStr msg
+      debugPrint res
+    Just f -> do
+      writeFile f (msg ++ show res)

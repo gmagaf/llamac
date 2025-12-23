@@ -20,7 +20,8 @@ import Common.Token
       CharConstant,
       IntConstant,
       StringConstant,
-      Token(..))
+      Token(..),
+      lexeme)
 
 -- Debug printing utils
 debugPrint :: Show a => a -> IO ()
@@ -46,7 +47,7 @@ instance Pretty Token where
     ConstFloatT v  -> show v
     ConstCharT v   -> '\'' : v : "\'"
     ConstStringT v -> "\"" ++ v ++ "\""
-    keyword         -> show keyword
+    keyword        -> lexeme keyword
 
 prettyId :: Identifier -> ShowS
 prettyId = showPretty . IdT

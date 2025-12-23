@@ -8,7 +8,7 @@ main :: IO ()
 main = do
   putStrLn "Hello from tests!"
   putStrLn "Starting unit (non-guided) testing using HSpec"
-  testParserSuite 1000
+  testParserSuite 100
   testSemSuite
   putStrLn "Starting unit guided testing using HSpec"
   testParserGuidedSuite

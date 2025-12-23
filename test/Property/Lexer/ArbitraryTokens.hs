@@ -15,7 +15,7 @@ import Property.Utils
 arbIdWithLength :: Int -> Gen Identifier
 arbIdWithLength l = suchThat ((:) <$> elements ['a'..'z'] <*> listGen (l - 1) g) (`notElem` keywords) where
   g = elements ('_':['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
-  keywords = map show [AndT, ArrayT, BeginT, BoolT, CharT,
+  keywords = map lexeme [AndT, ArrayT, BeginT, BoolT, CharT,
     DeleteT, DimT, DoT, DoneT, DowntoT, ElseT, EndT, FalseT,
     FloatT, ForT, IfT, InT, IntT, LetT, MatchT, ModT, MutableT,
     NewT, NotT, OfT, RecT, RefT, ThenT, ToT, TrueT, TypeT, UnitT,
@@ -55,14 +55,14 @@ arbCharUnQuoted = do
 
 arbChar :: Gen (Char, String)
 arbChar = do
-  (res, lexeme) <- arbCharUnQuoted
-  return (res, "\'" ++ lexeme ++ "\'")
+  (res, lxm) <- arbCharUnQuoted
+  return (res, "\'" ++ lxm ++ "\'")
 
 arbString :: Gen (String, String)
 arbString = sized $ \l -> do
   chars <- listGen l arbCharUnQuoted
-  let (res, lexeme) = foldl (\(cs, ls) (c, lx) -> (c:cs, lx++ls)) ("", []) chars
-  return (res, "\"" ++ lexeme ++ "\"")
+  let (res, lxm) = foldl (\(cs, ls) (c, lx) -> (c:cs, lx++ls)) ("", []) chars
+  return (res, "\"" ++ lxm ++ "\"")
 
 arbWhite :: Gen String
 arbWhite = sized $ \l -> listGen l (elements [' ', '\t', '\r', '\n'])
@@ -119,11 +119,11 @@ arbTokenLexeme = sized $ \l -> do
   (s, sLex) <- resize l arbString
   let sp = (ConstStringT s, sLex)
   k <- arbKeyword
-  let kp = (k, show k)
+  let kp = (k, lexeme k)
   o <- arbOperator
-  let op = (o, show o)
+  let op = (o, lexeme o)
   sep <- arbSeparator
-  let sepp = (sep, show sep)
+  let sepp = (sep, lexeme sep)
   elements [ip, cip, np, fp, cp, sp, kp, op, sepp]
 
 arbTokens :: Int -> Gen ([Token], String)
@@ -133,10 +133,10 @@ arbTokens l = do
     aux :: ([Token], String -> String) -> Int -> Gen ([Token], String -> String)
     aux (acc, f) 0 = return (acc, f)
     aux (acc, f) n = do
-      (t, lexeme) <- arbTokenLexeme
+      (t, lxm) <- arbTokenLexeme
       wh <- oneof [arbWhite, arbComment]
-      let sep = if last lexeme == '-' && head wh == '-' then " " else ""
-      aux (t:acc, showString lexeme . showString (sep ++ wh) . f) (n - 1)
+      let sep = if last lxm == '-' && head wh == '-' then " " else ""
+      aux (t:acc, showString lxm . showString (sep ++ wh) . f) (n - 1)
 
 -- Some arbitrary names and constants from a predefined set
 

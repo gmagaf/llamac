@@ -4,7 +4,8 @@ module Common.Token(Token(..),
                     IntConstant,
                     FloatConstant,
                     CharConstant,
-                    StringConstant) where
+                    StringConstant,
+                    lexeme) where
 
 -- Mappings of Llama constants to Haskell values
 type Identifier = String
@@ -91,10 +92,11 @@ data Token
   | CommaT
   | ColonT
   | EofT
-  deriving Eq
+  deriving (Eq, Show)
 
-instance Show Token where
-  show t = case t of
+-- Print the lexeme of the token
+lexeme :: Token -> String
+lexeme t = case t of
     -- Keywords
     AndT               -> "and"
     ArrayT             -> "array"

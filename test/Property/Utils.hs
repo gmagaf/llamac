@@ -1,6 +1,7 @@
 module Property.Utils (module Property.Utils) where
 
 import Test.QuickCheck
+import System.Exit (exitFailure)
 
 -- Some util functions for Gen
 
@@ -22,3 +23,4 @@ checkForSizes t (x:xs) = do
   if isSuccess res then checkForSizes t xs
   else do
     putStrLn "Test failed :("
+    exitFailure

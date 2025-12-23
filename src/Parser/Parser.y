@@ -2,7 +2,7 @@
 module Parser.Parser (calc, calcRepl) where
 
 import Lexer.Lexer (AlexPosn)
-import Common.Token (Token(..))
+import Common.Token (Token(..), lexeme)
 import Common.AST
 import Parser.ParserM (Parser, lexerWrap, getAlexPos, getTokenPosn, throwAtPosn, throwParsingError)
 }
@@ -389,5 +389,5 @@ PatArg_ :: { AlexPosn -> Pattern AlexPosn }
 parseError :: Token -> Parser a
 parseError t = do
     posn <- getAlexPos
-    throwAtPosn posn $ throwParsingError $ "Unable to process token " ++ show t
+    throwAtPosn posn $ throwParsingError $ "Unable to process token " ++ lexeme t
 }

@@ -6,7 +6,7 @@ import Data.Maybe (isJust, isNothing)
 import Control.Monad ((>=>), when)
 import Control.Lens.Setter ((<~))
 
-import Common.Token (Identifier, ConstrIdentifier)
+import Common.Token (ConstrIdentifier)
 import Common.AST (Node(..), Type)
 import Common.PrintAST
 import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..), tvarsInType, typeTo)
@@ -209,15 +209,16 @@ findName k = do
         Just entry -> resolveTableEntry entry
         _ -> throwSem ("Symbol " ++ k ++ " is not in scope")
 
-findType :: Identifier -> Parser [(ConstrIdentifier, [ConstType])]
-findType i = do
+findType :: ConstType -> Parser [(ConstrIdentifier, [ConstType])]
+findType t = do
+    let i = pretty t
     ts <- getTypes
     case query i ts of
         Just (TypeEntry constrs) -> return constrs
         _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
 
 -- Check that type is in scope else throw error
-checkTypeInScope :: Identifier -> Parser ()
+checkTypeInScope :: ConstType -> Parser ()
 checkTypeInScope = findType >=> const (return ())
 
 -- function aliases

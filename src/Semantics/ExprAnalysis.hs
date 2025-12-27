@@ -123,7 +123,11 @@ semConstConstrExpr :: ConstrIdentifier -> Parser (Expr SemanticTag)
 semConstConstrExpr i = do
     entry <- findName i
     case entry of
-        ConstrEntry t _ _ -> retE (ConstConstrExpr i) (constTypeToSymbolType t)
+        ConstrEntry t ps outT -> do
+            constrs <- findType outT
+            if (i, ps) `elem` constrs
+            then retE (ConstConstrExpr i) (constTypeToSymbolType t)
+            else throwSem $ "Type " ++ pretty outT ++ " of constructor " ++ i ++ " is shadowed out of scope"
         _                 -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
 
@@ -173,8 +177,10 @@ semConstrAppExpr :: ConstrIdentifier -> [Expr SemanticTag] -> Parser (Expr Seman
 semConstrAppExpr i es = do
     entry <- findName i
     case entry of
-        ConstrEntry t psT _ ->
-            case compare (length es) (length psT) of
+        ConstrEntry t psT outT -> do
+            constrs <- findType outT
+            if (i, psT) `elem` constrs
+            then case compare (length es) (length psT) of
                 LT -> throwSem $ "Constructor " ++ i ++ " is applied to too few arguments"
                 GT -> throwSem $ "Constructor " ++ i ++ " is applied to too many arguments"
                 EQ -> do
@@ -184,6 +190,7 @@ semConstrAppExpr i es = do
                     unify (constTypeToSymbolType t, inf)
                     checkConstraint v (NotAllowedFunType $ "Constructor " ++ i ++ " cannot return function type: " ++ pretty v)
                     retE (ConstrAppExpr i es) v
+            else throwSem $ "Type " ++ pretty outT ++ " of constructor " ++ i ++ " is shadowed out of scope"
         _ -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
 

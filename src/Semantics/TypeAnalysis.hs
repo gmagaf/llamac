@@ -44,7 +44,7 @@ insertTypeDef typesInDef (TDef tId cs p) =
             then return (typeTo ConstType t)
             else do
                 putSemPosn tp
-                checkTypeInScope tName
+                checkTypeInScope (typeTo ConstType t)
                 return (typeTo ConstType t)
         checkTypeInCtx t = return (typeTo ConstType t)
         checkConstrParams :: Constr AlexPosn -> Parser (ConstrIdentifier, [ConstType])
@@ -85,6 +85,6 @@ analyzeType = recSemType aType where
     aType :: TypeF (Type SemanticTag) -> Parser (Type SemanticTag)
     aType (ArrayType dim _) | dim < 1 = throwSem "Dimension of array type can't be less than 1"
     aType (UserDefinedType t) = do
-        checkTypeInScope t
+        checkTypeInScope (ConstType $ UserDefinedType t)
         Type (UserDefinedType t) . cpPosn <$> getSemPosn
     aType tf = Type tf . cpPosn <$> getSemPosn

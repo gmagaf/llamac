@@ -20,18 +20,15 @@ import Semantics.ExprAnalysis (analyzeExpr)
 -- Semantic analysis of definitions
 
 -- Util definitions for sig analysis
+type DefinitionType = SymbolType
 type KeyEntryPair = (Identifier, TableEntry)
 
 data SigAnalyzedAST =
-   Mut
- | Arr [Expr AlexPosn]
- | Fun [Param SemanticTag] (Expr AlexPosn)
+   Mut (Maybe (Type SemanticTag))
+ | Arr [Expr AlexPosn] (Maybe (Type SemanticTag))
+ | Fun [Param SemanticTag] (Maybe (Type SemanticTag)) (Expr AlexPosn)
 
-data SigAnalyzedType =
-    Typed (Type SemanticTag)
-  | Untyped SymbolType
-
-data SigAnalysisRes = SigAnalysisRes SigAnalyzedType SigAnalyzedAST AlexPosn KeyEntryPair
+data SigAnalysisRes = SigAnalysisRes SigAnalyzedAST DefinitionType AlexPosn KeyEntryPair
 
 {-
     Analyze let statements
@@ -89,22 +86,22 @@ secondAnalysis _ pair = return pair
     get polymorphic functions
 -}
 genResult :: (Def SemanticTag, TableEntry) -> Parser (Def SemanticTag, TableEntry)
-genResult (FunDef i ps Nothing e tg, FunEntry (MonoType t) params) = do
+genResult (FunDef i ps outT e tg, FunEntry (MonoType t) params) = do
     -- Update all the free variables from the outer scope
     resolveFreeVars
     -- Resolve the type to generalize
     rt <- resolveType t
     -- Generalize type
     scheme <- gen rt
-    return (FunDef i ps Nothing e tg{typeInfo = DefType scheme}, FunEntry scheme params)
+    return (FunDef i ps outT e tg{typeInfo = DefType scheme}, FunEntry scheme params)
 genResult pair = return pair
 
 entryPair :: SigAnalysisRes -> KeyEntryPair
 entryPair (SigAnalysisRes _ _ _ pair) = pair
 
 addMutVarToFree :: SigAnalysisRes -> Parser ()
-addMutVarToFree (SigAnalysisRes (Untyped t) Mut _ _) = addFreeTVars t
-addMutVarToFree (SigAnalysisRes (Untyped t) (Arr _) _ _) = addFreeTVars t
+addMutVarToFree (SigAnalysisRes (Mut Nothing) t _ _) = addFreeTVars t
+addMutVarToFree (SigAnalysisRes (Arr _ Nothing) t _ _) = addFreeTVars t
 addMutVarToFree _ = return ()
 
 {-
@@ -115,23 +112,24 @@ analyzeDefSig (VarDef x Nothing p) = do
     tv <- freshTVar
     checkConstraint tv (NotPolymorphicVar $ "Cannot abstract on mutable var " ++ pretty tv)
     let varType = SymType . RefType $ tv
-    return $ SigAnalysisRes (Untyped varType) Mut p (x, MutableEntry varType)
+    return $ SigAnalysisRes (Mut Nothing) varType p (x, MutableEntry varType)
 analyzeDefSig (VarDef x (Just t) p) = do
     semT <- stackTrace ("while analyzing mut var " ++ x) $ analyzeType t
     let varType = SymType . RefType $ typeToSymbolType semT
-    return $ SigAnalysisRes (Typed semT) Mut p (x, MutableEntry varType)
-analyzeDefSig (ArrayDef i es Nothing p) = do
+    return $ SigAnalysisRes (Mut (Just semT)) varType p (x, MutableEntry varType)
+analyzeDefSig (ArrayDef i es outT p) = do
     let dims = length es
-    tv <- freshTVar
-    checkConstraint tv (NotPolymorphicVar $ "Cannot abstract on array var " ++ pretty tv)
-    let arrayType = SymType . ArrayType dims $ tv
-    return $ SigAnalysisRes (Untyped arrayType) (Arr es) p (i, ArrayEntry arrayType dims)
-analyzeDefSig (ArrayDef i es (Just t) p) = do
-    let dims = length es
-    semT <- stackTrace ("while analyzing array " ++ i) $ analyzeType t
-    let arrayType = SymType . ArrayType dims $ typeToSymbolType semT
-    return $ SigAnalysisRes (Typed semT) (Arr es) p (i, ArrayEntry arrayType dims)
-analyzeDefSig (FunDef i ps Nothing e p) = do
+    (semOutT, outDefT) <- case outT of
+        Just t  -> do
+            semT <- stackTrace ("while analyzing array " ++ i) $ analyzeType t
+            return (Just semT, typeToSymbolType semT)
+        Nothing -> do
+            tv <- freshTVar
+            checkConstraint tv (NotPolymorphicVar $ "Cannot abstract on array var " ++ pretty tv)
+            return (Nothing, tv)
+    let arrayType = SymType . ArrayType dims $ outDefT
+    return $ SigAnalysisRes (Arr es semOutT) arrayType p (i, ArrayEntry arrayType dims)
+analyzeDefSig (FunDef i ps outT e p) = do
     let paramNames = map ide ps
     when (hasDuplicates paramNames) $
         throwSemAtPosn ("Fun " ++ i ++ " cannot have duplicate params") p
@@ -139,27 +137,18 @@ analyzeDefSig (FunDef i ps Nothing e p) = do
     semPs <- mapM (stackTrace ("while analyzing the params of " ++ i) . analyzeParam) ps
     putSemPosn p
     paramTypes <- mapM getNodeType semPs
-    -- Fresh outV is the output type of the function
-    outV <- freshTVar
-    let fType = paramsToFun SymType paramTypes outV
-    return $ SigAnalysisRes (Untyped fType) (Fun semPs e) p (i, FunEntry (MonoType fType) paramNames)
-analyzeDefSig (FunDef i ps (Just t) e p) = do
-    let paramNames = map ide ps
-    -- First we make sure that there are no duplicates in params
-    when (hasDuplicates paramNames) $
-        throwSemAtPosn ("Fun " ++ i ++ " cannot have duplicate params") p
-    -- We analyze the overall type of the function
-    semT <- stackTrace ("while analyzing fun " ++ i) $ analyzeType t
-    -- Analyze params and body in the current scope
-    semPs <- mapM (stackTrace ("while analyzing the params of " ++ i) . analyzeParam) ps
-    eT <- freshTVar
-    -- Collect the results: the new param types, the expr type and unify tv with the result fun type
-    putSemPosn p
-    paramTypes <- mapM getNodeType semPs
-    let fType = paramsToFun SymType paramTypes eT
-    unify (typeToSymbolType semT, fType)
-    let fScheme = MonoType $ typeToSymbolType semT
-    return $ SigAnalysisRes (Typed semT) (Fun semPs e) p (i, FunEntry fScheme paramNames)
+    (semOutT, outDefT) <- case outT of
+        Just t  -> do
+            -- We analyze the out type of the function
+            semT <- stackTrace ("while analyzing fun " ++ i) $ analyzeType t
+            return (Just semT, typeToSymbolType semT)
+        Nothing -> do
+            -- Fresh outV is the output type of the function
+            outV <- freshTVar
+            return (Nothing, outV)
+    checkConstraint outDefT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty outDefT)
+    let fType = paramsToFun SymType paramTypes outDefT
+    return $ SigAnalysisRes (Fun semPs semOutT e) fType p (i, FunEntry (MonoType fType) paramNames)
 
 {-
     Analyzes params by writting them to
@@ -181,56 +170,22 @@ analyzeParam (Param param p) = do
     Analysis of the body of a definition
 -}
 analyzeDefBody :: SigAnalysisRes -> Parser (Def SemanticTag, TableEntry)
-analyzeDefBody (SigAnalysisRes (Untyped st) Mut p (i, entry)) =
-    let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}
-    in return (VarDef i Nothing tg, entry)
-analyzeDefBody (SigAnalysisRes (Typed semT) Mut p (i, entry)) =
-    let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}
-    in return (VarDef i (Just semT) tg, entry)
-analyzeDefBody (SigAnalysisRes (Untyped st) (Arr es) p (i, entry)) = do
+analyzeDefBody (SigAnalysisRes (Mut t) st p (i, entry)) =
+    let tg = SemTag{posn = p, typeInfo = DefType . MonoType $ st}
+    in return (VarDef i t tg, entry)
+analyzeDefBody (SigAnalysisRes (Arr es t) st p (i, entry)) = do
     semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
     typesEs <- mapM getNodeType semEs
     putSemPosn p
     mapM_ (unify . (,) (SymType IntType)) typesEs
     let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}
-    return (ArrayDef i semEs Nothing tg, entry)
-analyzeDefBody (SigAnalysisRes (Typed semT) (Arr es) p (i, entry)) = do
-    semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
-    typesEs <- mapM getNodeType semEs
-    putSemPosn p
-    mapM_ (unify . (,) (SymType IntType)) typesEs
-    let tg = SemTag{posn = p, typeInfo = DefType . MonoType . typeToSymbolType $ semT}
-    return (ArrayDef i semEs (Just semT) tg, entry)
-analyzeDefBody (SigAnalysisRes (Untyped st) (Fun semPs e) p (i, _)) = do
+    return (ArrayDef i semEs t tg, entry)
+analyzeDefBody (SigAnalysisRes (Fun semPs outT e) st p (i, _)) = do
     -- Hold the free vars outside the body
     outerScopeVars <- getFreeTVars
     -- Open scope for params names and their types
-    openScopeInNames
     addFreeTVars st
-    -- Insert params in the current scope
-    let insertParam param = do
-          t <- getNodeType param
-          insertName (ide param) (ParamEntry t i)
-          return t
-    paramTypes <- mapM insertParam semPs
-    semE <- stackTrace ("while analyzing the body of " ++ i) (analyzeExpr e)
-    -- Collect the results: the new param types, the expr type and unify tv with the result fun type
-    putSemPosn p
-    eT <- getNodeType semE
-    let fType = paramsToFun SymType paramTypes eT
-    unify (st, fType)
-    reT <- getNodeType semE
-    checkConstraint reT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty reT)
-    -- Close scope
-    closeScopeInNames
-    putFreeTVars outerScopeVars
-    let fScheme = MonoType st
-    let tg = SemTag{posn = p, typeInfo = DefType fScheme}
-    return (FunDef i semPs Nothing semE tg, FunEntry fScheme (map ide semPs))
-analyzeDefBody (SigAnalysisRes (Typed semT) (Fun semPs e) p (i, _)) = do
-    -- Open scope for params names and their types
     openScopeInNames
-    outerScopeVars <- getFreeTVars
     -- Insert params in the current scope
     let insertParam param = do
           t <- getNodeType param
@@ -238,17 +193,14 @@ analyzeDefBody (SigAnalysisRes (Typed semT) (Fun semPs e) p (i, _)) = do
           return t
     paramTypes <- mapM insertParam semPs
     semE <- stackTrace ("while analyzing the body of " ++ i) (analyzeExpr e)
-    -- Collect the results: the new param types, the expr type and unify tv with the result fun type
+    -- Collect the results: the new param types, the expr type and unify infered type with the expected fun type
     putSemPosn p
     eT <- getNodeType semE
     let fType = paramsToFun SymType paramTypes eT
-    let st = typeToSymbolType semT
     unify (st, fType)
-    reT <- getNodeType semE
-    checkConstraint reT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty reT)
     -- Close scope
     closeScopeInNames
     putFreeTVars outerScopeVars
     let fScheme = MonoType st
     let tg = SemTag{posn = p, typeInfo = DefType fScheme}
-    return (FunDef i semPs (Just semT) semE tg, FunEntry fScheme (map ide semPs))
+    return (FunDef i semPs outT semE tg, FunEntry fScheme (map ide semPs))

@@ -183,7 +183,7 @@ arbDef s (i, t@(Type tf _)) = case tf of
     ps <- mapM arbParam (zip pids argTypes)
     let s' = M.union s (M.fromList $ zipWith pEntry ps argTypes)
     frequency [(2, FunDef i ps Nothing <$> arbExpr s' outT <*> arbitrary),
-               (3, FunDef i ps (Just t) <$> arbExpr s' outT <*> arbitrary)] where
+               (3, FunDef i ps (Just outT) <$> arbExpr s' outT <*> arbitrary)] where
       pEntry :: Param b -> Type b -> (Identifier, ConstType)
       pEntry p t' = (ide p, typeTo ConstType t')
   _ -> frequency [(2, FunDef i [] Nothing <$> arbExpr s t <*> arbitrary),

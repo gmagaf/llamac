@@ -24,4 +24,5 @@ initInterpreterState p f =
                                 , user_mallocs = M.empty
                                 , inputBuffer = "" }
     , code_file = f
+    , line_no = 0
     }

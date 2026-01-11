@@ -2,6 +2,7 @@ module Property.Parser.ArbitraryAST (arbitraryAST, ArbPosn(..)) where
 
 import Test.QuickCheck
 
+import Common.Token
 import Common.AST
 import Lexer.Lexer (AlexPosn(..))
 
@@ -39,7 +40,7 @@ arbConstr = Constr <$> arbitraryConstrIdentifier <*> boundedListOf (0, 2) arbTyp
 arbType :: Arbitrary b => Gen (Type b)
 arbType = sized $ \n -> Type <$> arbTypeF (resize (div n 2) arbType) <*> arbitrary
 
-arbTypeF :: Gen t -> Gen (TypeF t)
+arbTypeF :: Gen t -> Gen (TypeF Identifier t)
 arbTypeF r = sized gen where
   gen 0 = do
     i <- arbitraryIdentifier

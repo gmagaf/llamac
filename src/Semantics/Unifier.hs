@@ -8,7 +8,7 @@ import qualified Data.IntSet as S
 
 import Common.AST (TypeF(..))
 import Common.PrintAST (pretty)
-import Common.SymbolType(SymbolType(..), TypeScheme (..), constTypeToSymbolType, notVarInType, substScheme, cataM)
+import Common.SymbolType(SymbolType(..), TypeScheme (..), constTypeToSymbolType, notVarInType, substScheme, cataM, PosnId (..), printTypePosn)
 import Parser.ParserM (Parser)
 import Semantics.Utils (throwSem, getUnifier, putUnifier,
                         getConstraints, putConstraints,
@@ -50,13 +50,13 @@ gen t =
             else do
                 mCSet <- lookupConstrTg v NotPolymorphicVarTg <$> getConstraints
                 return $ maybe [v] (const []) mCSet
-        alg :: TypeF [Int] -> Parser [Int]
+        alg :: TypeF p [Int] -> Parser [Int]
         alg (FunType f1 f2) = return $ f1 ++ f2
         alg (ArrayType _ f) = return f
         alg (RefType f)     = return f
         alg _               = return []
     in do
-        varsNotInScope <- cataM (alg, varNotInScope) t
+        varsNotInScope <- cataM (either varNotInScope alg) t
         let varsToBound = removeDuplicates S.empty varsNotInScope
         return $ foldr AbsType (MonoType t) varsToBound
 
@@ -90,7 +90,7 @@ checkConstraint t@(SymType ft) tc = case (ft, tc) of
     (_, AllowedTypes ts s) ->
         let eqTypes = any (\ct -> t == constTypeToSymbolType ct) ts
         in unless eqTypes . throwSem $ "Type constraint failed for type " ++ pretty t ++ ": " ++ s
-    (UserDefinedType _, AllowedUserDefinedType _) -> return ()
+    (UserDefinedType {}, AllowedUserDefinedType _) -> return ()
     (_, AllowedUserDefinedType s) ->
         throwSem $ "Type constraint failed: for type " ++ pretty t ++ ". " ++ s
     (_, NotPolymorphicVar {}) -> return () -- This constraint only makes sense for type variables
@@ -138,4 +138,10 @@ unify (st1, st2) = do
             unify (t, s)
         (SymType (RefType t), SymType (RefType s)) -> do
             unify (t, s)
+        (SymType (UserDefinedType tId), SymType (UserDefinedType sId))
+            | identifier tId == identifier sId && tId /= sId -> do
+            throwSem $ "Unable to unify type " ++
+                pretty rt ++ " defined at " ++ printTypePosn tId ++
+                " with " ++
+                pretty rs ++ " defined at " ++ printTypePosn sId
         _ -> throwSem $ "Unable to unify type " ++ pretty rt ++ " with " ++ pretty rs

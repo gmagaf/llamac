@@ -9,6 +9,7 @@ import qualified LLVM.IRBuilder as L
 import qualified LLVM.AST.Type as L
 
 import Common.AST (Expr(..), ExprF (..), BinOp (..), LetDef (..), Def (FunDef), Param(..), NameDef (ide), AST)
+import Common.SymbolType (outFunType)
 import Common.SymbolTable (mkFullTableEntry, insert, names, TableEntry (ParamEntry, FunEntry), query, optInfo)
 import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames)
 import Parser.ParserState (symbols)
@@ -51,7 +52,7 @@ genDef :: Def SemanticTag -> Parser L.Operand
 genDef n@(FunDef fname params _ body _) = do -- TODO: Define defs gen
     scheme <- getDefScheme n
     st <- inst scheme
-    let retsty = getRetStType st
+    let retsty = outFunType st
     retty <- genType retsty
     genParams <- mapM genParam params
     function (L.mkName fname) genParams retty genBody where

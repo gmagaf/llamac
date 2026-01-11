@@ -6,7 +6,7 @@ import Common.PrintAST (Pretty(pretty))
 import Common.SymbolTable
 import Common.SymbolType (TypeScheme(..), SymbolType(..), ConstType(..),
                           constTypeToSymbolType,
-                          funToArgs, stCoAlg, paramsToFun)
+                          funToArgs, paramsToFun)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser, stackTrace, throwInternalError)
 import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames)
@@ -123,16 +123,13 @@ semConstConstrExpr :: ConstrIdentifier -> Parser (Expr SemanticTag)
 semConstConstrExpr i = do
     entry <- findName i
     case entry of
-        ConstrEntry t ps outT -> do
-            constrs <- findType outT
-            if (i, ps) `elem` constrs
-            then retE (ConstConstrExpr i) (constTypeToSymbolType t)
-            else throwSem $ "Type " ++ pretty outT ++ " of constructor " ++ i ++ " is shadowed out of scope"
+        ConstrEntry _ [] outT -> do
+            retE (ConstConstrExpr i) (constTypeToSymbolType outT)
         _                 -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
 
 semFunAppExpr :: Identifier -> [Expr SemanticTag] -> Parser (Expr SemanticTag)
-semFunAppExpr i es = let funTypeToArgTypes = funToArgs stCoAlg in do
+semFunAppExpr i es = do
     entry <- findName i
     case entry of
         FunEntry ft ps ->
@@ -143,17 +140,17 @@ semFunAppExpr i es = let funTypeToArgTypes = funToArgs stCoAlg in do
                     ts <- mapM getNodeType es
                     v <- freshTVar
                     t <- inst ft
-                    let inf = paramsToFun SymType ts v
+                    let inf = paramsToFun ts v
                     unify (t, inf)
                     checkConstraint v (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty v)
                     retE (FunAppExpr i es) v
         ParamEntry t _ -> do
             ts <- mapM getNodeType es
             v <- freshTVar
-            let inf = paramsToFun SymType ts v
+            let inf = paramsToFun ts v
             unify (t, inf)
             rt <- resolveType t
-            let argTypes = funTypeToArgTypes rt
+            let argTypes = funToArgs rt
             case compare (length es) (length argTypes) of
                 LT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty rt ++ " is applied to too few arguments"
                 GT -> throwSem $ "Param " ++ i ++ " of type " ++ pretty rt ++ " is applied to too many arguments"
@@ -161,10 +158,10 @@ semFunAppExpr i es = let funTypeToArgTypes = funToArgs stCoAlg in do
         PatternEntry t -> do
             ts <- mapM getNodeType es
             v <- freshTVar
-            let inf = paramsToFun SymType ts v
+            let inf = paramsToFun ts v
             unify (t, inf)
             rt <- resolveType t
-            let argTypes = funTypeToArgTypes rt
+            let argTypes = funToArgs rt
             case compare (length es) (length argTypes) of
                 LT -> throwSem $ "Pattern " ++ i ++ " of type " ++ pretty rt ++ " is applied to too few arguments"
                 GT -> throwSem $ "Pattern " ++ i ++ " of type " ++ pretty rt ++ " is applied to too many arguments"
@@ -178,19 +175,17 @@ semConstrAppExpr i es = do
     entry <- findName i
     case entry of
         ConstrEntry t psT outT -> do
-            constrs <- findType outT
-            if (i, psT) `elem` constrs
-            then case compare (length es) (length psT) of
+            case compare (length es) (length psT) of
                 LT -> throwSem $ "Constructor " ++ i ++ " is applied to too few arguments"
                 GT -> throwSem $ "Constructor " ++ i ++ " is applied to too many arguments"
                 EQ -> do
                     ts <- mapM getNodeType es
                     v <- freshTVar
-                    let inf = paramsToFun SymType ts v
+                    unify (constTypeToSymbolType outT, v)
+                    let inf = paramsToFun ts v
                     unify (constTypeToSymbolType t, inf)
                     checkConstraint v (NotAllowedFunType $ "Constructor " ++ i ++ " cannot return function type: " ++ pretty v)
                     retE (ConstrAppExpr i es) v
-            else throwSem $ "Type " ++ pretty outT ++ " of constructor " ++ i ++ " is shadowed out of scope"
         _ -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
 
@@ -326,7 +321,7 @@ semNewType :: Type SemanticTag -> Parser (Expr SemanticTag)
 semNewType (Type (ArrayType {}) _) = throwSem "Cannot dynamically allocate memory for array types"
 semNewType t = do
     p <- getSemPosn
-    let nt = SymType . RefType $ typeToSymbolType t
+    nt <- SymType . RefType <$> typeToSymbolType t
     return $ NewType t SemTag{posn = p, typeInfo = NodeType nt}
 
 semDeleteExpr :: Expr SemanticTag -> Parser (Expr SemanticTag)

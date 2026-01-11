@@ -115,14 +115,15 @@ analyzeDefSig (VarDef x Nothing p) = do
     return $ SigAnalysisRes (Mut Nothing) varType p (x, MutableEntry varType)
 analyzeDefSig (VarDef x (Just t) p) = do
     semT <- stackTrace ("while analyzing mut var " ++ x) $ analyzeType t
-    let varType = SymType . RefType $ typeToSymbolType semT
+    varType <- SymType . RefType <$> typeToSymbolType semT
     return $ SigAnalysisRes (Mut (Just semT)) varType p (x, MutableEntry varType)
 analyzeDefSig (ArrayDef i es outT p) = do
     let dims = length es
     (semOutT, outDefT) <- case outT of
         Just t  -> do
             semT <- stackTrace ("while analyzing array " ++ i) $ analyzeType t
-            return (Just semT, typeToSymbolType semT)
+            outDefT <- typeToSymbolType semT
+            return (Just semT, outDefT)
         Nothing -> do
             tv <- freshTVar
             checkConstraint tv (NotPolymorphicVar $ "Cannot abstract on array var " ++ pretty tv)
@@ -141,13 +142,14 @@ analyzeDefSig (FunDef i ps outT e p) = do
         Just t  -> do
             -- We analyze the out type of the function
             semT <- stackTrace ("while analyzing fun " ++ i) $ analyzeType t
-            return (Just semT, typeToSymbolType semT)
+            outDefT <- typeToSymbolType semT
+            return (Just semT, outDefT)
         Nothing -> do
             -- Fresh outV is the output type of the function
             outV <- freshTVar
             return (Nothing, outV)
     checkConstraint outDefT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty outDefT)
-    let fType = paramsToFun SymType paramTypes outDefT
+    let fType = paramsToFun paramTypes outDefT
     return $ SigAnalysisRes (Fun semPs semOutT e) fType p (i, FunEntry (MonoType fType) paramNames)
 
 {-
@@ -159,7 +161,7 @@ analyzeParam :: Param AlexPosn -> Parser (Param SemanticTag)
 analyzeParam (TypedParam param t p) = do
     semT <- stackTrace ("while analyzing param " ++ param) $ analyzeType t
     putSemPosn p
-    let st = typeToSymbolType t
+    st <- typeToSymbolType semT
     return $ TypedParam param semT SemTag{posn = p, typeInfo = NodeType st}
 analyzeParam (Param param p) = do
     putSemPosn p
@@ -196,7 +198,7 @@ analyzeDefBody (SigAnalysisRes (Fun semPs outT e) st p (i, _)) = do
     -- Collect the results: the new param types, the expr type and unify infered type with the expected fun type
     putSemPosn p
     eT <- getNodeType semE
-    let fType = paramsToFun SymType paramTypes eT
+    let fType = paramsToFun paramTypes eT
     unify (st, fType)
     -- Close scope
     closeScopeInNames

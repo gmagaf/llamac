@@ -10,6 +10,7 @@ import Unit.Semantics.SemanticTestSuites
 import Unit.Semantics.AnalyzedASTs
 import Common.FileUtils (readFileB)
 import Common.AST (AST)
+import Common.SymbolType (Source (FileIn))
 import Lexer.Lexer (AlexPosn)
 import Parser.Utils (parse, analyze)
 import Semantics.Utils (SemanticTag)
@@ -20,7 +21,7 @@ testGuidedParser (descr, p, f) = do
   hspec $ do
     describe "Unit testing suite: (parse program == Expected AST)" $ do
       it descr $ do
-        parse s `shouldBe` Right p
+        parse (FileIn f) s `shouldBe` Right p
 
 testParserGuidedSuite :: IO ()
 testParserGuidedSuite = mapM_ testGuidedParser suite where
@@ -39,9 +40,9 @@ parserSpec :: [(String, String)] -> Spec
 parserSpec [] = return ()
 parserSpec ((descr, s):ts) = do
   it descr $ do
-    isCorrect s `shouldBe` True
+    isCorrect descr s `shouldBe` True
   parserSpec ts where
-      isCorrect i = case parse i of
+      isCorrect f i = case parse (FileIn f) i of
         Left _  -> False
         Right _ -> True
 
@@ -67,7 +68,7 @@ testGuidedSem (descr, p, f) = do
   hspec $ do
     describe "Unit testing suite: (sem program == Expected AST)" $ do
       it descr $ do
-        analyze s `shouldBe` Right p
+        analyze (FileIn f) s `shouldBe` Right p
 
 testSemGuidedSuite :: IO ()
 testSemGuidedSuite = mapM_ testGuidedSem suite where
@@ -77,10 +78,11 @@ testSemGuidedSuite = mapM_ testGuidedSem suite where
 semSpec :: String -> Int -> [(String, Bool)] -> Spec
 semSpec _ _ [] = return ()
 semSpec descr i ((p, expectation):ts) = do
-  it (descr ++ "-" ++ show i) $ do
-    isCorrect p `shouldBe` expectation
+  let src = descr ++ "-" ++ show i
+  it src $ do
+    isCorrect src p `shouldBe` expectation
   semSpec descr (i + 1) ts where
-      isCorrect pp = case analyze pp of
+      isCorrect f pp = case analyze (FileIn f) pp of
         Left _  -> False
         Right _ -> True
 

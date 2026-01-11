@@ -1,14 +1,46 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Common.SymbolType (module Common.SymbolType) where
 
 import qualified Data.Set as S
-import Common.AST (Type(..), TypeF(..))
-import Common.PrintAST (Pretty(prettyPrec))
+import Control.Monad ((>=>))
+import Data.Functor.Identity (Identity (Identity, runIdentity))
+import Data.Bifunctor (Bifunctor(first))
+import Data.Bitraversable (bimapM)
 
+import Common.Token (Identifier)
+import Common.AST (Type(..), TypeF(..))
+import Common.PrintAST (Pretty(prettyPrec, showPretty))
+import Lexer.Lexer (AlexPosn, printPosn)
+
+-- A positioned identifier for user defined types with definition position info
+
+data Source = ReplIn Int
+            | FileIn String
+    deriving (Show, Eq, Ord)
+
+printSource :: Source -> String
+printSource (ReplIn l) = "<interactive>:" ++ show l
+printSource (FileIn f) = f
+
+data PosnId = PosnId
+            { identifier :: Identifier
+            , source :: Source
+            , posn :: AlexPosn
+            }
+    deriving (Show, Eq, Ord)
+
+instance Pretty PosnId where
+    showPretty = showPretty . identifier
+
+printTypePosn :: PosnId -> String
+printTypePosn p = printSource (source p) ++ ":" ++ printPosn (posn p)
 
 -- A representation for semantic types
 
 -- Const types are types without type variables
-newtype ConstType = ConstType { unConstType :: TypeF ConstType }
+newtype ConstType = ConstType { unConstType :: TypeF PosnId ConstType }
     deriving (Show, Eq, Ord)
 
 instance Pretty ConstType where
@@ -29,20 +61,13 @@ stringConstType :: ConstType
 stringConstType = ConstType (ArrayType 1 (ConstType CharType))
 
 -- Symbol Types are types including type variables
-data SymbolType = SymType (TypeF SymbolType)
+data SymbolType = SymType (TypeF PosnId SymbolType)
                 | TVar Int
     deriving (Show, Eq)
 
 instance Pretty SymbolType where
     prettyPrec d (SymType t) = prettyPrec d t
     prettyPrec _ (TVar i)    = showString $ "@" ++ show i
-
--- Some convertion utils
-typeTo :: (TypeF a -> a) -> Type b -> a
-typeTo alg (Type tf _) = alg (fmap (typeTo alg) tf)
-
-constTypeToSymbolType :: ConstType -> SymbolType
-constTypeToSymbolType (ConstType tf) = SymType $ fmap constTypeToSymbolType tf
 
 -- Type schemes are polymorphic types
 data TypeScheme = MonoType SymbolType
@@ -55,28 +80,87 @@ instance Pretty TypeScheme where
         showString ("forall @" ++ show v ++ ". ") .
         prettyPrec d t
 
+-- Abstract away the implementation details of different type data types
+
+class Traversable f => TypeFWrapper f t | t -> f where
+    -- The type for the identifiers used for user defined types
+    type TypeId t
+    -- Get out the TypeF functor wrapped in f
+    out :: t -> f (TypeF (TypeId t) t)
+    -- Get out the TypeF functor if possible else return t
+    coAlg :: t -> Either t (TypeF (TypeId t) t)
+
+class TypeFWrapper f t => TypeFixPoint f t | t -> f where
+    -- Default fix for TypeF functor
+    fix :: TypeF (TypeId t) t -> t
+    -- Fix for TypeF functor wrapped in f
+    fixf :: f (TypeF (TypeId t) t) -> t
+
+instance TypeFWrapper Identity (Type b) where
+    type TypeId (Type b) = Identifier
+    out (Type tf _) = Identity tf
+    coAlg = Right . runIdentity . out
+
+instance TypeFWrapper (Either Int) SymbolType where
+    type TypeId SymbolType = PosnId
+    out (SymType tf) = Right tf
+    out (TVar v)     = Left v
+    coAlg = either (Left . TVar) Right . out
+
+instance TypeFWrapper Identity ConstType where
+    type TypeId ConstType = PosnId
+    out (ConstType tf) = Identity tf
+    coAlg = Right . runIdentity . out
+
+instance TypeFixPoint (Either Int) SymbolType where
+    fix = SymType
+    fixf = either TVar SymType
+
+instance TypeFixPoint Identity ConstType where
+    fix = ConstType
+    fixf = ConstType . runIdentity
+
+-- Some convertion utils
+typeTo' :: TypeFixPoint f t => (TypeId (Type b) -> TypeId t) -> Type b -> t
+typeTo' c = cata aux where
+    aux (Identity tf) = fix $ first c tf
+
+typeTo :: (Monad m, TypeFixPoint f t) => (TypeId (Type b) -> m (TypeId t)) -> Type b -> m t
+typeTo c = cataM aux where
+    aux (Identity tf) = fix <$> bimapM c pure tf
+
+typeTo2 :: (Monad m, TypeFixPoint f t) => (Type b -> TypeId (Type b) -> m (TypeId t)) -> Type b -> m t
+typeTo2 c = paraM2 aux where
+    aux t (Identity tf) = fix <$> bimapM (c t) pure tf
+
+constTypeToSymbolType :: ConstType -> SymbolType
+constTypeToSymbolType (ConstType tf) = SymType $ fmap constTypeToSymbolType tf
+
 -- Recursion Utils
-bottomUp :: (SymbolType -> SymbolType) -> SymbolType -> SymbolType
-bottomUp f (SymType t) = f (SymType $ fmap (bottomUp f) t)
-bottomUp f v@(TVar _)  = f v
+bottomUp :: TypeFixPoint f t => (t -> t) -> t -> t
+bottomUp alg = alg . fixf . fmap (fmap (bottomUp alg)) . out
 
--- bottomUpM :: Monad m => (SymbolType -> m SymbolType) -> SymbolType -> m SymbolType
--- bottomUpM f (SymType t) = mapM (bottomUpM f) t >>= f . SymType
--- bottomUpM f v@(TVar _)  = f v
+bottomUpM :: (Monad m, TypeFixPoint f t) => (t -> m t) -> t -> m t
+bottomUpM alg = mapM (mapM (bottomUpM alg)) . out >=> alg . fixf
 
-cataUn :: (t -> TypeF t) -> (TypeF a -> a) -> t -> a
-cataUn unT alg tf = alg (fmap (cataUn unT alg) (unT tf))
+cata :: TypeFWrapper f t => (f (TypeF (TypeId t) a) -> a) -> t -> a
+cata alg = alg . fmap (fmap (cata alg)) . out
 
-cataUnM :: Monad m => (t -> TypeF t) -> (TypeF a -> m a) -> t -> m a
-cataUnM unT alg tf = mapM (cataUnM unT alg) (unT tf) >>= alg
+cataM :: (Monad m, TypeFWrapper f t) => (f (TypeF (TypeId t) a) -> m a) -> t -> m a
+cataM alg = mapM (mapM (cataM alg)) . out >=> alg
 
-cata :: (TypeF a -> a, Int -> a) -> SymbolType -> a
-cata alg@(f, _) (SymType t) = f $ fmap (cata alg) t
-cata (_, g) (TVar v) = g v
+para :: TypeFWrapper f t => (f (TypeF (TypeId t) (t, a)) -> a) -> t -> a
+para alg = alg . fmap (fmap fanout) . out where
+    fanout t = (t, para alg t)
 
-cataM :: Monad m => (TypeF a -> m a, Int -> m a) -> SymbolType -> m a
-cataM alg@(f, _) (SymType t) = mapM (cataM alg) t >>= f
-cataM (_, g) (TVar v) = g v
+paraM :: (Monad m, TypeFWrapper f t) => (f (TypeF (TypeId t) (t, a)) -> m a) -> t -> m a
+paraM alg = mapM (mapM fanout) . out >=> alg where
+    fanout t = do
+        a <- paraM alg t
+        return (t, a)
+
+paraM2 :: (Monad m, TypeFWrapper f t) => (t -> f (TypeF (TypeId t) a) -> m a) -> t -> m a
+paraM2 alg t = (mapM (mapM (paraM2 alg)) . out $ t) >>= alg t
 
 -- Type theoretic utils
 subst :: Int -> SymbolType -> SymbolType -> SymbolType
@@ -92,8 +176,8 @@ substScheme v r (AbsType u t) | v == u    = AbsType u t
                               | otherwise = AbsType u $ substScheme v r t
 
 tvarsInType :: SymbolType -> [Int]
-tvarsInType st = cata (aux, (:)) st [] where
-    aux :: TypeF ([Int] -> [Int]) -> [Int] -> [Int]
+tvarsInType st = cata (either (:) aux) st [] where
+    aux :: TypeF p ([Int] -> [Int]) -> [Int] -> [Int]
     aux (FunType f g)   = f . g
     aux (ArrayType _ f) = f
     aux (RefType f)     = f
@@ -120,32 +204,25 @@ notVarInType :: Int -> SymbolType -> Bool
 notVarInType v = not . tvarInType v
 
 -- Fun Types Utils
-paramsToFun :: (TypeF a -> a) -> [a] -> a -> a
-paramsToFun _ [] out       = out
-paramsToFun alg (t:ts) out = alg (FunType t (paramsToFun alg ts out))
+paramsToFun :: TypeFixPoint f t => [t] -> t -> t
+paramsToFun [] o = o
+paramsToFun (t:ts) o = fix (FunType t (paramsToFun ts o))
 
-funToTypes :: (a -> Either (TypeF a) a) -> a -> [a]
-funToTypes coalg = reverse . aux [] where
-    aux acc t = case coalg t of
-        Left (FunType t1 t2) -> aux (t1:acc) t2
+funToTypes :: TypeFWrapper f t => t -> [t]
+funToTypes = reverse . aux [] where
+    aux acc t = case coAlg t of
+        Right (FunType t1 t2) -> aux (t1:acc) t2
         _                    -> t:acc
 
-funToArgs :: (a -> Either (TypeF a) a) -> a -> [a]
-funToArgs coalg s =
-    let ts = funToTypes coalg s
+funToArgs :: TypeFWrapper f t => t -> [t]
+funToArgs s =
+    let ts = funToTypes s
         f [] = []
         f [_] = []
         f (x:xs) = x : f xs
     in if null ts then [] else f ts
 
-outFunType :: (a -> Either (TypeF a) a) -> a -> a
-outFunType out t = case out t of
-    Left (FunType _ t2) -> outFunType out t2
+outFunType :: TypeFWrapper f t => t -> t
+outFunType t = case coAlg t of
+    Right (FunType _ t2) -> outFunType t2
     _ -> t
-
-ctCoAlg :: ConstType -> Either (TypeF ConstType) ConstType
-ctCoAlg (ConstType t) = Left t
-
-stCoAlg :: SymbolType -> Either (TypeF SymbolType) SymbolType
-stCoAlg (SymType t) = Left t
-stCoAlg st          = Right st

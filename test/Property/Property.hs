@@ -7,6 +7,7 @@ import Test.QuickCheck (Gen, Property, Result, forAll)
 
 import Common.AST (mapAST, AST)
 import Common.PrintAST (prettyAST)
+import Common.SymbolType (Source (FileIn))
 import Parser.Utils (parse)
 import Parser.ParserState (initParserState)
 import Parser.ParserM (evalParser)
@@ -44,7 +45,7 @@ parsedPrettyASTisAST :: Show b => Gen (AST b) -> Property
 parsedPrettyASTisAST gen =
   forAll gen (\p ->
     let s = prettyAST p
-        ast = parse s
+        ast = parse (FileIn "test.llama") s
     in case ast of
         Right pp -> removeASTtags p == removeASTtags pp
         _        -> False)
@@ -60,7 +61,7 @@ semanticASTisOK gen =
   forAll gen (\p ->
     let p' = mapAST arb_posn p
         parser = analyzeAST p'
-        res = evalParser (initParserState "") parser
+        res = evalParser (initParserState (FileIn "test.llama") "") parser
     in case res of
         Right r -> mapAST posn r == p' -- check that semantic analysis only affects tags
         Left _  -> False)

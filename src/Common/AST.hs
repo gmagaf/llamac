@@ -1,6 +1,10 @@
 {-# LANGUAGE DeriveTraversable #-}
 module Common.AST (module Common.AST) where
 
+import Data.Bifunctor (Bifunctor (..))
+import Data.Bifoldable (Bifoldable (bifoldMap))
+import Data.Bitraversable (Bitraversable (bitraverse))
+
 import Common.Token (Identifier,
                      ConstrIdentifier,
                      IntConstant,
@@ -48,15 +52,42 @@ data TDef b = TDef Identifier [Constr b] b
 data Constr b = Constr ConstrIdentifier [Type b] b
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-data Type b = Type (TypeF (Type b)) b
+data Type b = Type (TypeF Identifier (Type b)) b
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-data TypeF t = UnitType | IntType | CharType | BoolType | FloatType
-             | FunType t t
-             | RefType t
-             | ArrayType Int t
-             | UserDefinedType Identifier
+data TypeF i t = UnitType | IntType | CharType | BoolType | FloatType
+               | FunType t t
+               | RefType t
+               | ArrayType Int t
+               | UserDefinedType i
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance Bifunctor TypeF where
+  first _ UnitType            = UnitType
+  first _ IntType             = IntType
+  first _ CharType            = CharType
+  first _ BoolType            = BoolType
+  first _ FloatType           = FloatType
+  first _ (FunType s t)       = FunType s t
+  first _ (RefType t)         = RefType t
+  first _ (ArrayType d t)     = ArrayType d t
+  first f (UserDefinedType i) = UserDefinedType (f i)
+  second = fmap
+
+instance Bifoldable TypeF where
+  bifoldMap f _ (UserDefinedType i) = f i
+  bifoldMap _ g t                   = foldMap g t
+
+instance Bitraversable TypeF where
+  bitraverse f _ (UserDefinedType i) = UserDefinedType <$> f i
+  bitraverse _ _ UnitType            = pure UnitType
+  bitraverse _ _ IntType             = pure IntType
+  bitraverse _ _ CharType            = pure CharType
+  bitraverse _ _ BoolType            = pure BoolType
+  bitraverse _ _ FloatType           = pure FloatType
+  bitraverse _ g (FunType s t)       = FunType <$> g s <*> g t
+  bitraverse _ g (RefType t)         = RefType <$> g t
+  bitraverse _ g (ArrayType d t)     = ArrayType d <$> g t
 
 -- Expressions
 data Expr b = Expr (ExprF (Expr b)) b

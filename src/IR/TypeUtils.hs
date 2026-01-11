@@ -1,11 +1,13 @@
-module IR.TypeUtils (charStar, genConstType, genType, getArgStTypes, getRetStType) where
+module IR.TypeUtils (charStar, genConstType, genType) where
+
+import Control.Monad.Identity (Identity(runIdentity))
 
 import qualified LLVM.AST.Type as L
 import LLVM.Prelude (Word64)
 
 import Common.Token (ConstrIdentifier)
 import Common.AST (TypeF(..))
-import Common.SymbolType (ConstType(..), SymbolType, cataM, cataUn, cataUnM, funToArgs, stCoAlg, outFunType)
+import Common.SymbolType (ConstType(..), SymbolType, PosnId(..), cata, cataM)
 import Common.SymbolTable (TypeTableEntry(..))
 import Parser.ParserM (Parser, throwCGenError)
 import Parser.SymbolTableUtils (queryTypeP)
@@ -21,9 +23,9 @@ charStar = L.ptr L.i8
 -- Util for computing the size needed
 -- to hold data of a type
 constTypeSize :: ConstType -> Word64
-constTypeSize = cataUn unConstType sizeOfType
+constTypeSize = cata (sizeOfType . runIdentity)
 
-sizeOfType :: TypeF Word64 -> Word64
+sizeOfType :: TypeF p Word64 -> Word64
 sizeOfType tf = case tf of
     UnitType          -> 0
     BoolType          -> 1
@@ -37,12 +39,12 @@ sizeOfType tf = case tf of
 
 -- Util for generating a constant type
 genConstType :: ConstType -> Parser L.Type
-genConstType = cataUnM unConstType genTypeF
+genConstType = cataM (genTypeF . runIdentity)
 
 genType :: SymbolType -> Parser L.Type
-genType = cataM (genTypeF, \_ -> return charStar)
+genType = cataM (either (\_ -> return charStar) genTypeF)
 
-genTypeF :: TypeF L.Type -> Parser L.Type
+genTypeF :: TypeF PosnId L.Type -> Parser L.Type
 genTypeF tf = case tf of
     UnitType                                -> return L.void
     BoolType                                -> return L.i1
@@ -54,20 +56,14 @@ genTypeF tf = case tf of
     RefType L.VoidType                      -> return charStar -- (void *) is illegal in llvm
     RefType t                               -> return (L.ptr t)
     ArrayType _ t                           -> return (L.ptr t)  -- TODO: Define this
-    UserDefinedType i                       -> do
+    UserDefinedType tId                     -> do
+        let i = identifier tId
         res <- queryTypeP i
         case res of
-            Just (TypeEntry entry) -> do
+            Just (TypeEntry _ entry) -> do
                 -- res = map (\(ci, ct) -> (ci, map genConstType ct)) tentry
                 let sizeOfConstr :: (ConstrIdentifier, [ConstType]) -> Word64
                     sizeOfConstr = foldr (\t -> (constTypeSize t +)) 0 . snd
                     size = foldr (\c acc -> max acc (sizeOfConstr c)) 0 entry
                 return $ L.StructureType True (L.i8:([L.ArrayType size L.i8 | size /= 0])) -- TODO: Define this
             Nothing -> throwCGenError ("Unable to find type: " ++ i ++ " to generate")
-
-
-getArgStTypes :: SymbolType -> [SymbolType]
-getArgStTypes = funToArgs stCoAlg
-
-getRetStType :: SymbolType -> SymbolType
-getRetStType = outFunType stCoAlg

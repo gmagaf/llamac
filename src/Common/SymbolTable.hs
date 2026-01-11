@@ -40,7 +40,7 @@ import qualified LLVM.AST.Type as L
 
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (Pretty (pretty))
-import Common.SymbolType (SymbolType (TVar), TypeScheme, ConstType)
+import Common.SymbolType (SymbolType (TVar), TypeScheme, ConstType, PosnId, printTypePosn)
 
 -- This module contains the defintion of the Symbol table for the compiler
 
@@ -119,8 +119,8 @@ data TableEntry
     | ConstrEntry ConstType [ConstType] ConstType -- Type of constructor, params, output type
         deriving Show
 
-newtype TypeTableEntry
-    = TypeEntry [(ConstrIdentifier, [ConstType])] -- Constructors and arguements
+data TypeTableEntry
+    = TypeEntry PosnId [(ConstrIdentifier, [ConstType])] -- Definition positnion, constructors and arguements
         deriving Show
 
 varKey :: Int -> String
@@ -171,8 +171,8 @@ instance (Pretty e, Show g) => Pretty (FullTableEntry e g) where
 
 instance Pretty TypeTableEntry where
     pretty entry = case entry of
-        TypeEntry constrs ->
-            "Type with constrs: " ++ cs where
+        TypeEntry p constrs ->
+            "Type with constrs: " ++ cs ++ " defined at: " ++ printTypePosn p where
                 f (c, []) = c
                 f (c, ps) = c ++ " of " ++ unwords (map pretty ps)
                 cs = intercalate ", " (map f constrs)

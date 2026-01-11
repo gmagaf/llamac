@@ -109,6 +109,9 @@ rules :-
 
 {
 
+instance Ord AlexPosn where
+    compare (AlexPn o _ _) (AlexPn o' _ _) = compare o o'
+
 -- User state to hold comment depth, scanned chars of
 -- a string and the position of the read token
 data AlexUserState = AlexUserState { commentDepth :: Int

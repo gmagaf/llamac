@@ -3,13 +3,13 @@ module Semantics.Utils (module Semantics.Utils) where
 import qualified Data.IntSet as S
 import qualified Data.Set as Set
 import Data.Maybe (isJust, isNothing)
-import Control.Monad ((>=>), when)
+import Control.Monad ((>=>), when, unless)
 import Control.Lens.Setter ((<~))
 
-import Common.Token (ConstrIdentifier)
-import Common.AST (Node(..), Type)
+import Common.Token (Identifier, ConstrIdentifier)
+import Common.AST (Node(..), Type (Type), TypeF (UserDefinedType))
 import Common.PrintAST
-import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..), tvarsInType, typeTo)
+import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..), PosnId (identifier), printTypePosn, tvarsInType, typeTo2)
 import Common.SymbolTable (Context, NameSpace, FullTableEntry, TableEntry(..), TypeTableEntry(..), names)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
@@ -210,12 +210,17 @@ findName k = do
         _ -> throwSem ("Symbol " ++ k ++ " is not in scope")
 
 findType :: ConstType -> Parser [(ConstrIdentifier, [ConstType])]
-findType t = do
-    let i = pretty t
-    ts <- getTypes
-    case query i ts of
-        Just (TypeEntry constrs) -> return constrs
-        _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
+findType t@(ConstType tf) = do
+    case tf of
+        UserDefinedType posnId -> do
+            let i = identifier posnId
+            ts <- getTypes
+            case query i ts of
+                Just (TypeEntry posnId' constrs) -> do
+                    unless (posnId == posnId') $ throwSem ("Type symbol " ++ i ++ " defined at: " ++ printTypePosn posnId ++ " is not in scope")
+                    return constrs
+                _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
+        _ -> throwSem ("Symbol table only contains user defined types. Not: " ++ pretty t)
 
 -- Check that type is in scope else throw error
 checkTypeInScope :: ConstType -> Parser ()
@@ -229,8 +234,18 @@ insertName :: String -> TableEntry -> Parser ()
 insertName = insertNameP
 
 -- Other util functions
-typeToSymbolType :: Type b -> SymbolType
-typeToSymbolType = typeTo SymType
+typeToSymbolType :: Type SemanticTag -> Parser SymbolType
+typeToSymbolType = typeTo2 aux where
+    aux (Type _ tg) i = do
+        putSemPosn (posn tg)
+        findTypeId i
+
+findTypeId :: Identifier -> Parser PosnId
+findTypeId i = do
+    ts <- getTypes
+    case query i ts of
+        Just (TypeEntry posnId _) -> return posnId
+        _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
 
 hasDuplicates :: (Ord a) => [a] -> Bool
 hasDuplicates list = length list /= length set

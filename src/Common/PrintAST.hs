@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Common.PrintAST (Pretty,
                         pretty,
                         prettyPrec,
@@ -52,6 +53,9 @@ instance Pretty Token where
 prettyId :: Identifier -> ShowS
 prettyId = showPretty . IdT
 
+instance Pretty Identifier where
+  showPretty = prettyId
+
 prettyConstrId :: ConstrIdentifier -> ShowS
 prettyConstrId = showPretty . IdConstrT
 
@@ -105,7 +109,7 @@ instance Pretty (Constr b) where
 instance Pretty (Type b) where
   prettyPrec d (Type t _) = prettyPrec d t
 
-instance Pretty t => Pretty (TypeF t) where
+instance (Pretty i, Pretty t) => Pretty (TypeF i t) where
   prettyPrec d tf =
     let
       ref_prec = 3
@@ -120,7 +124,7 @@ instance Pretty t => Pretty (TypeF t) where
       CharType  -> showPretty CharT
       BoolType  -> showPretty BoolT
       FloatType -> showPretty FloatT
-      UserDefinedType i -> prettyId i
+      UserDefinedType i -> showPretty i
       RefType u -> showParen (always || d > ref_prec) $
             prettyPrec (ref_prec + 1) u .
             showString " " .

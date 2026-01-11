@@ -1,4 +1,5 @@
 module Parser.ParserM (Parser,
+                       getSource, putSource,
                        getAlexPos, getTokenPosn, putAlexState,
                        getSemState, putSemState,
                        getCGenState, putCGenState,
@@ -15,10 +16,11 @@ import Control.Lens.Getter (use)
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
       alexMonadScan, tokenPosnOfAlexState, printPosn)
 import Common.Token (Token)
-import Parser.ParserState (ParserState, alex_state, sem_state, cgen_state)
+import Parser.ParserState (ParserState, source, alex_state, sem_state, cgen_state)
 import Parser.ParserT (ParserT, evalParserT, runParserT, throw, withExcept, catch)
 import Semantics.SemanticState (SemanticState)
 import IR.CodeGenState (CodeGenState)
+import Common.SymbolType (Source)
 
 -- This module defines the Parser monad
 
@@ -45,6 +47,9 @@ instance Show Error where
 type Parser = ParserT Error ParserState Identity
 
 -- Monad utils
+getSource :: Parser Source
+getSource = use source
+
 getAlexState :: Parser AlexState
 getAlexState = use alex_state
 
@@ -59,6 +64,10 @@ getSemState = use sem_state
 
 getCGenState :: Parser CodeGenState
 getCGenState = use cgen_state
+
+putSource :: Source -> Parser ()
+putSource s = do
+  source .= s
 
 putAlexState :: AlexState -> Parser ()
 putAlexState s = do

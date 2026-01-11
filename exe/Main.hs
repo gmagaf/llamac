@@ -7,6 +7,7 @@ import System.Console.CmdArgs.Implicit hiding (args)
 
 import Common.FileUtils (safeReadFile)
 import Common.PrintAST (debugPrint)
+import Common.SymbolType (Source (FileIn))
 import Parser.ParserM (Parser)
 import Parser.ParserState (ParserState)
 import Parser.Utils (scanM, parseM, initAnalyzeM, genM, parseString)
@@ -43,6 +44,7 @@ main :: IO ()
 main = do
   args <- cmdArgs sample
   let f = fileArg args
+  let src = FileIn f
   let outF = outputArg args
   s <- safeReadFile f
   case s of
@@ -51,16 +53,16 @@ main = do
       exitFailure
     Right code -> do
       (success, state) <- case stageFlag args of
-            Lex   -> parseAndPrint scanM "Tokens:\n" code outF
-            Parse -> parseAndPrint parseM "AST:\n" code outF
-            Sem   -> parseAndPrint initAnalyzeM "Annotated AST:\n" code outF
-            Gen   -> parseAndPrint (genM f) "" code outF
+            Lex   -> parseAndPrint scanM "Tokens:\n" (src, code) outF
+            Parse -> parseAndPrint parseM "AST:\n" (src, code) outF
+            Sem   -> parseAndPrint initAnalyzeM "Annotated AST:\n" (src, code) outF
+            Gen   -> parseAndPrint (genM f) "" (src, code) outF
       when (debugFlag args) $ print state
       unless success exitFailure
 
-parseAndPrint :: Show a => Parser a -> String -> String -> Maybe FilePath -> IO (Bool, ParserState)
-parseAndPrint parserM msg code outF = do
-  let (r, state) = parseString parserM code
+parseAndPrint :: Show a => Parser a -> String -> (Source, String) -> Maybe FilePath -> IO (Bool, ParserState)
+parseAndPrint parserM msg (src, code) outF = do
+  let (r, state) = parseString parserM src code
   case r of
     Left err  -> do
       print err

@@ -10,6 +10,7 @@ import Common.Token (Token)
 import Common.AST (AST)
 import Common.PrintAST (pretty, debugPrint)
 import Common.FileUtils (readFileB)
+import Common.SymbolType (Source(..))
 import Lexer.Lexer (AlexPosn, alexTokens)
 import Parser.Parser (calc)
 import Parser.ParserM (Error, Parser, runParser, liftAlex)
@@ -37,36 +38,36 @@ genM :: String -> Parser Text
 genM s = initSymbolTable >> calc >>= analyzeAST >>= genAST >> codegenProgram s
 
 -- Util that initilizes a parser state and runs a parser monad
-parseString :: Parser a -> String -> (Either Error a, ParserState)
-parseString m s = runParser initState m where
+parseString :: Parser a -> Source -> String -> (Either Error a, ParserState)
+parseString m src s = runParser initState m where
   initState :: ParserState
-  initState = initParserState s
+  initState = initParserState src s
 
 -- Parse a file
 parseFile :: Parser a -> FilePath -> IO (Either Error a)
 parseFile m f = do
   inp <- readFileB f
-  let (res, _) = parseString m inp
+  let (res, _) = parseString m (FileIn f) inp
   return res
 
 -- Parse a line
 parseLine :: Parser a -> IO (Either Error a)
 parseLine m = do
   line <- getLine
-  let (res, _) = parseString m line
+  let (res, _) = parseString m (ReplIn 1) line
   return res
 
 -- Some util functions for parsing strings
-parse :: String -> Either Error (AST AlexPosn)
-parse = fst . parseString parseM
+parse :: Source -> String -> Either Error (AST AlexPosn)
+parse src = fst . parseString parseM src
 
-analyze :: String -> Either Error (AST SemanticTag)
-analyze = fst . parseString initAnalyzeM
+analyze :: Source -> String -> Either Error (AST SemanticTag)
+analyze src = fst . parseString initAnalyzeM src
 
 -- Util function for debugging end to end
 debug :: String -> IO ()
 debug s = do
-  let (res, state) = parseString initAnalyzeM s
+  let (res, state) = parseString initAnalyzeM (FileIn "debugIn") s
   -- let (res, state) = parseString (initParseAnalyzeGenM "debug from ghci") s
   putStrLn "Semantic State"
   print (view sem_state state)

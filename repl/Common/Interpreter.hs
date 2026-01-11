@@ -24,6 +24,7 @@ data InterpreterState = InterpreterState
     { parser_state :: ParserState
     , run_time_env :: RunTimeEnv
     , code_file    :: Maybe String
+    , line_no      :: Int
     } deriving Show
 
 getRunTime :: Interpreter RunTimeEnv
@@ -52,6 +53,9 @@ isAllocated ha = do
     let alloc = M.lookup ha allocated
     return (fromMaybe True alloc) -- if it is not allocated from the user we assume it is allocated by the system
 
+getReplLine :: Interpreter Int
+getReplLine = gets line_no
+
 getCodeFile :: Interpreter (Maybe String)
 getCodeFile = gets code_file
 
@@ -77,6 +81,12 @@ putCodeFile :: Maybe String -> Interpreter ()
 putCodeFile f = do
     s <- get
     put s{code_file = f}
+
+incrReplLine :: Interpreter ()
+incrReplLine = do
+    s <- get
+    let l = line_no s
+    put s{line_no = l + 1}
 
 allocate :: Int -> Interpreter ()
 allocate ha = do

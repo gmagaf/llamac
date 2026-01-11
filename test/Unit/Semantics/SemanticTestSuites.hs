@@ -116,9 +116,16 @@ letDefSuite =
     ("type t = T\nlet t : t = T", True),
     ("type t = T\nlet t = T", True),
     ("type t = T of t\nlet t (t : t) = t\nlet g t : t = T t", True),
+    ("type t = T and t = S let g = T", True),
+    ("type t = T of int and t = S of int let g = T 8", True),
+    ("type t = R and t = S and x = X of t let c : x = X S", True),
+    ("type t = T and t = S and x = X of t let f = X S and g = T", True),
     -- Polymorphic functions
     ("let id x = x\nlet x : int = id 17 and y : char = id 'a'", True),
     ("let const x : int = 42\nlet x = const 17 and y = const 'a'", True),
+    ("let f = let mutable x in x\nlet x : int = !f", True),
+    ("let f = let mutable x in !x\nlet x : int = f", True),
+    ("let f = let mutable x in !x\nlet x : int = !f", True),
     -- Failing cases
     ("let f = g", False),
     ("let f x = g x and g x = x", False),
@@ -136,6 +143,9 @@ letDefSuite =
     ("type t = R of int type t = T let t : t = R 0", False),
     ("type t = R of int and s = R of char let t = R 0", False),
     ("type t = R let c = R type t = T let ct : t = c", False),
+    ("type t = T and t = S let g : t = T", False),
+    ("type t = T of int and t = S of int let g : t = T 8", False),
+    ("type t = R and t = S and x = X of t let c : x = X R", False),
     ("let rec f = let mutable x in !x let x : int = f and y : char = f", False)
     ]
 
@@ -170,7 +180,7 @@ letRecSuites =
     ("let rec f x = main x and main a = 42 and mutable x and g = x", True),
     ("let rec f x = let mutable x in !x let x : int = f 3 and y = f 'a'", True),
     ("let rec f x = let mutable x in x := 42; !x and x : int = f 3", True),
-    ("let rec f x = let mutable x in !x and x : int = f 3", False),
+    ("let rec f = let mutable x in !x and x : int = f", False),
     -- Failing cases
     ("let rec f = main and main a = 42 and g = main and k1 = main 'c' and k2 = main 9.0", False),
     ("let rec f = main and main a = 42 and g (a : int) = main a and k1 = main 'c' and k2 = main 9.0", False),

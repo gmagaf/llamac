@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 module FrontEnd.FrontEnd (module FrontEnd.FrontEnd) where
 
 import System.IO (hFlush, stdout)
@@ -7,11 +8,12 @@ import System.Console.Haskeline
 
 import Common.FileUtils (safeReadFile)
 import Common.PrintAST (pretty)
+import Common.SymbolType (Source(..))
 import qualified Common.AST as AST
 import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calcRepl)
 import Parser.ParserState (initAlexState, initParserState)
-import Parser.ParserM (putAlexState, throwInternalError, getSemState, getCGenState)
+import Parser.ParserM (putAlexState, throwInternalError, getSemState, getCGenState, putSource)
 import Parser.SymbolTableUtils (getSymbols)
 import Parser.Utils (initAnalyzeM, analyzeM)
 import Semantics.Utils (findName, getNodeType, resolveType)
@@ -72,6 +74,7 @@ getReplPreInput = do
 getReplInput :: Interpreter ReplInput
 getReplInput = do
     pre <- liftIO getReplPreInput
+    incrReplLine
     case pre of
         HelpCmd         -> return Help
         ReloadCmd       -> return Reload
@@ -95,12 +98,12 @@ getReplInput = do
 -- Initialize repl and run repl
 initRepl :: Maybe String -> IO ()
 initRepl f = do
-    input <- case f of
+    (src, input) <- case f of
         Just fileName -> do
             putStrLn ("Loading file: " ++ fileName)
-            getCodeFromFile fileName
-        Nothing -> return ""
-    let initState = initInterpreterState (initParserState input) f
+            (fileName,) <$> getCodeFromFile fileName
+        Nothing -> return ("", "")
+    let initState = initInterpreterState (initParserState (FileIn src) input) f
     let catchError err = liftIO (print err >> putStrLn "Failed to load file")
     let fileInterpeter = catchRunTimeError initSymbolsParseAnalyzeRun catchError
     res <- evalInterpreter initState (fileInterpeter >> repl)
@@ -141,9 +144,13 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
         Failed err -> do
             print' (show err)
         Program p -> do
+            l <- getReplLine
+            liftParser (putSource (ReplIn l))
             semP <- liftParser (analyzeAST p)
             runAST semP
         Expression e -> do
+            l <- getReplLine
+            liftParser (putSource (ReplIn l))
             semE <- liftParser (sem e)
             v <- evalExpr semE
             t <- liftParser (getNodeType semE >>= resolveType)
@@ -163,6 +170,7 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
                     code <- liftIO (getCodeFromFile fileName)
                     let newAlex = initAlexState code
                     liftParser (putAlexState newAlex)
+                    liftParser (putSource (FileIn fileName))
                     parseAnalyzeRun
         Load f -> do
             fop <- liftIO (getSafeCodeFromFile f)
@@ -172,6 +180,7 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
                     putCodeFile (Just f)
                     let newAlex = initAlexState code
                     liftParser (putAlexState newAlex)
+                    liftParser (putSource (FileIn f))
                     parseAnalyzeRun
         Script f -> do
             fop <- liftIO (getSafeCodeFromFile f)
@@ -181,6 +190,7 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
                     putCodeFile (Just f)
                     let newAlex = initAlexState code
                     liftParser (putAlexState newAlex)
+                    liftParser (putSource (FileIn f))
                     parseAnalyzeRun
                     m <- loadProgramOrExpr "main"
                     case m of

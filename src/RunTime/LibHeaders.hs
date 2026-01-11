@@ -82,7 +82,7 @@ initSymbolTable = do
     f :: RunTimeLibSib -> Parser ()
     f (i, t, ps) = do
         let scheme = MonoType (constTypeToSymbolType t)
-        argTs <- mapM genConstType (funToArgs ctCoAlg t)
-        outT  <- genConstType (outFunType ctCoAlg t)
+        argTs <- mapM genConstType (funToArgs t)
+        outT  <- genConstType (outFunType t)
         fun   <- L.extern (L.mkName i) argTs outT
         symbols . names %= insert i (mkFullTableEntry (FunEntry scheme ps) (Just fun))

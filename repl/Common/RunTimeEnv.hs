@@ -4,7 +4,8 @@ module Common.RunTimeEnv (module Common.RunTimeEnv) where
 import qualified Data.Map as M
 
 import Common.Token (Identifier)
-import Common.PrintAST
+import Common.PrintAST (Pretty, pretty)
+import Common.DebugPrint
 
 -- This module defines the basic
 -- data types for the runtime environment
@@ -41,17 +42,15 @@ data RunTimeEnvF v = RunTimeEnv { frame_pointer :: ActivationRecordF v
                                 }
     deriving (Show, Functor)
 
-instance Pretty v => Pretty (ActivationRecordF v) where
-    pretty ar =
+instance (Show v, Pretty v) => DebugPrint (RunTimeEnvF v) where
+    debugPrint rtenv =
         let prettyMaybe = maybe "null"
             prettyNestedAr nar = show (offset nar)
-        in "| locals: " ++ M.foldrWithKey (\i v a -> i ++ " = " ++ pretty v ++ if a == "" then "" else ", " ++ a) "" (locals ar)
-           ++ " | control_link: " ++ prettyMaybe prettyNestedAr (control_link ar)
-           ++ " | access_link: " ++ prettyMaybe prettyNestedAr (access_link ar)
-           ++ " |"
-
-instance Pretty v => Pretty (RunTimeEnvF v) where
-    pretty rtenv =
-        let prettyAr ar = show (offset ar) ++ " * " ++ pretty ar
+            prettyAr ar =
+                show (offset ar) ++ " * "
+                ++ "| locals: " ++ M.foldrWithKey (\i v a -> i ++ " = " ++ pretty v ++ if a == "" then "" else ", " ++ a) "" (locals ar)
+                ++ " | control_link: " ++ prettyMaybe prettyNestedAr (control_link ar)
+                ++ " | access_link: " ++ prettyMaybe prettyNestedAr (access_link ar)
+                ++ " |"
             traverseStack ar = prettyAr ar ++ maybe "" (("\n" ++) . traverseStack) (control_link ar)
-        in traverseStack (frame_pointer rtenv)
+        in putStrLn $ traverseStack (frame_pointer rtenv)

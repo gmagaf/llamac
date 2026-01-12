@@ -133,13 +133,13 @@ lexeme t = case t of
     WhileT             -> "while"
     WithT              -> "with"
     -- Identifiers
-    IdT v              -> "id:" ++ v
-    IdConstrT v        -> "constrId:" ++ v
+    IdT v              -> v
+    IdConstrT v        -> v
     -- Constants
-    ConstIntT v        -> "intC:" ++ show v
-    ConstFloatT v      -> "floatC:" ++ show v
-    ConstCharT v       -> "charC:" ++ [v]
-    ConstStringT v     -> "stringC:" ++ v
+    ConstIntT v        -> show v
+    ConstFloatT v      -> show v
+    ConstCharT v       -> '\'' : v : "\'"
+    ConstStringT v     -> "\"" ++ v ++ "\""
     -- Symbols
     ArrowT             -> "->"
     EqualsT            -> "="

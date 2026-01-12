@@ -4,14 +4,7 @@ module Common.PrintAST (Pretty,
                         prettyPrec,
                         showPretty,
                         prettyAST,
-                        debugPrint,
                         prettyPrecSepList) where
-
-import Text.Pretty.Simple (CheckColorTty(CheckColorTty),
-                          OutputOptions(outputOptionsIndentAmount, outputOptionsStringStyle),
-                          StringOutputStyle (Literal),
-                          defaultOutputOptionsDarkBg,
-                          pPrintOpt)
 
 import Common.AST
 import Common.Token
@@ -24,12 +17,6 @@ import Common.Token
       Token(..),
       lexeme)
 
--- Debug printing utils
-debugPrint :: Show a => a -> IO ()
-debugPrint = let smallIndent = defaultOutputOptionsDarkBg {outputOptionsIndentAmount = 2, outputOptionsStringStyle = Literal}
-             in pPrintOpt CheckColorTty smallIndent
-
-
 -- Pretty printing utils
 
 class Pretty a where
@@ -41,14 +28,7 @@ class Pretty a where
   showPretty = showString . pretty
 
 instance Pretty Token where
-  pretty t = case t of
-    IdT v          -> v
-    IdConstrT v    -> v
-    ConstIntT v    -> show v
-    ConstFloatT v  -> show v
-    ConstCharT v   -> '\'' : v : "\'"
-    ConstStringT v -> "\"" ++ v ++ "\""
-    keyword        -> lexeme keyword
+  pretty = lexeme
 
 prettyId :: Identifier -> ShowS
 prettyId = showPretty . IdT

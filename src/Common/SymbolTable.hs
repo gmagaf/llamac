@@ -2,6 +2,9 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Common.SymbolTable (Context,
                            SymbolTable,
                            names,
@@ -39,7 +42,8 @@ import qualified LLVM.AST as L (Operand)
 import qualified LLVM.AST.Type as L
 
 import Common.Token (Identifier, ConstrIdentifier)
-import Common.PrintAST (Pretty (pretty))
+import Common.PrintAST (pretty)
+import Common.DebugPrint (DebugPrint, debugPrint)
 import Common.SymbolType (SymbolType (TVar), TypeScheme, ConstType, PosnId, printTypePosn)
 
 -- This module contains the defintion of the Symbol table for the compiler
@@ -93,7 +97,15 @@ closeScope (Context scopes) = Context s where
 data FullTableEntry e g = FullTableEntry {
     _basicInfo :: e,
     _optInfo :: Maybe g
-    } deriving Show
+    }
+
+showOptInfo :: Bool
+showOptInfo = False
+
+instance (Show e, Show g) => Show (FullTableEntry e g) where
+    show entry = show (view basicInfo entry) ++
+                   bool "" (maybe "" (\(_, i) -> " additional info: " ++ show i) (preview generated entry))
+                   showOptInfo
 
 mkFullTableEntry :: e -> Maybe g -> FullTableEntry e g
 mkFullTableEntry = FullTableEntry
@@ -117,30 +129,9 @@ data TableEntry
     | ParamEntry SymbolType Identifier            -- Type of the param, function of the param
     | PatternEntry SymbolType                     -- Type of the pattern
     | ConstrEntry ConstType [ConstType] ConstType -- Type of constructor, params, output type
-        deriving Show
 
-data TypeTableEntry
-    = TypeEntry PosnId [(ConstrIdentifier, [ConstType])] -- Definition positnion, constructors and arguements
-        deriving Show
-
-varKey :: Int -> String
-varKey = pretty . TVar
-
-type NameSpace = Context String (FullTableEntry TableEntry L.Operand)
-type TypeSpace = Context String (FullTableEntry TypeTableEntry L.Type)
-data SymbolTable = SymbolTable {
-    _names :: NameSpace,
-    _types :: TypeSpace
-    }
-    deriving Show
-makeLenses ''SymbolTable
-
-emptySymbolTable :: SymbolTable
-emptySymbolTable = SymbolTable emptyContext emptyContext
-
--- Pretty printing of symbol table
-instance Pretty TableEntry where
-    pretty entry = case entry of
+instance Show TableEntry where
+    show entry = case entry of
         MutableEntry t ->
             "Mutable var of type: " ++ pretty t
         ArrayEntry t dim ->
@@ -161,26 +152,37 @@ instance Pretty TableEntry where
             " with type: " ++ pretty constrType ++
             " with params: (" ++ intercalate ", " (map pretty ts) ++ ")"
 
-showOptInfo :: Bool
-showOptInfo = False
+data TypeTableEntry
+    = TypeEntry PosnId [(ConstrIdentifier, [ConstType])] -- Definition positnion, constructors and arguements
 
-instance (Pretty e, Show g) => Pretty (FullTableEntry e g) where
-    pretty entry = pretty (view basicInfo entry) ++
-                   bool "" (maybe "" (\(_, i) -> " additional info: " ++ show i) (preview generated entry))
-                   showOptInfo
+varKey :: Int -> String
+varKey = pretty . TVar
 
-instance Pretty TypeTableEntry where
-    pretty entry = case entry of
+instance Show TypeTableEntry where
+    show entry = case entry of
         TypeEntry p constrs ->
             "Type with constrs: " ++ cs ++ " defined at: " ++ printTypePosn p where
                 f (c, []) = c
                 f (c, ps) = c ++ " of " ++ unwords (map pretty ps)
                 cs = intercalate ", " (map f constrs)
 
-instance (Show k, Pretty e) => Pretty (Context k e) where
-    pretty (Context scopes) =
+type NameSpace = Context String (FullTableEntry TableEntry L.Operand)
+type TypeSpace = Context String (FullTableEntry TypeTableEntry L.Type)
+data SymbolTable = SymbolTable {
+    _names :: NameSpace,
+    _types :: TypeSpace
+    }
+deriving instance (Show NameSpace, Show TypeSpace) => Show SymbolTable
+makeLenses ''SymbolTable
+
+emptySymbolTable :: SymbolTable
+emptySymbolTable = SymbolTable emptyContext emptyContext
+
+-- Debug printing of symbol table
+instance (Show k, Show e) => DebugPrint (Context k e) where
+    debugPrint (Context scopes) =
         let -- Utils for each record
-            toString = bimap show pretty
+            toString = bimap show show
             toLengths = bimap length length
             toPaddings (accK, accE) = bimap (max accK) (max accE)
             addPadding v l = v ++ replicate (max 0 (l - length v)) ' '
@@ -201,11 +203,11 @@ instance (Show k, Pretty e) => Pretty (Context k e) where
             printLine (k, e) acc = "| " ++ addPadding k lk ++ " | " ++ addPadding e le ++ " |\n" ++ acc
             printScope scope acc = foldr printLine (line ++ acc) scope
             scopesTables = foldr printScope "" strings
-        in line ++ printLine ("Keys", "Entries")  (line ++ scopesTables)
+        in putStr $ line ++ printLine ("Keys", "Entries")  (line ++ scopesTables)
 
-instance Pretty SymbolTable where
-    pretty st =
-        "Types Namespace\n" ++
-        pretty (view types st) ++
-        "Names Namespace\n" ++
-        pretty (view names st)
+instance DebugPrint SymbolTable where
+    debugPrint st = do
+        putStrLn "Types Namespace"
+        debugPrint (view types st)
+        putStrLn "Names Namespace"
+        debugPrint (view names st)

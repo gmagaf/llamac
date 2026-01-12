@@ -8,7 +8,7 @@ import Data.Text.Lazy (Text)
 
 import Common.Token (Token)
 import Common.AST (AST)
-import Common.PrintAST (pretty, debugPrint)
+import Common.DebugPrint (debugPrint)
 import Common.FileUtils (readFileB)
 import Common.SymbolType (Source(..))
 import Lexer.Lexer (AlexPosn, alexTokens)
@@ -70,11 +70,11 @@ debug s = do
   let (res, state) = parseString initAnalyzeM (FileIn "debugIn") s
   -- let (res, state) = parseString (initParseAnalyzeGenM "debug from ghci") s
   putStrLn "Semantic State"
-  print (view sem_state state)
+  debugPrint (view sem_state state)
   -- putStrLn "Code Gen State"
   -- print (view cgen_state state)
   putStrLn "Symbol Table"
-  putStrLn $ pretty (view symbols state)
+  debugPrint (view symbols state)
   case res of
     Left err  -> print err
     Right ast -> debugPrint ast

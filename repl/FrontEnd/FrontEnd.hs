@@ -8,15 +8,16 @@ import System.Console.Haskeline
 
 import Common.FileUtils (safeReadFile)
 import Common.PrintAST (pretty)
+import Common.DebugPrint (debugPrint)
 import Common.SymbolType (Source(..))
 import qualified Common.AST as AST
 import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calcRepl)
 import Parser.ParserState (initAlexState, initParserState)
 import Parser.ParserM (putAlexState, throwInternalError, getSemState, getCGenState, putSource)
-import Parser.SymbolTableUtils (getSymbols)
+import Parser.SymbolTableUtils (getSymbols, queryName, queryType)
 import Parser.Utils (initAnalyzeM, analyzeM)
-import Semantics.Utils (findName, getNodeType, resolveType)
+import Semantics.Utils (getNodeType, resolveType, throwSem)
 import Semantics.Semantics (analyzeAST, Analyzable (sem), TypeAble (infer))
 
 import Common.Utils (initInterpreterState)
@@ -127,7 +128,7 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
             print' helpMsg
         Debug Symbols -> do
             s <- liftParser getSymbols
-            print' (pretty s)
+            liftIO (debugPrint s)
         Debug SemState -> do
             s <- liftParser getSemState
             print' (show s)
@@ -140,7 +141,7 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
             print' msg
         Debug RunTime -> do
             run <- getRunTime
-            print' (pretty run)
+            liftIO (debugPrint run)
         Failed err -> do
             print' (show err)
         Program p -> do
@@ -159,8 +160,15 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
             semT <- liftParser (infer e >>= resolveType)
             print' (pretty semT)
         Info n -> do
-            entry <- liftParser (findName n)
-            print' (pretty entry)
+            mTypeEntry <- liftParser (queryType n)
+            mNameEntry <- liftParser (queryName n)
+            case (mTypeEntry, mNameEntry) of
+                (Just te, Just ne) -> do
+                    print' (show te)
+                    print' (show ne)
+                (Just te, Nothing) -> print' (show te)
+                (Nothing, Just ne) -> print' (show ne)
+                (Nothing, Nothing) -> liftParser $ throwSem ("Symbol " ++ n ++ " is not in scope")
         Reload -> do
             f <- getCodeFile
             case f of

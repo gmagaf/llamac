@@ -6,7 +6,7 @@ import System.Exit (exitFailure)
 import System.Console.CmdArgs.Implicit hiding (args)
 
 import Common.FileUtils (safeReadFile)
-import Common.PrintAST (debugPrint)
+import Common.DebugPrint (DebugPrint, debugPrint)
 import Common.SymbolType (Source (FileIn))
 import Parser.ParserM (Parser)
 import Parser.ParserState (ParserState)
@@ -60,7 +60,7 @@ main = do
       when (debugFlag args) $ print state
       unless success exitFailure
 
-parseAndPrint :: Show a => Parser a -> String -> (Source, String) -> Maybe FilePath -> IO (Bool, ParserState)
+parseAndPrint :: DebugPrint a => Parser a -> String -> (Source, String) -> Maybe FilePath -> IO (Bool, ParserState)
 parseAndPrint parserM msg (src, code) outF = do
   let (r, state) = parseString parserM src code
   case r of
@@ -71,7 +71,7 @@ parseAndPrint parserM msg (src, code) outF = do
       printOut outF msg res
       return (True, state)
 
-printOut :: Show a => Maybe FilePath -> String -> a -> IO ()
+printOut :: DebugPrint a => Maybe FilePath -> String -> a -> IO ()
 printOut outF msg res = do
   case outF of
     Nothing -> do

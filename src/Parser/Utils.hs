@@ -70,7 +70,7 @@ debug s = do
   let (res, state) = parseString initAnalyzeM (FileIn "debugIn") s
   -- let (res, state) = parseString (initParseAnalyzeGenM "debug from ghci") s
   putStrLn "Semantic State"
-  debugPrint (view sem_state state)
+  print (view sem_state state)
   -- putStrLn "Code Gen State"
   -- print (view cgen_state state)
   putStrLn "Symbol Table"

@@ -1,14 +1,17 @@
 {
+{-# LANGUAGE StandaloneDeriving #-}
 module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
                     alexStartPos, alexInitUserState, alexMonadScan,
                     printPosn, tokenPosnOfAlexState,
                     lexer, alexTokens, parseHex) where
 
-import Common.Token (Token(..))
 import Text.Read (readMaybe)
 import Data.Char (chr, isHexDigit)
 import Control.Monad (when)
 -- import Debug.Trace (trace)
+
+import Common.Token (Token(..))
+import Common.DebugPrint (DebugPrint (debugPrint), debugIO)
 }
 
 %wrapper "monadUserState"
@@ -109,6 +112,12 @@ rules :-
 
 {
 
+-- Show and debugging state info
+deriving instance Show AlexState
+
+instance DebugPrint AlexState where
+  debugPrint = debugIO False True
+
 instance Ord AlexPosn where
     compare (AlexPn o _ _) (AlexPn o' _ _) = compare o o'
 
@@ -117,7 +126,7 @@ instance Ord AlexPosn where
 data AlexUserState = AlexUserState { commentDepth :: Int
                                    , tokenPosn :: AlexPosn
                                    , readChars :: [Char]
-                                   }
+                                   } deriving Show
 
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState {commentDepth = 0, tokenPosn = AlexPn 0 0 0, readChars = []}

@@ -2,6 +2,7 @@
 module Main (main) where
 
 import Control.Monad (when, unless)
+import Control.Lens (view)
 import System.Exit (exitFailure)
 import System.Console.CmdArgs.Implicit hiding (args)
 
@@ -9,7 +10,7 @@ import Common.FileUtils (safeReadFile)
 import Common.DebugPrint (DebugPrint, debugPrint)
 import Common.SymbolType (Source (FileIn))
 import Parser.ParserM (Parser)
-import Parser.ParserState (ParserState)
+import Parser.ParserState (ParserState, symbols)
 import Parser.Utils (scanM, parseM, initAnalyzeM, genM, parseString)
 
 data Args = Args
@@ -57,7 +58,10 @@ main = do
             Parse -> parseAndPrint parseM "AST:\n" (src, code) outF
             Sem   -> parseAndPrint initAnalyzeM "Annotated AST:\n" (src, code) outF
             Gen   -> parseAndPrint (genM f) "" (src, code) outF
-      when (debugFlag args) $ print state
+      when (debugFlag args) $ do
+        debugPrint state
+        putStrLn "Symbol Table"
+        debugPrint (view symbols state)
       unless success exitFailure
 
 parseAndPrint :: DebugPrint a => Parser a -> String -> (Source, String) -> Maybe FilePath -> IO (Bool, ParserState)

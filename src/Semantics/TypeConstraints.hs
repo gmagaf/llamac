@@ -57,7 +57,13 @@ data TypeConstraint (tg :: TypeConstraintK) where
     AllowedUserDefinedType :: String -> TypeConstraint 'AllowedUserDefinedTypeT
     NotPolymorphicVar      :: String -> TypeConstraint 'NotPolymorphicVarT
 
-deriving instance Show (TypeConstraint a)
+instance Show (TypeConstraint tg) where
+    show (AllowedTypes _ msg)         = show $ "AllowedTypes: " ++ msg
+    show (NotAllowedFunType msg)      = show $ "NotAllowedFunType: " ++ msg
+    show (NotAllowedArrayType msg)    = show $ "NotAllowedArrayType: " ++ msg
+    show (ArrayOfAtLeastDim _ msg)    = show $ "ArrayOfAtLeastDim: " ++ msg
+    show (AllowedUserDefinedType msg) = show $ "AllowedUserDefinedType: " ++ msg
+    show (NotPolymorphicVar msg)      = show $ "NotPolymorphicVar: " ++ msg
 
 showDPair :: DS.DSum Tag TypeConstraint -> String
 showDPair (_ DS.:=> c) = show c

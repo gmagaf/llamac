@@ -14,7 +14,7 @@ import Common.SymbolType (Source(..))
 import Lexer.Lexer (AlexPosn, alexTokens)
 import Parser.Parser (calc)
 import Parser.ParserM (Error, Parser, runParser, liftAlex)
-import Parser.ParserState (ParserState, sem_state, symbols, initParserState)
+import Parser.ParserState (ParserState, symbols, initParserState, sem_state)
 import Semantics.Utils (SemanticTag)
 import Semantics.Semantics (analyzeAST)
 import RunTime.LibHeaders (initSymbolTable)
@@ -68,11 +68,8 @@ analyze src = fst . parseString initAnalyzeM src
 debug :: String -> IO ()
 debug s = do
   let (res, state) = parseString initAnalyzeM (FileIn "debugIn") s
-  -- let (res, state) = parseString (initParseAnalyzeGenM "debug from ghci") s
-  putStrLn "Semantic State"
-  print (view sem_state state)
-  -- putStrLn "Code Gen State"
-  -- print (view cgen_state state)
+  -- let (res, state) = parseString (genM "debug from ghci") (FileIn "debugIn") s
+  debugPrint (view sem_state state)
   putStrLn "Symbol Table"
   debugPrint (view symbols state)
   case res of

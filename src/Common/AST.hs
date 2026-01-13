@@ -5,6 +5,7 @@ import Data.Bifunctor (Bifunctor (..))
 import Data.Bifoldable (Bifoldable (bifoldMap))
 import Data.Bitraversable (Bitraversable (bitraverse))
 
+import Common.DebugPrint (DebugPrint (debugPrint), debugIO)
 import Common.Token (Identifier,
                      ConstrIdentifier,
                      IntConstant,
@@ -211,3 +212,10 @@ instance NameDef TDef where
 
 instance NameDef Constr where
   ide (Constr i _ _) = i
+
+-- Debugging utils
+instance (Show b) => DebugPrint (LetDef b) where
+    debugPrint = debugIO True False
+
+instance (Show b) => DebugPrint (TypeDef b) where
+    debugPrint = debugIO True False

@@ -5,6 +5,7 @@ module Semantics.SemanticState (SemanticState(..),
 import Data.List (intercalate)
 import qualified Data.IntSet as S
 
+import Common.DebugPrint (DebugPrint (debugPrint), debugIO)
 import Common.PrintAST (Pretty(pretty))
 import Common.SymbolType (SymbolType (..))
 import Lexer.Lexer (AlexPosn, alexStartPos)
@@ -35,6 +36,9 @@ instance Show SemanticState where
     ++ ", " ++ "constraints = " ++ showConstraintsMap (constraints s)
     ++ ", " ++ "freeTVarsInScope = " ++ showFreeTVars (freeTVars s)
     ++ "}"
+
+instance DebugPrint SemanticState where
+  debugPrint = debugIO False True
 
 showUnifierVals :: Unifier -> Int -> String
 showUnifierVals _ 0 = "_"

@@ -2,7 +2,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
                     alexStartPos, alexInitUserState, alexMonadScan,
-                    printPosn, tokenPosnOfAlexState,
+                    printPosn, getCurrentTokenPosn,
                     lexer, alexTokens, parseHex) where
 
 import Text.Read (readMaybe)
@@ -124,12 +124,12 @@ instance Ord AlexPosn where
 -- User state to hold comment depth, scanned chars of
 -- a string and the position of the read token
 data AlexUserState = AlexUserState { commentDepth :: Int
-                                   , tokenPosn :: AlexPosn
+                                   , currentTokenPosn :: AlexPosn
                                    , readChars :: [Char]
                                    } deriving Show
 
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState {commentDepth = 0, tokenPosn = AlexPn 0 0 0, readChars = []}
+alexInitUserState = AlexUserState {commentDepth = 0, currentTokenPosn = alexStartPos, readChars = []}
 
 getCommentDepth :: Alex Int
 getCommentDepth = commentDepth <$> alexGetUserState
@@ -139,13 +139,13 @@ setCommentDepth d = do
   state <- alexGetUserState
   alexSetUserState $ state{commentDepth = d}
 
-tokenPosnOfAlexState :: AlexState -> AlexPosn
-tokenPosnOfAlexState = tokenPosn . alex_ust
+getCurrentTokenPosn :: AlexState -> AlexPosn
+getCurrentTokenPosn = currentTokenPosn . alex_ust
 
 setTokenPosn :: AlexPosn -> Alex ()
 setTokenPosn p = do
   state <- alexGetUserState
-  alexSetUserState $ state{tokenPosn = p}
+  alexSetUserState $ state{currentTokenPosn = p}
 
 getReadChars :: Alex [Char]
 getReadChars = readChars <$> alexGetUserState
@@ -184,6 +184,8 @@ unknownCharacter (posn, _, _, current_string) len =
 -- Handle end of file
 alexEOF :: Alex Token
 alexEOF = do
+  (p, _, _, _) <- alexGetInput
+  setTokenPosn p
   code <- alexGetStartCode
   if code == comment
     then alexError "Reached end of file without closing all comments"
@@ -239,6 +241,7 @@ endString (posn, _, _, _) _ = do
     then do
       alexSetStartCode 0
       chars <- reverse <$> getReadChars
+      setReadChars ""
       return (ConstStringT chars)
     else lexicalError posn ("Unexpected startCode: " ++ show code ++ " in endString")
 

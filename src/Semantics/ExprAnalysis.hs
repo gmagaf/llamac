@@ -19,54 +19,73 @@ import {-# SOURCE #-} Semantics.LetAnalysis (analyzeLet)
 -- Semantic analysis of expressions
 
 analyzeExpr :: Expr AlexPosn -> Parser (Expr SemanticTag)
-analyzeExpr = recSemExpr indSemExpr
+analyzeExpr expr =
+    let tTag        = putSemPosn
+        tExpr       = indExprF analyzeExpr
+        tExprF      = indSemExpr
+        tType       = analyzeType
+        tNewType t  = stackTrace ("while analyzing type " ++ pretty t) . semNewType $ t
+        tLet        = analyzeLet
+        tLetIn      = semLetIn
+        tMatchExpr  = analyzeExpr
+        tClause     = analyzeClause
+        tMatch e cs = stackTrace ("while analyzing pattern to match " ++ pretty e) (semMatchExpr e cs)
+    in stackTrace ("while analyzing expr " ++ pretty expr) $
+        traverseExpr tTag (tExpr, tExprF) (tType, tNewType) (tLet, analyzeExpr, tLetIn) (tMatchExpr, tClause, tMatch) expr
 
--- Inductively analyze expressions using mapM for expression functor
-recSemExpr :: (ExprF (Expr SemanticTag) -> Parser (Expr SemanticTag))
-         -> Expr AlexPosn
-         -> Parser (Expr SemanticTag)
-recSemExpr g expr =
-    let aexpr = stackTrace ("while analyzing expr " ++ pretty expr) . recSemExpr g
-        atype = stackTrace ("while analyzing expr " ++ pretty expr) . analyzeType
-        alet = stackTrace ("while analyzing expr " ++ pretty expr) . analyzeLet
-        aclause = stackTrace ("while analyzing expr " ++ pretty expr) . analyzeClause
-    in case expr of
-        Expr (ForExpr i l u e) p -> do
-            semL <- aexpr l
-            semU <- aexpr u
-            openScopeInNames
-            insertName i (FunEntry (MonoType . SymType $ IntType) [])
-            semE <- aexpr e
-            closeScopeInNames
-            putSemPosn p
-            g (ForExpr i semL semU semE)
-        Expr (ForDownExpr i u l e) p -> do
-            semU <- aexpr u
-            semL <- aexpr l
-            openScopeInNames
-            insertName i (FunEntry (MonoType . SymType $ IntType) [])
-            semE <- aexpr e
-            closeScopeInNames
-            putSemPosn p
-            g (ForDownExpr i semU semL semE)
-        Expr ef p -> do
-            semEf <- mapM aexpr ef
-            putSemPosn p
-            g semEf
-        NewType t p -> do
-            semT <- atype t
-            putSemPosn p
-            semNewType semT
-        LetIn l e p -> do
-            semL <- alet l
-            semE <- aexpr e
-            putSemPosn p
-            semLetIn semL semE
-        MatchExpr e cs p -> do
-            semE <- aexpr e
-            semCs <- mapM aclause cs
-            putSemPosn p
-            semMatchExpr semE semCs
+-- Define a function to traverse the expression
+-- The traversal goes with the following order:
+-- 1. children nodes
+-- 2. tag
+-- 3. parent node
+traverseExpr :: Monad m
+             => (a -> m ())
+             -> (ExprF (Expr a) -> m (ExprF (Expr b)), ExprF (Expr b) -> m (Expr b))
+             -> (Type a -> m (Type b), Type b -> m (Expr b))
+             -> (LetDef a -> m (LetDef b), Expr a -> m (Expr b), LetDef b -> Expr b -> m (Expr b))
+             -> (Expr a -> m (Expr b), Clause a -> m (Clause b), Expr b -> [Clause b] -> m (Expr b))
+             -> Expr a
+             -> m (Expr b)
+traverseExpr tTag (tExp, tExprF) (tType, tNewType) (tLet, tLetExp, tLetIn) (tMatchExpr, tClause, tMatch) expr = do
+    case expr of
+        (Expr tf a) -> do
+            tTf <- tExp tf
+            tTag a
+            tExprF tTf
+        NewType t tg -> do
+            bType <- tType t
+            tTag tg
+            tNewType bType
+        LetIn l e a -> do
+            tl <- tLet l
+            te <- tLetExp e
+            tTag a
+            tLetIn tl te
+        MatchExpr e cs a -> do
+            te <- tMatchExpr e
+            tcs <- mapM  tClause cs
+            tTag a
+            tMatch te tcs
+
+-- Inductively analyze expression functors using mapM
+indExprF :: (Expr a -> Parser (Expr b)) -> ExprF (Expr a) -> Parser (ExprF (Expr b))
+indExprF aexpr (ForExpr i l u e) = do
+    semL <- aexpr l
+    semU <- aexpr u
+    openScopeInNames
+    insertName i (FunEntry (MonoType . SymType $ IntType) [])
+    semE <- aexpr e
+    closeScopeInNames
+    return (ForExpr i semL semU semE)
+indExprF aexpr (ForDownExpr i u l e) = do
+    semU <- aexpr u
+    semL <- aexpr l
+    openScopeInNames
+    insertName i (FunEntry (MonoType . SymType $ IntType) [])
+    semE <- aexpr e
+    closeScopeInNames
+    return (ForDownExpr i semU semL semE)
+indExprF aexpr ef = mapM aexpr ef
 
 -- Util for returning the result expression by updating its node type
 retE :: ExprF (Expr SemanticTag) -> SymbolType -> Parser (Expr SemanticTag)
@@ -401,12 +420,14 @@ semMatchExpr e cs = do
     let getPat (Match pat _ _) = pat
     let pats = map getPat cs
     patTs <- mapM getNodeType pats
-    mapM_ (\t -> unify (et, t)) patTs
+    stackTrace ("all patterns must have the same type as the matched expression " ++ pretty e) $
+        mapM_ (\t -> unify (et, t)) patTs
     outT <- freshTVar
     let getExp (Match _ expr _) = expr
     let patExps = map getExp cs
     patExpTs <- mapM getNodeType patExps
-    mapM_ (\t -> unify (outT, t)) patExpTs
+    stackTrace "all clauses must have the same type" $
+        mapM_ (\t -> unify (outT, t)) patExpTs
     return $ MatchExpr e cs SemTag{posn = p, typeInfo = NodeType outT}
 
 -- Semantic analysis of clauses

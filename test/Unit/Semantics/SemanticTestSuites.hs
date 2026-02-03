@@ -120,6 +120,7 @@ letDefSuite =
     ("type t = T of int and t = S of int let g = T 8", True),
     ("type t = R and t = S and x = X of t let c : x = X S", True),
     ("type t = T and t = S and x = X of t let f = X S and g = T", True),
+    ("type t = T type t = S let f x = match x with T -> 42 end", True),
     -- Polymorphic functions
     ("let id x = x\nlet x : int = id 17 and y : char = id 'a'", True),
     ("let const x : int = 42\nlet x = const 17 and y = const 'a'", True),
@@ -144,6 +145,7 @@ letDefSuite =
     ("type t = R of int and s = R of char let t = R 0", False),
     ("type t = R let c = R type t = T let ct : t = c", False),
     ("type t = T and t = S let g : t = T", False),
+    ("type t = T type t = S let f (x : t) = match (x : t) with T -> 42 end", False),
     ("type t = T of int and t = S of int let g : t = T 8", False),
     ("type t = R and t = S and x = X of t let c : x = X R", False),
     ("let rec f = let mutable x in !x let x : int = f and y : char = f", False)
@@ -276,6 +278,7 @@ exprSuites =
         ("type t = T of bool and s = S of t let main s = match s with S x -> () end", True),
         ("type t = T of bool and s = S of t let main s = match s with S t -> match t with T true -> () end end", True),
         ("type t = T of int let main x = match x with T f -> f = f end", True),
+        ("let f x = match x with x -> let g y = x in x end", True),
         -- Failing cases
         ("type t = T of t int \nlet t (t : t) = t\nlet g t : t -> t = T t", False),
         ("let rec mutable a [1, 2, 3] and d = dim 0 a", False),
@@ -375,5 +378,6 @@ exprSuites =
         ("let main x = match x with y -> !y end", False),
         ("let rec main x = match x with y -> y (main y) end", False),
         ("type t = T of bool and s = S of t let main s = match s with S (T true) -> () end", False),
+        ("let f x = match x with x -> let g y = y == x in g 42 end", False),
         ("let main x = match x with f -> f end + 3", False)
     ]

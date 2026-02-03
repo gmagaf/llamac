@@ -4,7 +4,7 @@ module Parser.Parser (calc, calcRepl) where
 import Lexer.Lexer (AlexPosn)
 import Common.Token (Token(..), lexeme)
 import Common.AST
-import Parser.ParserM (Parser, lexerWrap, getAlexPos, getTokenPosn, throwAtPosn, throwParsingError)
+import Parser.ParserM (Parser, lexerWrap, getPosn, throwAtPosn, throwParsingError)
 }
 
 %name calc AST
@@ -113,7 +113,7 @@ AST_ :: { [Either (LetDef AlexPosn) (TypeDef AlexPosn)] }
   | AST_ TypeDef                    { (Right $2) : $1 }
 
 P :: { AlexPosn }
-  : {- empty -}                     {% getTokenPosn }
+  : {- empty -}                     {% getPosn }
 
 REPL :: { ProgramOrExpr AlexPosn }
   :  {- empty -}                    { Program [] }
@@ -388,6 +388,6 @@ PatArg_ :: { AlexPosn -> Pattern AlexPosn }
 -- Handle errors
 parseError :: Token -> Parser a
 parseError t = do
-    posn <- getAlexPos
+    posn <- getPosn
     throwAtPosn posn $ throwParsingError $ "Unable to process token " ++ lexeme t
 }

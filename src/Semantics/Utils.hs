@@ -14,7 +14,7 @@ import Common.SymbolTable (Context, NameSpace, FullTableEntry, TableEntry(..), T
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
     getSemState, putSemState,
-    throwSemanticError, throwAtPosn)
+    throwSemanticError, throwAtPosn, putPosn, getPosn)
 import Parser.ParserState (symbols)
 import Parser.SymbolTableUtils (getNames, getTypes, queryP, updateP, insertNameP, insertTypeP)
 import Semantics.TypeConstraints (ConstraintsMap)
@@ -51,12 +51,10 @@ getDefScheme n = case typeInfo (tag n) of
 
 -- Functions for dealing with the Semantic state of the parser
 getSemPosn :: Parser AlexPosn
-getSemPosn = posnOfSem <$> getSemState
+getSemPosn = getPosn
 
 putSemPosn :: AlexPosn -> Parser ()
-putSemPosn p = do
-    s <- getSemState
-    putSemState s{posnOfSem = p}
+putSemPosn = putPosn
 
 getUnifier :: Parser Unifier
 getUnifier = unifier <$> getSemState

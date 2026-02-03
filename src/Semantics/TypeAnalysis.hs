@@ -38,7 +38,7 @@ insertTypeDef typesInDef (TDef tId cs p) =
         constrNames = map ide cs
         checkDuplicateConstrs :: Parser ()
         checkDuplicateConstrs = when (hasDuplicates constrNames) $
-            throwSem $ "Type " ++ tId ++ " cannot have duplicate constructors"
+            throwSemAtPosn ("Type " ++ tId ++ " cannot have duplicate constructors") p
         checkTypeInCtx :: Type AlexPosn -> Parser ConstType
         checkTypeInCtx = typeTo2 aux where
             aux (Type _ tp) tName =
@@ -72,20 +72,20 @@ analyzeConstr tId (Constr cId params p) = do
     insertName cId (ConstrEntry typeOfConstr paramTypes outputType)
     return $ Constr cId semParams (cpPosn p)
 
-recSemType :: (TypeF (TypeId (Type SemanticTag)) (Type SemanticTag) -> Parser (Type SemanticTag))
-    -> Type AlexPosn
-    -> Parser (Type SemanticTag)
-recSemType f t@(Type tf p) = do
-    let aType = stackTrace ("while analyzing type " ++ pretty t) . recSemType f
-    semTf <- mapM aType tf
-    putSemPosn p
-    f semTf
+recSemType :: (a -> TypeF (TypeId (Type b)) (Type b) -> Parser (Type b))
+    -> Type a
+    -> Parser (Type b)
+recSemType f (Type tf p) = do
+    semTf <- mapM (recSemType f) tf
+    f p semTf
 
 analyzeType :: Type AlexPosn -> Parser (Type SemanticTag)
-analyzeType = recSemType aType where
-    aType :: TypeF (TypeId (Type SemanticTag)) (Type SemanticTag) -> Parser (Type SemanticTag)
-    aType (ArrayType dim _) | dim < 1 = throwSem "Dimension of array type can't be less than 1"
-    aType (UserDefinedType t) = do
-        void (findTypeId t)
-        Type (UserDefinedType t) . cpPosn <$> getSemPosn
-    aType tf = Type tf . cpPosn <$> getSemPosn
+analyzeType t = recSemType aType t where
+    aType :: AlexPosn -> TypeF (TypeId (Type SemanticTag)) (Type SemanticTag) -> Parser (Type SemanticTag)
+    aType p tf = stackTrace ("while analyzing type " ++ pretty t) $ case tf of
+        ArrayType dim _ | dim < 1 -> throwSemAtPosn "Dimension of array type can't be less than 1" p
+        UserDefinedType i -> do
+            putSemPosn p
+            void (findTypeId i)
+            return ((Type (UserDefinedType i) . cpPosn) p)
+        _ -> return ((Type tf . cpPosn) p)

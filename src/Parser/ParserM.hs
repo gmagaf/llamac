@@ -1,6 +1,6 @@
 module Parser.ParserM (Parser,
                        getSource, putSource,
-                       getAlexPos, getTokenPosn, putAlexState,
+                       getPosn, putPosn, putAlexState,
                        getSemState, putSemState,
                        getCGenState, putCGenState,
                        Error, throwError, throwAtPosn, stackTrace,
@@ -14,9 +14,9 @@ import Control.Lens.Setter ((.=))
 import Control.Lens.Getter (use)
 
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
-      alexMonadScan, tokenPosnOfAlexState, printPosn)
+      alexMonadScan, getCurrentTokenPosn, printPosn)
 import Common.Token (Token)
-import Parser.ParserState (ParserState, source, alex_state, sem_state, cgen_state)
+import Parser.ParserState (ParserState, source, parser_posn, alex_state, sem_state, cgen_state)
 import Parser.ParserT (ParserT, evalParserT, runParserT, throw, withExcept, catch)
 import Semantics.SemanticState (SemanticState)
 import IR.CodeGenState (CodeGenState)
@@ -50,14 +50,11 @@ type Parser = ParserT Error ParserState Identity
 getSource :: Parser Source
 getSource = use source
 
+getPosn :: Parser AlexPosn
+getPosn = use parser_posn
+
 getAlexState :: Parser AlexState
 getAlexState = use alex_state
-
-getAlexPos :: Parser AlexPosn
-getAlexPos = alex_pos <$> getAlexState
-
-getTokenPosn :: Parser AlexPosn
-getTokenPosn = tokenPosnOfAlexState <$> getAlexState
 
 getSemState :: Parser SemanticState
 getSemState = use sem_state
@@ -68,6 +65,10 @@ getCGenState = use cgen_state
 putSource :: Source -> Parser ()
 putSource s = do
   source .= s
+
+putPosn :: AlexPosn -> Parser ()
+putPosn p = do
+  parser_posn .= p
 
 putAlexState :: AlexState -> Parser ()
 putAlexState s = do
@@ -120,6 +121,7 @@ liftAlex (Alex f) = do
   case f aState of
     Right (aState', a) -> do
       putAlexState aState'
+      putPosn (getCurrentTokenPosn aState')
       return a
     Left lexErr        -> throwLexicalError lexErr
 

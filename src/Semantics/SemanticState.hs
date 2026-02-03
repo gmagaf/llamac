@@ -8,14 +8,12 @@ import qualified Data.IntSet as S
 import Common.DebugPrint (DebugPrint (debugPrint), debugIO)
 import Common.PrintAST (Pretty(pretty))
 import Common.SymbolType (SymbolType (..))
-import Lexer.Lexer (AlexPosn, alexStartPos)
 import Semantics.TypeConstraints (ConstraintsMap, showConstraintsMap, emptyConstraintsMap)
 
 type Unifier = SymbolType -> Maybe SymbolType
 
 data SemanticState = SemanticState
   { varTypeC     :: Int         -- a counter to the var types used
-  , posnOfSem    :: AlexPosn    -- a posn to the current place of analysis, used for error messages
   , unifier      :: Unifier     -- this should always be the most
                                 -- general unifier and it should keep track
                                 -- of variables not in scope. This should work
@@ -31,7 +29,6 @@ data SemanticState = SemanticState
 instance Show SemanticState where
   show s = "SemanticState {" ++
     "varTypeC = " ++ show (varTypeC s)
-    ++ ", " ++ "posnOfSem = " ++ show (posnOfSem s)
     ++ ", " ++ "unifier = " ++ showUnifierVals (unifier s) (varTypeC s)
     ++ ", " ++ "constraints = " ++ showConstraintsMap (constraints s)
     ++ ", " ++ "freeTVarsInScope = " ++ showFreeTVars (freeTVars s)
@@ -55,7 +52,6 @@ initSemanticState :: SemanticState
 initSemanticState = SemanticState
                 {
                   varTypeC = 0
-                , posnOfSem = alexStartPos
                 , unifier = initUnifier
                 , constraints = emptyConstraintsMap
                 , freeTVars = S.empty

@@ -136,7 +136,6 @@ analyzeDefSig (FunDef i ps outT e p) = do
         throwSemAtPosn ("Fun " ++ i ++ " cannot have duplicate params") p
     -- Analyze params in the current scope
     semPs <- mapM (stackTrace ("while analyzing the params of " ++ i) . analyzeParam) ps
-    putSemPosn p
     paramTypes <- mapM getNodeType semPs
     (semOutT, outDefT) <- case outT of
         Just t  -> do
@@ -160,11 +159,9 @@ analyzeDefSig (FunDef i ps outT e p) = do
 analyzeParam :: Param AlexPosn -> Parser (Param SemanticTag)
 analyzeParam (TypedParam param t p) = do
     semT <- stackTrace ("while analyzing param " ++ param) $ analyzeType t
-    putSemPosn p
     st <- typeToSymbolType semT
     return $ TypedParam param semT SemTag{posn = p, typeInfo = NodeType st}
 analyzeParam (Param param p) = do
-    putSemPosn p
     vt <- freshTVar
     return $ Param param SemTag{posn = p, typeInfo = NodeType vt}
 
@@ -196,9 +193,9 @@ analyzeDefBody (SigAnalysisRes (Fun semPs outT e) st p (i, _)) = do
     paramTypes <- mapM insertParam semPs
     semE <- stackTrace ("while analyzing the body of " ++ i) (analyzeExpr e)
     -- Collect the results: the new param types, the expr type and unify infered type with the expected fun type
-    putSemPosn p
     eT <- getNodeType semE
     let fType = paramsToFun paramTypes eT
+    putSemPosn p
     unify (st, fType)
     -- Close scope
     closeScopeInNames

@@ -15,12 +15,12 @@ import Control.Lens.Getter (use)
 
 import Lexer.Lexer (Alex(..), AlexState(..), AlexPosn,
       alexMonadScan, getCurrentTokenPosn, printPosn)
+import Common.Source (Source)
 import Common.Token (Token)
 import Parser.ParserState (ParserState, source, parser_posn, alex_state, sem_state, cgen_state)
 import Parser.ParserT (ParserT, evalParserT, runParserT, throw, withExcept, catch)
 import Semantics.SemanticState (SemanticState)
 import IR.CodeGenState (CodeGenState)
-import Common.SymbolType (Source)
 
 -- This module defines the Parser monad
 

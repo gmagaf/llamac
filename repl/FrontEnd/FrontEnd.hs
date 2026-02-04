@@ -9,7 +9,7 @@ import System.Console.Haskeline
 import Common.FileUtils (safeReadFile)
 import Common.PrintAST (pretty)
 import Common.DebugPrint (debugPrint)
-import Common.SymbolType (Source(..))
+import Common.Source (Source(..))
 import qualified Common.AST as AST
 import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calcRepl)

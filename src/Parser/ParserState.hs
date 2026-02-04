@@ -8,7 +8,7 @@ import Control.Lens (makeLenses)
 import Control.Lens.Getter (view)
 
 import Common.DebugPrint
-import Common.SymbolType (Source, printSource)
+import Common.Source (Source, printSource)
 import Common.SymbolTable (SymbolTable, emptySymbolTable)
 import Lexer.Lexer (AlexState(..), AlexPosn, alexStartPos, alexInitUserState, printPosn)
 import Semantics.SemanticState (SemanticState, initSemanticState)

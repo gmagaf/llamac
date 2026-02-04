@@ -9,20 +9,13 @@ import Data.Functor.Identity (Identity (Identity, runIdentity))
 import Data.Bifunctor (Bifunctor(first))
 import Data.Bitraversable (bimapM)
 
+import Common.Source (Source, printSource)
 import Common.Token (Identifier)
 import Common.AST (Type(..), TypeF(..))
 import Common.PrintAST (Pretty(prettyPrec, showPretty))
 import Lexer.Lexer (AlexPosn, printPosn)
 
 -- A positioned identifier for user defined types with definition position info
-
-data Source = ReplIn Int
-            | FileIn String
-    deriving (Show, Eq, Ord)
-
-printSource :: Source -> String
-printSource (ReplIn l) = "<interactive>:" ++ show l
-printSource (FileIn f) = f
 
 data PosnId = PosnId
             { identifier :: Identifier

@@ -9,7 +9,7 @@ import Control.Lens.Setter ((<~))
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST (Node(..), Type (Type), TypeF (UserDefinedType))
 import Common.PrintAST
-import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..), PosnId (identifier), printTypePosn, tvarsInType, typeTo2)
+import Common.SymbolType (SymbolType(..), ConstType(..), TypeScheme (..), PosnId (identifier), printTypePosn, tvarsInType, typeToParaM)
 import Common.SymbolTable (Context, NameSpace, FullTableEntry, TableEntry(..), TypeTableEntry(..), names)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
@@ -232,18 +232,22 @@ insertName :: String -> TableEntry -> Parser ()
 insertName = insertNameP
 
 -- Other util functions
-typeToSymbolType :: Type SemanticTag -> Parser SymbolType
-typeToSymbolType = typeTo2 aux where
+typeToConstType :: Type SemanticTag -> Parser ConstType
+typeToConstType = typeToParaM aux where
     aux (Type _ tg) i = do
-        putSemPosn (posn tg)
-        findTypeId i
+        findTypeId (posn tg) i
 
-findTypeId :: Identifier -> Parser PosnId
-findTypeId i = do
+typeToSymbolType :: Type SemanticTag -> Parser SymbolType
+typeToSymbolType = typeToParaM aux where
+    aux (Type _ tg) i = do
+        findTypeId (posn tg) i
+
+findTypeId :: AlexPosn -> Identifier -> Parser PosnId
+findTypeId p i = do
     ts <- getTypes
     case query i ts of
         Just (TypeEntry posnId _) -> return posnId
-        _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
+        _ -> throwSemAtPosn ("Type symbol " ++ i ++ " is not in scope") p
 
 hasDuplicates :: (Ord a) => [a] -> Bool
 hasDuplicates list = length list /= length set

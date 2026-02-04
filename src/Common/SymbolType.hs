@@ -114,16 +114,16 @@ instance TypeFixPoint Identity ConstType where
     fixf = ConstType . runIdentity
 
 -- Some convertion utils
-typeTo' :: TypeFixPoint f t => (TypeId (Type b) -> TypeId t) -> Type b -> t
-typeTo' c = cata aux where
+typeTo :: TypeFixPoint f t => (TypeId (Type b) -> TypeId t) -> Type b -> t
+typeTo c = cata aux where
     aux (Identity tf) = fix $ first c tf
 
-typeTo :: (Monad m, TypeFixPoint f t) => (TypeId (Type b) -> m (TypeId t)) -> Type b -> m t
-typeTo c = cataM aux where
+typeToM :: (Monad m, TypeFixPoint f t) => (TypeId (Type b) -> m (TypeId t)) -> Type b -> m t
+typeToM c = cataM aux where
     aux (Identity tf) = fix <$> bimapM c pure tf
 
-typeTo2 :: (Monad m, TypeFixPoint f t) => (Type b -> TypeId (Type b) -> m (TypeId t)) -> Type b -> m t
-typeTo2 c = paraM2 aux where
+typeToParaM :: (Monad m, TypeFixPoint f t) => (Type b -> TypeId (Type b) -> m (TypeId t)) -> Type b -> m t
+typeToParaM c = paraM2 aux where
     aux t (Identity tf) = fix <$> bimapM (c t) pure tf
 
 constTypeToSymbolType :: ConstType -> SymbolType

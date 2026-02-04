@@ -12,7 +12,7 @@ import Common.AST
       NameDef(ide),
       tag)
 import Common.SymbolTable (TypeTableEntry(..), TableEntry(..))
-import Common.SymbolType (ConstType(..), PosnId (..), TypeId, typeTo, paramsToFun, typeTo2)
+import Common.SymbolType (ConstType(..), PosnId (..), TypeId, typeToParaM, paramsToFun)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser, stackTrace, getSource)
 import Parser.SymbolTableUtils (openScopeInTypes, openScopeInNames)
@@ -40,18 +40,15 @@ insertTypeDef typesInDef (TDef tId cs p) =
         checkDuplicateConstrs = when (hasDuplicates constrNames) $
             throwSemAtPosn ("Type " ++ tId ++ " cannot have duplicate constructors") p
         checkTypeInCtx :: Type AlexPosn -> Parser ConstType
-        checkTypeInCtx = typeTo2 aux where
+        checkTypeInCtx = typeToParaM aux where
             aux (Type _ tp) tName =
                 let maybeId = foldl' (\acc pId -> if identifier pId == tName then Just pId else acc) Nothing typesInDef
-                in do
-                    putSemPosn tp
-                    maybe (findTypeId tName) return maybeId
+                in maybe (findTypeId tp tName) return maybeId
         checkConstrParams :: Constr AlexPosn -> Parser (ConstrIdentifier, [ConstType])
         checkConstrParams (Constr c ts _) = do
             checkedTs <- mapM checkTypeInCtx ts
             return (c, checkedTs)
     in do
-        putSemPosn p
         checkDuplicateConstrs
         constrs <- mapM checkConstrParams cs
         src <- getSource
@@ -66,7 +63,7 @@ analyzeTDef pId (TDef tId cs p) = do
 analyzeConstr :: PosnId -> Constr AlexPosn -> Parser (Constr SemanticTag)
 analyzeConstr tId (Constr cId params p) = do
     semParams <- mapM (stackTrace ("while analyzing constr " ++ cId) . analyzeType) params
-    paramTypes <- mapM (typeTo findTypeId) semParams
+    paramTypes <- mapM typeToConstType semParams
     let outputType = ConstType $ UserDefinedType tId
     let typeOfConstr = paramsToFun paramTypes outputType
     insertName cId (ConstrEntry typeOfConstr paramTypes outputType)
@@ -85,7 +82,6 @@ analyzeType t = recSemType aType t where
     aType p tf = stackTrace ("while analyzing type " ++ pretty t) $ case tf of
         ArrayType dim _ | dim < 1 -> throwSemAtPosn "Dimension of array type can't be less than 1" p
         UserDefinedType i -> do
-            putSemPosn p
-            void (findTypeId i)
+            void (findTypeId p i)
             return ((Type (UserDefinedType i) . cpPosn) p)
         _ -> return ((Type tf . cpPosn) p)

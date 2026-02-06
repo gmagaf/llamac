@@ -6,6 +6,7 @@ import qualified Data.Set as S
 import Data.Char (isUpper)
 import Test.QuickCheck
 
+import Common.Source
 import Common.Token
 import Common.AST
 import Common.SymbolType
@@ -59,8 +60,8 @@ arbTypeDef s = sized $ \n -> do
   typesToDef <- boundedListOf (1, logSize n) arbTypeId
   let s' = S.union s (S.fromList typesToDef)
   arbTDefs <- mapM (arbTDef s' . identifier) typesToDef
-  let f outT (Constr i ts _) = (i, paramsToFun (map (typeTo' addPosn :: Type b -> ConstType) ts) outT)
-  let getConstrs (TDef i cs p) = map (f (typeTo' addPosn $ Type (UserDefinedType i) p)) cs
+  let f outT (Constr i ts _) = (i, paramsToFun (map (typeTo addPosn :: Type b -> ConstType) ts) outT)
+  let getConstrs (TDef i cs p) = map (f (typeTo addPosn $ Type (UserDefinedType i) p)) cs
   let constrs = foldl (\acc td -> getConstrs td ++ acc) [] arbTDefs
   td <- TypeDef arbTDefs <$> arbitrary
   return (td, M.fromList constrs, s')
@@ -154,7 +155,7 @@ arbLetDef s ts = sized $ \n -> do
   let idc = length ids
   types <- listGen idc (arbSimpleType ts)
   let pairs = zip ids types
-  let constTypes = map (typeTo' addPosn) types
+  let constTypes = map (typeTo addPosn) types
   let entries = zip ids constTypes
   let s' = M.union s (M.fromList entries)
   isRec <- elements [True, False]
@@ -190,7 +191,7 @@ arbDef s (i, t@(Type tf _)) = case tf of
     frequency [(2, FunDef i ps Nothing <$> arbExpr s' outT <*> arbitrary),
                (3, FunDef i ps (Just outT) <$> arbExpr s' outT <*> arbitrary)] where
       pEntry :: Param b -> Type b -> (Identifier, ConstType)
-      pEntry p t' = (ide p, typeTo' addPosn t')
+      pEntry p t' = (ide p, typeTo addPosn t')
   _ -> frequency [(2, FunDef i [] Nothing <$> arbExpr s t <*> arbitrary),
                   (1, FunDef i [] (Just t) <$> arbExpr s t <*> arbitrary)]
 
@@ -233,7 +234,7 @@ arbExpr s t@(Type tf _) = sized gen where
         return (LetIn (Let [def] b) (Expr (ConstExpr "id_ref_arr") b) b)
       RefType t' -> NewType t' <$> arbitrary
       UserDefinedType _ -> do
-        i <- fst <$> suchThat (elements (M.toList s)) (\(_, ct) -> typeTo' addPosn t == ct)
+        i <- fst <$> suchThat (elements (M.toList s)) (\(_, ct) -> typeTo addPosn t == ct)
         if isUpper (head i)
           then Expr (ConstConstrExpr i) <$> arbitrary
           else Expr (ConstExpr i) <$> arbitrary
@@ -275,7 +276,7 @@ typeIsArray ct = case ct of
 
 funAppGen :: Arbitrary b => Scope -> Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
 funAppGen s t r =
-  let funs = filter (\(_, ct) -> outFunType ct == typeTo' addPosn t) (M.toList s)
+  let funs = filter (\(_, ct) -> outFunType ct == typeTo addPosn t) (M.toList s)
   in if null funs
     then resize 0 (r t)
     else do
@@ -324,14 +325,14 @@ loopGen n s t@(Type tf _) r = case tf of
 
 arrayAccGen :: Arbitrary b => Scope -> Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
 arrayAccGen s reft@(Type (RefType t) b) r = do
-  let ct = typeTo' addPosn t
+  let ct = typeTo addPosn t
   let isArrayOfT (ConstType (ArrayType _ arrt)) = arrt == ct
       isArrayOfT _ = False
   let arrs = filter (isArrayOfT . snd) (M.toList s)
   if null arrs
     then do
       def <- arbDef s ("new_array_to_access", Type (ArrayType 4 t) b)
-      let s' = M.insert "new_array_to_access" (typeTo' addPosn (Type (ArrayType 4 t) b)) s
+      let s' = M.insert "new_array_to_access" (typeTo addPosn (Type (ArrayType 4 t) b)) s
       arrAcc <- arrayAccGen s' reft r
       b' <- arbitrary
       return (LetIn (Let [def] b') arrAcc b')

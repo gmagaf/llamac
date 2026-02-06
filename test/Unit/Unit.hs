@@ -10,7 +10,7 @@ import Unit.Semantics.SemanticTestSuites
 import Unit.Semantics.AnalyzedASTs
 import Common.FileUtils (readFileB)
 import Common.AST (AST)
-import Common.SymbolType (Source (FileIn))
+import Common.Source (Source (FileIn))
 import Lexer.Lexer (AlexPosn)
 import Parser.Utils (parse, analyze)
 import Semantics.Utils (SemanticTag)

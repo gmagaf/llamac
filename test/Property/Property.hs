@@ -7,7 +7,7 @@ import Test.QuickCheck (Gen, Property, Result, forAll)
 
 import Common.AST (mapAST, AST)
 import Common.PrintAST (prettyAST)
-import Common.SymbolType (Source (FileIn))
+import Common.Source (Source (FileIn))
 import Parser.Utils (parse)
 import Parser.ParserState (initParserState)
 import Parser.ParserM (evalParser)

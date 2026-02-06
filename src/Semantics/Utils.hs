@@ -14,7 +14,7 @@ import Common.SymbolTable (Context, NameSpace, FullTableEntry, TableEntry(..), T
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser,
     getSemState, putSemState,
-    throwSemanticError, throwAtPosn, putPosn, getPosn)
+    throwSemanticError, throwAtPosn)
 import Parser.ParserState (symbols)
 import Parser.SymbolTableUtils (getNames, getTypes, queryP, updateP, insertNameP, insertTypeP)
 import Semantics.TypeConstraints (ConstraintsMap)
@@ -50,12 +50,6 @@ getDefScheme n = case typeInfo (tag n) of
         throwSemAtPosn "Unable to compute type scheme of node" p
 
 -- Functions for dealing with the Semantic state of the parser
-getSemPosn :: Parser AlexPosn
-getSemPosn = getPosn
-
-putSemPosn :: AlexPosn -> Parser ()
-putSemPosn = putPosn
-
 getUnifier :: Parser Unifier
 getUnifier = unifier <$> getSemState
 
@@ -64,7 +58,7 @@ addUnifier v = do
     let tv = TVar v
     f <- getUnifier
     when (isJust (f tv)) $
-        throwSem ("Fresh variable " ++ pretty tv ++ " has been used before")
+        throwSemanticError ("Fresh variable " ++ pretty tv ++ " has been used before")
     let g t@(TVar _)   = if t == tv then Just tv else f t
         g (SymType tf) = SymType <$> mapM g tf
     s <- getSemState
@@ -75,9 +69,9 @@ putUnifier v t = do
     let tv = TVar v
     f <- getUnifier
     when (isNothing (f tv)) $
-        throwSem ("Variable " ++ pretty tv ++ " has never been used before")
+        throwSemanticError ("Variable " ++ pretty tv ++ " has never been used before")
     when (isNothing (f t)) $
-        throwSem ("Type " ++ pretty t ++ " contains variables never used before")
+        throwSemanticError ("Type " ++ pretty t ++ " contains variables never used before")
     let g t'@(TVar v') = if v' == v then Just t else Just t'
         g (SymType tf) = SymType <$> mapM g tf
     s <- getSemState
@@ -109,11 +103,6 @@ putConstraints c = do
 throwSemAtPosn :: String -> AlexPosn -> Parser a
 throwSemAtPosn s p = throwAtPosn p (throwSemanticError s)
 
-throwSem :: String -> Parser a
-throwSem s = do
-    p <- getSemPosn
-    throwAtPosn p (throwSemanticError s)
-
 -- The only way to create a new tvar
 freshTVarC :: Parser (SymbolType, Int)
 freshTVarC = do
@@ -141,7 +130,7 @@ updateName key entry = do
     ns <- getNames
     symbols . names <~ case query key ns of
         Just _ -> return $ update key entry ns
-        _ -> throwSem ("Cannot update symbol " ++ key ++ " as it is not in scope")
+        _ -> throwSemanticError ("Cannot update symbol " ++ key ++ " as it is not in scope")
 
 -- Resolution utils
 resolveFreeVars :: Parser ()
@@ -150,7 +139,7 @@ resolveFreeVars = do
     fvs <- getFreeTVars
     let g s v = case f (TVar v) of
             Just st -> S.union (S.fromList $ tvarsInType st) <$> s
-            Nothing -> throwSem $ "Unable to resolve type var " ++ pretty (TVar v)
+            Nothing -> throwSemanticError $ "Unable to resolve type var " ++ pretty (TVar v)
     fvs' <- S.foldl' g (pure S.empty) fvs
     putFreeTVars fvs'
 
@@ -159,7 +148,7 @@ resolveType st = do
     f <- getUnifier
     case f st of
         Just t  -> return t
-        Nothing -> throwSem $ "Unable to resolve type " ++ pretty st
+        Nothing -> throwSemanticError $ "Unable to resolve type " ++ pretty st
 
 resolveTypeScheme :: TypeScheme -> Parser TypeScheme
 resolveTypeScheme s = do
@@ -168,7 +157,7 @@ resolveTypeScheme s = do
         aux :: Unifier -> TypeScheme -> Parser TypeScheme
         aux f (MonoType t')  = case f t' of
             Just t  -> return (MonoType t)
-            Nothing -> throwSem $ "Unable to resolve type" ++ pretty t'
+            Nothing -> throwSemanticError $ "Unable to resolve type" ++ pretty t'
         aux f (AbsType v s') =
             let g t@(TVar _)   = if t == TVar v then Just t else f t
                 g (SymType tf) = SymType <$> mapM g tf
@@ -200,12 +189,12 @@ resolveTableEntry entry = case entry of
     ConstrEntry {} -> return entry
 
 -- Find symbol if exists else throw error
-findName :: String -> Parser TableEntry
-findName k = do
+findNameAt :: AlexPosn -> String -> Parser TableEntry
+findNameAt p k = do
     ns <- getNames
     case query k ns of
         Just entry -> resolveTableEntry entry
-        _ -> throwSem ("Symbol " ++ k ++ " is not in scope")
+        _ -> throwSemAtPosn ("Symbol " ++ k ++ " is not in scope") p
 
 findType :: ConstType -> Parser [(ConstrIdentifier, [ConstType])]
 findType t@(ConstType tf) = do
@@ -215,10 +204,10 @@ findType t@(ConstType tf) = do
             ts <- getTypes
             case query i ts of
                 Just (TypeEntry posnId' constrs) -> do
-                    unless (posnId == posnId') $ throwSem ("Type symbol " ++ i ++ " defined at: " ++ printTypePosn posnId ++ " is not in scope")
+                    unless (posnId == posnId') $ throwSemanticError ("Type symbol " ++ i ++ " defined at: " ++ printTypePosn posnId ++ " is not in scope")
                     return constrs
-                _ -> throwSem ("Type symbol " ++ i ++ " is not in scope")
-        _ -> throwSem ("Symbol table only contains user defined types. Not: " ++ pretty t)
+                _ -> throwSemanticError ("Type symbol " ++ i ++ " is not in scope")
+        _ -> throwSemanticError ("Symbol table only contains user defined types. Not: " ++ pretty t)
 
 -- Check that type is in scope else throw error
 checkTypeInScope :: ConstType -> Parser ()

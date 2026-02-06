@@ -14,10 +14,10 @@ import qualified Common.AST as AST
 import Lexer.Lexer (AlexPosn)
 import Parser.Parser (calcRepl)
 import Parser.ParserState (initAlexState, initParserState)
-import Parser.ParserM (putAlexState, throwInternalError, getSemState, getCGenState, putSource)
+import Parser.ParserM (putAlexState, throwSemanticError, throwInternalError, getSemState, getCGenState, putSource)
 import Parser.SymbolTableUtils (getSymbols, queryName, queryType)
 import Parser.Utils (initAnalyzeM, analyzeM)
-import Semantics.Utils (getNodeType, resolveType, throwSem)
+import Semantics.Utils (getNodeType, resolveType)
 import Semantics.Semantics (analyzeAST, Analyzable (sem), TypeAble (infer))
 
 import Common.Utils (initInterpreterState)
@@ -168,7 +168,7 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
                     print' (show ne)
                 (Just te, Nothing) -> print' (show te)
                 (Nothing, Just ne) -> print' (show ne)
-                (Nothing, Nothing) -> liftParser $ throwSem ("Symbol " ++ n ++ " is not in scope")
+                (Nothing, Nothing) -> liftParser $ throwSemanticError ("Symbol " ++ n ++ " is not in scope")
         Reload -> do
             f <- getCodeFile
             case f of

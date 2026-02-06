@@ -12,9 +12,9 @@ import Common.AST (TypeF(..), Node (tag))
 import Common.PrintAST (pretty)
 import Lexer.Lexer (AlexPosn)
 import Common.SymbolType(SymbolType(..), TypeScheme (..), constTypeToSymbolType, notVarInType, substScheme, cataM, PosnId (identifier), printTypePosn)
-import Parser.ParserM (Parser, throwSemanticError, throwAtPosn)
+import Parser.ParserM (Parser, throwSemanticError, throwAtPosn, getPosn)
 import Semantics.Utils (SemanticTag (posn), getNodeType,
-                        getSemPosn, getUnifier, putUnifier,
+                        getUnifier, putUnifier,
                         getConstraints, putConstraints,
                         resolveType, freshTVar, getFreeTVars, removeDuplicates)
 import Semantics.TypeConstraints
@@ -162,7 +162,7 @@ unifyNode e n = do
 
 unifyHere :: SymbolType -> SymbolType -> Parser ()
 unifyHere e t = do
-    p <- getSemPosn
+    p <- getPosn
     unifyAt e (t, p)
 
 checkConstraintAt :: AlexPosn -> SymbolType -> TypeConstraint t -> Parser ()
@@ -176,5 +176,5 @@ checkConstraintNode n c = do
 
 checkConstraintHere :: SymbolType -> TypeConstraint t -> Parser ()
 checkConstraintHere st c = do
-    p <- getSemPosn
+    p <- getPosn
     checkConstraintAt p st c

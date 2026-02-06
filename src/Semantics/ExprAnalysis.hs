@@ -10,7 +10,7 @@ import Common.SymbolType (TypeScheme(..), SymbolType(..), ConstType(..),
                           constTypeToSymbolType,
                           funToArgs, paramsToFun)
 import Lexer.Lexer (AlexPosn)
-import Parser.ParserM (Parser, stackTrace, throwInternalError)
+import Parser.ParserM (Parser, getPosn, putPosn, throwSemanticError, throwInternalError, throwAtPosn, stackTrace)
 import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames)
 import Semantics.TypeConstraints (TypeConstraint(..), mkAllowedTypes)
 import Semantics.Utils
@@ -22,7 +22,7 @@ import {-# SOURCE #-} Semantics.LetAnalysis (analyzeLet)
 
 analyzeExpr :: Expr AlexPosn -> Parser (Expr SemanticTag)
 analyzeExpr expr =
-    let tTag        = putSemPosn
+    let tTag        = putPosn
         tExpr       = indExprF analyzeExpr
         tExprF      = indSemExpr
         tType       = analyzeType
@@ -89,10 +89,21 @@ indExprF aexpr (ForDownExpr i u l e) = do
     return (ForDownExpr i semU semL semE)
 indExprF aexpr ef = mapM aexpr ef
 
+-- Utils for easily creating error messages
+throwSem :: String -> Parser a
+throwSem s = do
+    p <- getPosn
+    throwAtPosn p (throwSemanticError s)
+
+findName :: String -> Parser TableEntry
+findName i = do
+    p <- getPosn
+    findNameAt p i
+
 -- Util for returning the result expression by updating its node type
 retE :: ExprF (Expr SemanticTag) -> SymbolType -> Parser (Expr SemanticTag)
 retE ef t = do
-    p <- getSemPosn
+    p <- getPosn
     return $ Expr ef SemTag{posn = p, typeInfo = NodeType t}
 
 indSemExpr :: ExprF (Expr SemanticTag) -> Parser (Expr SemanticTag)
@@ -230,7 +241,7 @@ semArrayDim i dim = findName i >>= run where
 
 semLetIn :: LetDef SemanticTag -> Expr SemanticTag -> Parser (Expr SemanticTag)
 semLetIn l e = do
-    p <- getSemPosn
+    p <- getPosn
     closeScopeInNames
     t <- getNodeType e
     return $ LetIn l e SemTag{posn = p, typeInfo = NodeType t}
@@ -341,7 +352,7 @@ semArrayAccess i es = do
 semNewType :: Type SemanticTag -> Parser (Expr SemanticTag)
 semNewType (Type (ArrayType {}) _) = throwSem "Cannot dynamically allocate memory for array types"
 semNewType t = do
-    p <- getSemPosn
+    p <- getPosn
     nt <- SymType . RefType <$> typeToSymbolType t
     return $ NewType t SemTag{posn = p, typeInfo = NodeType nt}
 
@@ -404,7 +415,7 @@ semMatchExpr :: Expr SemanticTag
              -> [Clause SemanticTag]
              -> Parser (Expr SemanticTag)
 semMatchExpr e cs = do
-    p <- getSemPosn
+    p <- getPosn
     et <- getNodeType e
     checkConstraintNode e (AllowedUserDefinedType "Can only apply pattern matching to user defined type")
     let getPat (Match pat _ _) = pat
@@ -443,12 +454,12 @@ recSemPattern :: (PatternF (Pattern SemanticTag) -> Parser (Pattern SemanticTag)
 recSemPattern f p@(Pattern pf psn) = do
     let aPattern = stackTrace ("while analyzing pattern " ++ pretty p) . recSemPattern f
     semPf <- mapM aPattern pf
-    putSemPosn psn
+    putPosn psn
     f semPf
 
 retP :: PatternF (Pattern SemanticTag) -> SymbolType -> Parser (Pattern SemanticTag)
 retP pat t = do
-    p <- getSemPosn
+    p <- getPosn
     return $ Pattern pat SemTag{posn = p, typeInfo = NodeType t}
 
 indSemPat :: PatternF (Pattern SemanticTag) -> Parser (Pattern SemanticTag)

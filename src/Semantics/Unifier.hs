@@ -1,16 +1,20 @@
 {-# LANGUAGE GADTs #-}
-module Semantics.Unifier (inst, gen, checkConstraint, unify) where
+module Semantics.Unifier (inst, gen, checkConstraint, unify,
+                          unifyAt, unifyNode, unifyHere,
+                          checkConstraintAt, checkConstraintNode, checkConstraintHere) where
 
 import Data.Maybe (isNothing)
 import Control.Monad (when, unless)
 import Data.Foldable (forM_)
 import qualified Data.IntSet as S
 
-import Common.AST (TypeF(..))
+import Common.AST (TypeF(..), Node (tag))
 import Common.PrintAST (pretty)
-import Common.SymbolType(SymbolType(..), TypeScheme (..), constTypeToSymbolType, notVarInType, substScheme, cataM, PosnId (..), printTypePosn)
-import Parser.ParserM (Parser)
-import Semantics.Utils (throwSem, getUnifier, putUnifier,
+import Lexer.Lexer (AlexPosn)
+import Common.SymbolType(SymbolType(..), TypeScheme (..), constTypeToSymbolType, notVarInType, substScheme, cataM, PosnId (identifier), printTypePosn)
+import Parser.ParserM (Parser, throwSemanticError, throwAtPosn)
+import Semantics.Utils (SemanticTag (posn), getNodeType,
+                        getSemPosn, getUnifier, putUnifier,
                         getConstraints, putConstraints,
                         resolveType, freshTVar, getFreeTVars, removeDuplicates)
 import Semantics.TypeConstraints
@@ -78,27 +82,27 @@ copyConstraints _ = return ()
 checkConstraint :: SymbolType -> TypeConstraint t -> Parser ()
 checkConstraint t@(SymType ft) tc = case (ft, tc) of
     (FunType {}, NotAllowedFunType s) ->
-        throwSem $ "Type constraint failed: " ++ s
+        throwSemanticError $ "Type constraint failed: " ++ s
     (_, NotAllowedFunType _) -> return ()
     (ArrayType {}, NotAllowedArrayType s) ->
-        throwSem $ "Type constraint failed: " ++ s
+        throwSemanticError $ "Type constraint failed: " ++ s
     (_, NotAllowedArrayType _) -> return ()
     (ArrayType d _, ArrayOfAtLeastDim l s) ->
-        when (d < l) $ throwSem $ "Type constraint failed: " ++ s
+        when (d < l) $ throwSemanticError $ "Type constraint failed: " ++ s
     (_, ArrayOfAtLeastDim _ s) ->
-        throwSem $ "Type constraint failed: " ++ s
+        throwSemanticError $ "Type constraint failed: " ++ s
     (_, AllowedTypes ts s) ->
         let eqTypes = any (\ct -> t == constTypeToSymbolType ct) ts
-        in unless eqTypes . throwSem $ "Type constraint failed for type " ++ pretty t ++ ": " ++ s
+        in unless eqTypes . throwSemanticError $ "Type constraint failed for type " ++ pretty t ++ ": " ++ s
     (UserDefinedType {}, AllowedUserDefinedType _) -> return ()
     (_, AllowedUserDefinedType s) ->
-        throwSem $ "Type constraint failed: for type " ++ pretty t ++ ". " ++ s
+        throwSemanticError $ "Type constraint failed: for type " ++ pretty t ++ ". " ++ s
     (_, NotPolymorphicVar {}) -> return () -- This constraint only makes sense for type variables
 checkConstraint (TVar v) c = do
     let tv = TVar v
     f <- getUnifier
     when (isNothing (f tv)) $
-        throwSem ("Unable to add constraint: " ++ show c ++
+        throwSemanticError ("Unable to add constraint: " ++ show c ++
                   " . Variable " ++ pretty tv ++ " has never been used before")
     cs <- getConstraints
     putConstraints $ insertConstrWith union v (singletonSet c) cs
@@ -121,27 +125,56 @@ applyConstraints _ = return ()
 -- The constraint is solved in favor of the less
 -- variable if possible
 -- The result is saved in SymbolTable
-unify :: (SymbolType, SymbolType) -> Parser ()
-unify (st1, st2) = do
-    rt <- resolveType st1
-    rs <- resolveType st2
+unify :: SymbolType -> SymbolType -> Parser ()
+unify expected st = do
+    rt <- resolveType expected
+    rs <- resolveType st
     applyConstraints (rt, rs)
     case (rt, rs) of
         (t, s) | t == s -> return ()
-        (TVar v, TVar u) | v < u -> unify (rs, rt)
+        (TVar v, TVar u) | v < u -> unify rs rt
         (TVar v, s) | notVarInType v s -> putUnifier v s
         (t, TVar v) | notVarInType v t -> putUnifier v t
         (SymType (FunType t1 t2), SymType (FunType s1 s2)) -> do
-            unify (t1, s1)
-            unify (t2, s2)
+            unify t1 s1
+            unify t2 s2
         (SymType (ArrayType dimT t), SymType (ArrayType dimS s)) | dimT == dimS -> do
-            unify (t, s)
+            unify t s
         (SymType (RefType t), SymType (RefType s)) -> do
-            unify (t, s)
+            unify t s
         (SymType (UserDefinedType tId), SymType (UserDefinedType sId))
             | identifier tId == identifier sId && tId /= sId -> do
-            throwSem $ "Unable to unify type " ++
+            throwSemanticError $ "Unable to unify expected type " ++
                 pretty rt ++ " defined at " ++ printTypePosn tId ++
                 " with " ++
                 pretty rs ++ " defined at " ++ printTypePosn sId
-        _ -> throwSem $ "Unable to unify type " ++ pretty rt ++ " with " ++ pretty rs
+        _ -> throwSemanticError $ "Unable to unify expected type " ++ pretty rt ++ " with " ++ pretty rs
+
+-- Utils for unifying and adding constraints with better error messages
+unifyAt :: SymbolType -> (SymbolType, AlexPosn) -> Parser ()
+unifyAt e (t, p) = throwAtPosn p (unify e t)
+
+unifyNode :: Node n => SymbolType -> n SemanticTag -> Parser ()
+unifyNode e n = do
+    t <- getNodeType n
+    let p = posn (tag n)
+    unifyAt e (t, p)
+
+unifyHere :: SymbolType -> SymbolType -> Parser ()
+unifyHere e t = do
+    p <- getSemPosn
+    unifyAt e (t, p)
+
+checkConstraintAt :: AlexPosn -> SymbolType -> TypeConstraint t -> Parser ()
+checkConstraintAt p st c = throwAtPosn p (checkConstraint st c)
+
+checkConstraintNode :: Node n => n SemanticTag -> TypeConstraint t -> Parser ()
+checkConstraintNode n c = do
+    st <- getNodeType n
+    let p = posn (tag n)
+    checkConstraintAt p st c
+
+checkConstraintHere :: SymbolType -> TypeConstraint t -> Parser ()
+checkConstraintHere st c = do
+    p <- getSemPosn
+    checkConstraintAt p st c

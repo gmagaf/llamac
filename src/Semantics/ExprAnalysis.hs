@@ -1,5 +1,7 @@
 module Semantics.ExprAnalysis(analyzeExpr) where
 
+import Control.Monad.List (zipWithM_)
+
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST
 import Common.PrintAST (Pretty(pretty))
@@ -12,7 +14,7 @@ import Parser.ParserM (Parser, stackTrace, throwInternalError)
 import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames)
 import Semantics.TypeConstraints (TypeConstraint(..), mkAllowedTypes)
 import Semantics.Utils
-import Semantics.Unifier (inst, checkConstraint, unify)
+import Semantics.Unifier (inst, unifyNode, unifyHere, checkConstraintHere, checkConstraintNode)
 import Semantics.TypeAnalysis (analyzeType)
 import {-# SOURCE #-} Semantics.LetAnalysis (analyzeLet)
 
@@ -160,14 +162,14 @@ semFunAppExpr i es = do
                     v <- freshTVar
                     t <- inst ft
                     let inf = paramsToFun ts v
-                    unify (t, inf)
-                    checkConstraint v (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty v)
+                    unifyHere t inf
+                    checkConstraintHere v (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty v)
                     retE (FunAppExpr i es) v
         ParamEntry t _ -> do
             ts <- mapM getNodeType es
             v <- freshTVar
             let inf = paramsToFun ts v
-            unify (t, inf)
+            unifyHere t inf
             rt <- resolveType t
             let argTypes = funToArgs rt
             case compare (length es) (length argTypes) of
@@ -178,7 +180,7 @@ semFunAppExpr i es = do
             ts <- mapM getNodeType es
             v <- freshTVar
             let inf = paramsToFun ts v
-            unify (t, inf)
+            unifyHere t inf
             rt <- resolveType t
             let argTypes = funToArgs rt
             case compare (length es) (length argTypes) of
@@ -200,10 +202,10 @@ semConstrAppExpr i es = do
                 EQ -> do
                     ts <- mapM getNodeType es
                     v <- freshTVar
-                    unify (constTypeToSymbolType outT, v)
+                    unifyHere (constTypeToSymbolType outT) v
                     let inf = paramsToFun ts v
-                    unify (constTypeToSymbolType t, inf)
-                    checkConstraint v (NotAllowedFunType $ "Constructor " ++ i ++ " cannot return function type: " ++ pretty v)
+                    unifyHere (constTypeToSymbolType t) inf
+                    checkConstraintHere v (NotAllowedFunType $ "Constructor " ++ i ++ " cannot return function type: " ++ pretty v)
                     retE (ConstrAppExpr i es) v
         _ -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
@@ -215,14 +217,14 @@ semArrayDim i dim = findName i >>= run where
       | dims < dim = throwSem $ "Cannot compute the " ++ show dim ++ " dimension of " ++ show dims ++ "-dim array " ++ i
       | otherwise = retE (ArrayDim i dim) (SymType IntType)
     run (ParamEntry t _) = do
-        checkConstraint t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
+        checkConstraintHere t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
         retE (ArrayDim i dim) (SymType IntType)
     run (FunEntry sch []) = do
         t <- inst sch
-        checkConstraint t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
+        checkConstraintHere t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
         retE (ArrayDim i dim) (SymType IntType)
     run (PatternEntry t) = do
-        checkConstraint t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
+        checkConstraintHere t (ArrayOfAtLeastDim dim $ "Cannot compute the dimension " ++ show dim ++ " for type " ++ pretty t)
         retE (ArrayDim i dim) (SymType IntType)
     run _ = throwSem $ "No array " ++ i ++ " in scope"
 
@@ -235,22 +237,20 @@ semLetIn l e = do
 
 semUnOp :: UnOp -> Expr SemanticTag -> Parser (Expr SemanticTag)
 semUnOp op e = do
-    t <- getNodeType e
     v <- freshTVar
     case op of
-        BangOp         -> unify (SymType (RefType v), t)
-        PlusUnOp       -> unify (SymType IntType, t)
-        MinusUnOp      -> unify (SymType IntType, t)
-        PlusFloatUnOp  -> unify (SymType FloatType, t)
-        MinusFloatUnOp -> unify (SymType FloatType, t)
-        NotOp          -> unify (SymType BoolType, t)
+        BangOp         -> unifyNode (SymType (RefType v)) e
+        PlusUnOp       -> unifyNode (SymType IntType) e
+        MinusUnOp      -> unifyNode (SymType IntType) e
+        PlusFloatUnOp  -> unifyNode (SymType FloatType) e
+        MinusFloatUnOp -> unifyNode (SymType FloatType) e
+        NotOp          -> unifyNode (SymType BoolType) e
+    t <- getNodeType e
     let finalT = if op == BangOp then v else t
     retE (UnOpExpr op e) finalT
 
 semBinOp :: BinOp -> Expr SemanticTag -> Expr SemanticTag -> Parser (Expr SemanticTag)
-semBinOp op d e = do
-    s <- getNodeType d
-    t <- getNodeType e
+semBinOp op s t = do
     outT <- freshTVar
     case op of
         PlusOp          -> unifyAll (SymType IntType) s t outT
@@ -265,10 +265,12 @@ semBinOp op d e = do
         ExpOp           -> unifyAll (SymType FloatType) s t outT
         AndOp           -> unifyAll (SymType BoolType) s t outT
         OrOp            -> unifyAll (SymType BoolType) s t outT
-        SemicolonOp     -> unify (t, outT)
+        SemicolonOp     -> unifyNode outT t
         AssignMutableOp -> do
-            unify (s, SymType (RefType t))
-            unify (SymType UnitType, outT)
+            st <- getNodeType s
+            tt <- getNodeType t
+            unifyHere st (SymType (RefType tt))
+            unifyHere (SymType UnitType) outT
         EqOp            -> unifyEq s t outT
         NotEqOp         -> unifyEq s t outT
         NatEqOp         -> unifyEq s t outT
@@ -277,25 +279,29 @@ semBinOp op d e = do
         GTOp            -> unifyComp s t outT
         LEqOp           -> unifyComp s t outT
         GEqOp           -> unifyComp s t outT
-    retE (BinOpExpr op d e) outT where
+    retE (BinOpExpr op s t) outT where
         unifyAll expected s' t' outT' = do
-            unify (expected, s')
-            unify (expected, t')
-            unify (expected, outT')
+            unifyNode expected s'
+            unifyNode expected t'
+            unifyHere expected outT'
         unifyEq s' t' outT' = do
-            checkConstraint s' (NotAllowedFunType $ "Cannot apply operator " ++ pretty op ++ " to fun types")
-            checkConstraint s' (NotAllowedArrayType $ "Cannot apply operator " ++ pretty op ++ " to array types")
-            checkConstraint t' (NotAllowedFunType $ "Cannot apply operator " ++ pretty op ++ " to fun types")
-            checkConstraint t' (NotAllowedArrayType $ "Cannot apply operator " ++ pretty op ++ " to array types")
-            unify (s', t')
-            unify (SymType BoolType, outT')
+            checkConstraintNode s' (NotAllowedFunType $ "Cannot apply operator " ++ pretty op ++ " to fun types")
+            checkConstraintNode s' (NotAllowedArrayType $ "Cannot apply operator " ++ pretty op ++ " to array types")
+            checkConstraintNode t' (NotAllowedFunType $ "Cannot apply operator " ++ pretty op ++ " to fun types")
+            checkConstraintNode t' (NotAllowedArrayType $ "Cannot apply operator " ++ pretty op ++ " to array types")
+            st <- getNodeType s'
+            tt <- getNodeType t'
+            unifyHere st tt
+            unifyHere (SymType BoolType) outT'
         unifyComp s' t' outT' = do
             let c = mkAllowedTypes [ConstType IntType, ConstType FloatType, ConstType CharType]
                     ("Operator " ++ pretty op ++ " can only be applied to int, float or char")
-            checkConstraint s' c
-            checkConstraint t' c
-            unify (s', t')
-            unify (SymType BoolType, outT')
+            checkConstraintNode s' c
+            checkConstraintNode t' c
+            st <- getNodeType s'
+            tt <- getNodeType t'
+            unifyHere st tt
+            unifyHere (SymType BoolType) outT'
 
 semArrayAccess :: Identifier -> [Expr SemanticTag] -> Parser (Expr SemanticTag)
 semArrayAccess i es = do
@@ -306,33 +312,29 @@ semArrayAccess i es = do
                 LT -> throwSem $ "Array " ++ i ++ " is applied to too few arguments"
                 GT -> throwSem $ "Array " ++ i ++ " is applied to too many arguments"
                 EQ -> do
-                    ts <- mapM getNodeType es
-                    mapM_ (\et -> unify (SymType IntType, et)) ts
+                    mapM_ (unifyNode (SymType IntType)) es
                     v <- freshTVar
                     let inf = SymType (ArrayType dims v)
-                    unify (t, inf)
+                    unifyHere t inf
                     retE (ArrayAccess i es) (SymType (RefType v))
         ParamEntry t _ -> do
-            ts <- mapM getNodeType es
-            mapM_ (\et -> unify (SymType IntType, et)) ts
+            mapM_ (unifyNode (SymType IntType)) es
             v <- freshTVar
             let inf = SymType (ArrayType (length es) v)
-            unify (t, inf)
+            unifyHere t inf
             retE (ArrayAccess i es) (SymType (RefType v))
         FunEntry s []  -> do
-            ts <- mapM getNodeType es
-            mapM_ (\et -> unify (SymType IntType, et)) ts
+            mapM_ (unifyNode (SymType IntType)) es
             t <- inst s
             v <- freshTVar
             let inf = SymType (ArrayType (length es) v)
-            unify (t, inf)
+            unifyHere t inf
             retE (ArrayAccess i es) (SymType (RefType v))
         PatternEntry t -> do
-            ts <- mapM getNodeType es
-            mapM_ (\et -> unify (SymType IntType, et)) ts
+            mapM_ (unifyNode (SymType IntType)) es
             v <- freshTVar
             let inf = SymType (ArrayType (length es) v)
-            unify (t, inf)
+            unifyHere t inf
             retE (ArrayAccess i es) (SymType (RefType v))
         _    -> throwSem $ "No array " ++ i ++ " found in scope"
 
@@ -345,9 +347,8 @@ semNewType t = do
 
 semDeleteExpr :: Expr SemanticTag -> Parser (Expr SemanticTag)
 semDeleteExpr e = do
-    t <- getNodeType e
     v <- freshTVar
-    unify (SymType (RefType v), t)
+    unifyNode (SymType (RefType v)) e
     retE (DeleteExpr e) (SymType UnitType)
 
 semIfThenElseExpr :: Expr SemanticTag
@@ -355,31 +356,26 @@ semIfThenElseExpr :: Expr SemanticTag
                   -> Expr SemanticTag
                   -> Parser (Expr SemanticTag)
 semIfThenElseExpr c d e = do
-    ct <- getNodeType c
     dt <- getNodeType d
     et <- getNodeType e
-    unify (SymType BoolType, ct)
-    unify (dt, et)
+    unifyNode (SymType BoolType) c
+    unifyHere dt et
     retE (IfThenElseExpr c d e) dt
 
 semIfThenExpr :: Expr SemanticTag
               -> Expr SemanticTag
               -> Parser (Expr SemanticTag)
 semIfThenExpr c e = do
-    ct <- getNodeType c
-    et <- getNodeType e
-    unify (SymType BoolType, ct)
-    unify (SymType UnitType, et)
+    unifyNode (SymType BoolType) c
+    unifyNode (SymType UnitType) e
     retE (IfThenExpr c e) (SymType UnitType)
 
 semWhileExpr :: Expr SemanticTag
              -> Expr SemanticTag
              -> Parser (Expr SemanticTag)
 semWhileExpr c e = do
-    ct <- getNodeType c
-    et <- getNodeType e
-    unify (SymType BoolType, ct)
-    unify (SymType UnitType, et)
+    unifyNode (SymType BoolType) c
+    unifyNode (SymType UnitType) e
     retE (WhileExpr c e) (SymType UnitType)
 
 semForExpr :: Identifier
@@ -388,12 +384,9 @@ semForExpr :: Identifier
            -> Expr SemanticTag
            -> Parser (Expr SemanticTag)
 semForExpr i l u e = do
-    lt <- getNodeType l
-    ut <- getNodeType u
-    et <- getNodeType e
-    unify (SymType IntType, lt)
-    unify (SymType IntType, ut)
-    unify (SymType UnitType, et)
+    unifyNode (SymType IntType) l
+    unifyNode (SymType IntType) u
+    unifyNode (SymType UnitType) e
     retE (ForExpr i l u e) (SymType UnitType)
 
 semForDownExpr :: Identifier
@@ -402,12 +395,9 @@ semForDownExpr :: Identifier
                -> Expr SemanticTag
                -> Parser (Expr SemanticTag)
 semForDownExpr i u l e = do
-    ut <- getNodeType u
-    lt <- getNodeType l
-    et <- getNodeType e
-    unify (SymType IntType, ut)
-    unify (SymType IntType, lt)
-    unify (SymType UnitType, et)
+    unifyNode (SymType IntType) u
+    unifyNode (SymType IntType) l
+    unifyNode (SymType UnitType) e
     retE (ForDownExpr i u l e) (SymType UnitType)
 
 semMatchExpr :: Expr SemanticTag
@@ -416,18 +406,16 @@ semMatchExpr :: Expr SemanticTag
 semMatchExpr e cs = do
     p <- getSemPosn
     et <- getNodeType e
-    checkConstraint et (AllowedUserDefinedType "Can only apply pattern matching to user defined type")
+    checkConstraintNode e (AllowedUserDefinedType "Can only apply pattern matching to user defined type")
     let getPat (Match pat _ _) = pat
     let pats = map getPat cs
-    patTs <- mapM getNodeType pats
     stackTrace ("all patterns must have the same type as the matched expression " ++ pretty e) $
-        mapM_ (\t -> unify (et, t)) patTs
+        mapM_ (unifyNode et) pats
     outT <- freshTVar
     let getExp (Match _ expr _) = expr
     let patExps = map getExp cs
-    patExpTs <- mapM getNodeType patExps
     stackTrace "all clauses must have the same type" $
-        mapM_ (\t -> unify (outT, t)) patExpTs
+        mapM_ (unifyNode outT) patExps
     return $ MatchExpr e cs SemTag{posn = p, typeInfo = NodeType outT}
 
 -- Semantic analysis of clauses
@@ -482,8 +470,7 @@ indSemPat (ConstrPattern i pats) = do
                 LT -> throwSem $ "Constructor " ++ i ++ " is applied to too few patterns"
                 GT -> throwSem $ "Constructor " ++ i ++ " is applied to too many patterns"
                 EQ -> do
-                    patTs <- mapM getNodeType pats
-                    mapM_ unify (zipWith (\ct t -> (constTypeToSymbolType ct, t)) argT patTs)
+                    zipWithM_ (unifyNode . constTypeToSymbolType) argT pats
                     mapM_ verifyParamPat pats
                     retP (ConstrPattern i pats) (constTypeToSymbolType outT)
             where verifyParamPat (Pattern (ConstrPattern _ []) _) = return ()

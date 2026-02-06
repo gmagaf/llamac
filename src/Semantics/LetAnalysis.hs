@@ -13,7 +13,7 @@ import Parser.ParserM (Parser, stackTrace)
 import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames)
 import Semantics.TypeConstraints (TypeConstraint(..))
 import Semantics.Utils
-import Semantics.Unifier (gen, checkConstraint, unify)
+import Semantics.Unifier (gen, checkConstraintAt, unifyNode, unifyAt)
 import Semantics.TypeAnalysis (analyzeType)
 import Semantics.ExprAnalysis (analyzeExpr)
 
@@ -110,7 +110,7 @@ addMutVarToFree _ = return ()
 analyzeDefSig :: Def AlexPosn -> Parser SigAnalysisRes
 analyzeDefSig (VarDef x Nothing p) = do
     tv <- freshTVar
-    checkConstraint tv (NotPolymorphicVar $ "Cannot abstract on mutable var " ++ pretty tv)
+    checkConstraintAt p tv (NotPolymorphicVar $ "Cannot abstract on mutable var " ++ pretty tv)
     let varType = SymType . RefType $ tv
     return $ SigAnalysisRes (Mut Nothing) varType p (x, MutableEntry varType)
 analyzeDefSig (VarDef x (Just t) p) = do
@@ -126,7 +126,7 @@ analyzeDefSig (ArrayDef i es outT p) = do
             return (Just semT, outDefT)
         Nothing -> do
             tv <- freshTVar
-            checkConstraint tv (NotPolymorphicVar $ "Cannot abstract on array var " ++ pretty tv)
+            checkConstraintAt p tv (NotPolymorphicVar $ "Cannot abstract on array var " ++ pretty tv)
             return (Nothing, tv)
     let arrayType = SymType . ArrayType dims $ outDefT
     return $ SigAnalysisRes (Arr es semOutT) arrayType p (i, ArrayEntry arrayType dims)
@@ -147,7 +147,7 @@ analyzeDefSig (FunDef i ps outT e p) = do
             -- Fresh outV is the output type of the function
             outV <- freshTVar
             return (Nothing, outV)
-    checkConstraint outDefT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty outDefT)
+    checkConstraintAt p outDefT (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty outDefT)
     let fType = paramsToFun paramTypes outDefT
     return $ SigAnalysisRes (Fun semPs semOutT e) fType p (i, FunEntry (MonoType fType) paramNames)
 
@@ -174,9 +174,7 @@ analyzeDefBody (SigAnalysisRes (Mut t) st p (i, entry)) =
     in return (VarDef i t tg, entry)
 analyzeDefBody (SigAnalysisRes (Arr es t) st p (i, entry)) = do
     semEs <- mapM (stackTrace ("while analyzing the dimensions of array " ++ i) . analyzeExpr) es
-    typesEs <- mapM getNodeType semEs
-    putSemPosn p
-    mapM_ (unify . (,) (SymType IntType)) typesEs
+    mapM_ (unifyNode (SymType IntType)) semEs
     let tg = SemTag{posn = p, typeInfo = DefType $ MonoType st}
     return (ArrayDef i semEs t tg, entry)
 analyzeDefBody (SigAnalysisRes (Fun semPs outT e) st p (i, _)) = do
@@ -195,8 +193,7 @@ analyzeDefBody (SigAnalysisRes (Fun semPs outT e) st p (i, _)) = do
     -- Collect the results: the new param types, the expr type and unify infered type with the expected fun type
     eT <- getNodeType semE
     let fType = paramsToFun paramTypes eT
-    putSemPosn p
-    unify (st, fType)
+    unifyAt fType (st, p)
     -- Close scope
     closeScopeInNames
     putFreeTVars outerScopeVars

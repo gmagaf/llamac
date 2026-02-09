@@ -131,10 +131,10 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
             liftIO (debugPrint s)
         Debug SemState -> do
             s <- liftParser getSemState
-            print' (show s)
+            liftIO (debugPrint s)
         Debug CGenState -> do
             s <- liftParser getCGenState
-            print' (show s)
+            liftIO (debugPrint s)
         Debug FileInput -> do
             fopt <- getCodeFile
             let msg = maybe "No file loaded" ("Loaded file: " ++) fopt

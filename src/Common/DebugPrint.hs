@@ -1,8 +1,7 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
-module Common.DebugPrint (DebugPrint, debugPrint, debugIO) where
+module Common.DebugPrint (Debug (..), PrintConfig(..), debugPrintDef, debugWriteDef) where
 
 import qualified Data.Text.Lazy as L
+import qualified Data.Text.Lazy.IO as TIO
 import Text.Pretty.Simple (CheckColorTty(CheckColorTty),
                           OutputOptions(..),
                           StringOutputStyle (..),
@@ -11,37 +10,47 @@ import Text.Pretty.Simple (CheckColorTty(CheckColorTty),
                           pPrintOpt, pShowOpt)
 import System.Console.ANSI
 
-class Show a => DebugPrint a where
+-- Debug printing utils
+
+defaultOptions :: Bool -> Bool -> OutputOptions
+defaultOptions c p =
+    let base = if c then defaultOutputOptionsDarkBg else defaultOutputOptionsNoColor
+        opt = base { outputOptionsIndentAmount = 2
+                   , outputOptionsCompact = True
+                   , outputOptionsCompactParens = p
+                   , outputOptionsInitialIndent = 0
+                   , outputOptionsStringStyle = Literal
+                   }
+    in opt
+
+data PrintConfig = PrintConfig { color :: Bool, wrapParens :: Bool }
+
+class Show a => Debug a where
     debugPrint :: a -> IO ()
-    debugPrint = debugIO True False
+    debugPrint = debugPrintDef (PrintConfig { color = True, wrapParens = False })
+    debugWrite :: String -> a -> IO ()
+    debugWrite = debugWriteDef (PrintConfig { color = False, wrapParens = False })
 
-instance DebugPrint a => DebugPrint [a]
-instance (DebugPrint a, DebugPrint b) => DebugPrint (Either a b)
+debugPrintDef :: Show a => PrintConfig -> a -> IO ()
+debugPrintDef conf = pPrintOpt CheckColorTty (defaultOptions (color conf) (wrapParens conf))
 
-instance DebugPrint L.Text where
+debugWriteDef :: Show a => PrintConfig -> String -> a -> IO ()
+debugWriteDef conf f = TIO.writeFile f . pShowOpt (defaultOptions False (wrapParens conf))
+
+
+instance Debug a => Debug [a] where
+    debugPrint = debugPrintDef (PrintConfig { color = True, wrapParens = False })
+    debugWrite = debugWriteDef (PrintConfig { color = True, wrapParens = False })
+
+instance (Debug a, Debug b) => Debug (Either a b) where
+    debugPrint = debugPrintDef (PrintConfig { color = True, wrapParens = False })
+    debugWrite = debugWriteDef (PrintConfig { color = False, wrapParens = False })
+
+instance Debug L.Text where
     debugPrint s = do
         setSGR [ SetColor Foreground Vivid Blue
                , SetConsoleIntensity BoldIntensity
                ]
-        putStrLn $ L.unpack s
+        TIO.putStrLn s
         setSGR [Reset]
-
--- Debug printing utils
-debugText :: Show a => a -> L.Text
-debugText = let smallIndent = defaultOutputOptionsDarkBg
-                            { outputOptionsIndentAmount = 2
-                            , outputOptionsStringStyle = Literal
-                            }
-             in pShowOpt smallIndent
-
-debugIO :: Show a => Bool -> Bool -> a -> IO ()
-debugIO color wrapParens =
-    let base = if color then defaultOutputOptionsDarkBg else defaultOutputOptionsNoColor
-        smallIndent = base
-                        { outputOptionsIndentAmount = 2
-                        , outputOptionsCompact = True
-                        , outputOptionsCompactParens = wrapParens
-                        , outputOptionsInitialIndent = 0
-                        , outputOptionsStringStyle = Literal
-                        }
-    in pPrintOpt CheckColorTty smallIndent
+    debugWrite = TIO.writeFile

@@ -5,7 +5,7 @@ module Semantics.SemanticState (SemanticState(..),
 import Data.List (intercalate)
 import qualified Data.IntSet as S
 
-import Common.DebugPrint (DebugPrint (debugPrint), debugIO)
+import Common.DebugPrint (Debug(..), PrintConfig(..), debugPrintDef, debugWriteDef)
 import Common.PrintAST (Pretty(pretty))
 import Common.SymbolType (SymbolType (..))
 import Semantics.TypeConstraints (ConstraintsMap, showConstraintsMap, emptyConstraintsMap)
@@ -34,8 +34,9 @@ instance Show SemanticState where
     ++ ", " ++ "freeTVarsInScope = " ++ showFreeTVars (freeTVars s)
     ++ "}"
 
-instance DebugPrint SemanticState where
-  debugPrint = debugIO False True
+instance Debug SemanticState where
+  debugPrint = debugPrintDef (PrintConfig { color = True, wrapParens = True })
+  debugWrite = debugWriteDef (PrintConfig { color = False, wrapParens = True })
 
 showUnifierVals :: Unifier -> Int -> String
 showUnifierVals _ 0 = "_"

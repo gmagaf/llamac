@@ -7,7 +7,7 @@ module Common.Token(Token(..),
                     StringConstant,
                     lexeme) where
 
-import Common.DebugPrint (DebugPrint (debugPrint), debugIO)
+import Common.DebugPrint (Debug)
 
 -- Mappings of Llama constants to Haskell values
 type Identifier = String
@@ -96,8 +96,7 @@ data Token
   | EofT
   deriving (Eq, Show)
 
-instance DebugPrint Token where
-    debugPrint = debugIO True False
+instance Debug Token
 
 -- Print the lexeme of the token
 lexeme :: Token -> String

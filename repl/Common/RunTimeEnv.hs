@@ -42,7 +42,7 @@ data RunTimeEnvF v = RunTimeEnv { frame_pointer :: ActivationRecordF v
                                 }
     deriving (Show, Functor)
 
-instance (Show v, Pretty v) => DebugPrint (RunTimeEnvF v) where
+instance (Show v, Pretty v) => Debug (RunTimeEnvF v) where
     debugPrint rtenv =
         let prettyMaybe = maybe "null"
             prettyNestedAr nar = show (offset nar)

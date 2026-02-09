@@ -6,6 +6,8 @@ import LLVM.IRBuilder (ModuleBuilderState (..), IRBuilderState (..), emptyIRBuil
 import LLVM.IRBuilder.Internal.SnocList (SnocList(unSnocList))
 import LLVM.Pretty (ppll)
 
+import Common.DebugPrint (Debug(..), PrintConfig(..), debugPrintDef, debugWriteDef)
+
 -- This module defines the state of the code generation
 
 data CodeGenState = CodeGenState
@@ -20,6 +22,10 @@ instance Show CodeGenState where
         ++ ", " ++ "moduleStateTypes = " ++ show (fmap ppll . builderTypeDefs $ ms)
         ++ ", " ++ "irBuilderStateBBs = " ++ (show . map ppll . unSnocList . builderBlocks $ irs)
         ++ "}"
+
+instance Debug CodeGenState where
+  debugPrint = debugPrintDef (PrintConfig { color = True, wrapParens = True })
+  debugWrite = debugWriteDef (PrintConfig { color = False, wrapParens = True })
 
 initCodeGenState :: CodeGenState
 initCodeGenState = CodeGenState

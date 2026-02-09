@@ -41,9 +41,10 @@ import Control.Lens.Getter (Getter, to, view)
 import qualified LLVM.AST as L (Operand)
 import qualified LLVM.AST.Type as L
 
+import Common.FileUtils (writeToFile)
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (pretty)
-import Common.DebugPrint (DebugPrint, debugPrint)
+import Common.DebugPrint (Debug (debugPrint, debugWrite))
 import Common.SymbolType (SymbolType (TVar), TypeScheme, ConstType, PosnId, printTypePosn)
 
 -- This module contains the defintion of the Symbol table for the compiler
@@ -179,8 +180,8 @@ emptySymbolTable :: SymbolTable
 emptySymbolTable = SymbolTable emptyContext emptyContext
 
 -- Debug printing of symbol table
-instance (Show k, Show e) => DebugPrint (Context k e) where
-    debugPrint (Context scopes) =
+debugShow :: (Show k, Show e) => Context k e -> String
+debugShow (Context scopes) =
         let -- Utils for each record
             toString = bimap show show
             toLengths = bimap length length
@@ -203,11 +204,20 @@ instance (Show k, Show e) => DebugPrint (Context k e) where
             printLine (k, e) acc = "| " ++ addPadding k lk ++ " | " ++ addPadding e le ++ " |\n" ++ acc
             printScope scope acc = foldr printLine (line ++ acc) scope
             scopesTables = foldr printScope "" strings
-        in putStr $ line ++ printLine ("Keys", "Entries")  (line ++ scopesTables)
+        in line ++ printLine ("Keys", "Entries")  (line ++ scopesTables)
 
-instance DebugPrint SymbolTable where
+instance (Show k, Show e) => Debug (Context k e) where
+    debugPrint = putStr . debugShow
+    debugWrite f = writeToFile f . debugShow
+
+instance Debug SymbolTable where
     debugPrint st = do
         putStrLn "Types Namespace"
         debugPrint (view types st)
         putStrLn "Names Namespace"
         debugPrint (view names st)
+    debugWrite f st = writeToFile f res where
+        res = "Types Namespace\n"
+           ++ debugShow (view types st)
+           ++ "Names Namespace\n"
+           ++ debugShow (view names st)

@@ -8,7 +8,7 @@ import System.Console.CmdArgs.Implicit hiding (args)
 
 import Common.Source (Source (FileIn))
 import Common.FileUtils (safeReadFile)
-import Common.DebugPrint (DebugPrint, debugPrint)
+import Common.DebugPrint (Debug (debugPrint, debugWrite))
 import Parser.ParserM (Parser)
 import Parser.ParserState (ParserState, symbols)
 import Parser.Utils (scanM, parseM, initAnalyzeM, genM, parseString)
@@ -54,32 +54,25 @@ main = do
       exitFailure
     Right code -> do
       (success, state) <- case stageFlag args of
-            Lex   -> parseAndPrint scanM "Tokens:\n" (src, code) outF
-            Parse -> parseAndPrint parseM "AST:\n" (src, code) outF
-            Sem   -> parseAndPrint initAnalyzeM "Annotated AST:\n" (src, code) outF
-            Gen   -> parseAndPrint (genM f) "" (src, code) outF
+            Lex   -> parseAndPrint scanM (src, code) outF
+            Parse -> parseAndPrint parseM (src, code) outF
+            Sem   -> parseAndPrint initAnalyzeM (src, code) outF
+            Gen   -> parseAndPrint (genM f) (src, code) outF
       when (debugFlag args) $ do
         debugPrint state
         putStrLn "Symbol Table"
         debugPrint (view symbols state)
       unless success exitFailure
 
-parseAndPrint :: DebugPrint a => Parser a -> String -> (Source, String) -> Maybe FilePath -> IO (Bool, ParserState)
-parseAndPrint parserM msg (src, code) outF = do
+parseAndPrint :: Debug a => Parser a -> (Source, String) -> Maybe FilePath -> IO (Bool, ParserState)
+parseAndPrint parserM (src, code) outF = do
   let (r, state) = parseString parserM src code
   case r of
     Left err  -> do
       print err
       return (False, state)
     Right res -> do
-      printOut outF msg res
+      case outF of
+        Nothing -> debugPrint res
+        Just f  -> debugWrite f res
       return (True, state)
-
-printOut :: DebugPrint a => Maybe FilePath -> String -> a -> IO ()
-printOut outF msg res = do
-  case outF of
-    Nothing -> do
-      putStr msg
-      debugPrint res
-    Just f -> do
-      writeFile f (msg ++ show res)

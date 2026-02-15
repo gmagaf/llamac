@@ -437,6 +437,7 @@ analyzeClause c@(Match pat e p) = do
     outerScopeVars <- getFreeTVars
     openScopeInNames
     semP <- stackTrace ("while analyzing clause " ++ pretty c) $ analyzePattern pat
+    checkConstraintNode semP (AllowedUserDefinedType "Can only apply pattern matching to user defined type")
     semE <- stackTrace ("while analyzing clause " ++ pretty c) $ analyzeExpr e
     closeScopeInNames
     -- Restore the free tVars

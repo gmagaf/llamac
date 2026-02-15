@@ -65,8 +65,9 @@ analyzeLet (LetRec defs p) = do
     -- Analyze the body of the definitions
     semDefEntries <- mapM analyzeDefBody sigAnalysisResults
     -- Second analysis of the definitions to get the most general signatures
-    res <- zipWithM secondAnalysis defs semDefEntries
+    secAnalysis <- zipWithM secondAnalysis defs semDefEntries
     -- Generalize the results
+    let res = if performSecondAnalysis then secAnalysis else semDefEntries
     finalRes <- mapM genResult res
     -- Final update in scope
     mapM_ (uncurry updateName . B.first ide) finalRes
@@ -77,6 +78,9 @@ analyzeLet (LetRec defs p) = do
     In Second analysis we only analyze Untyped fun definitions
     in order to get the most general unifier principal type
 -}
+performSecondAnalysis :: Bool
+performSecondAnalysis = False
+
 secondAnalysis :: Def AlexPosn -> (Def SemanticTag, TableEntry) -> Parser (Def SemanticTag, TableEntry)
 secondAnalysis d@(FunDef {}) (_, FunEntry _ _) = analyzeDefSig d >>= analyzeDefBody
 secondAnalysis _ pair = return pair

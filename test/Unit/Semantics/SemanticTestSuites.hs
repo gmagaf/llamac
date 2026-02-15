@@ -156,7 +156,7 @@ letRecSuites =
     [
     ("let rec fact n = if n = 0 then 1 else n * fact (n-1)", True),
     ("let rec even n = if n = 0 then true else odd (n-1)\nand odd n = if n = 0 then false else even (n-1)", True),
-    ("let rec id x = x and g a = id a + 1\nlet x = id 'a' and y = id 0.42", True),
+    ("let rec id x = x\nlet g a = id a + 1\nlet x = id 'a' and y = id 0.42", True),
     ("let rec main = 42", True),
     ("let rec f a = main a and main a = 42 and g a = main a", True),
     ("let rec f x = main x and main a = 42 and g x = main x", True),
@@ -182,8 +182,9 @@ letRecSuites =
     ("let rec f x = main x and main a = 42 and mutable x and g = x", True),
     ("let rec f x = let mutable x in !x let x : int = f 3 and y = f 'a'", True),
     ("let rec f x = let mutable x in x := 42; !x and x : int = f 3", True),
-    ("let rec f = let mutable x in !x and x : int = f", False),
+    ("let rec f = let mutable x in !x and x : int = f", True),
     -- Failing cases
+    ("let rec id x = x and g a = id a + 1\nlet x = id 'a' and y = id 0.42", False),
     ("let rec f = main and main a = 42 and g = main and k1 = main 'c' and k2 = main 9.0", False),
     ("let rec f = main and main a = 42 and g (a : int) = main a and k1 = main 'c' and k2 = main 9.0", False),
     ("let rec id x = x and c = id 3 and d = id 'a'", False),

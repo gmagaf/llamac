@@ -5,7 +5,7 @@ module Semantics.SemanticState (SemanticState(..),
 import Data.List (intercalate)
 import qualified Data.IntSet as S
 
-import Common.DebugPrint (Debug(..), PrintConfig(..), debugPrintDef, debugWriteDef)
+import Common.DebugPrint (Debug(..), PrintConfig(..), debugMode)
 import Common.PrintAST (Pretty(pretty))
 import Common.SymbolType (SymbolType (..))
 import Semantics.TypeConstraints (ConstraintsMap, showConstraintsMap, emptyConstraintsMap)
@@ -35,8 +35,7 @@ instance Show SemanticState where
     ++ "}"
 
 instance Debug SemanticState where
-  debugPrint = debugPrintDef (PrintConfig { color = True, wrapParens = True })
-  debugWrite = debugWriteDef (PrintConfig { color = False, wrapParens = True })
+  debugMode _ = Left (PrintConfig { color = True, wrapParens = True })
 
 showUnifierVals :: Unifier -> Int -> String
 showUnifierVals _ 0 = "_"

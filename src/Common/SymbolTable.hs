@@ -41,10 +41,9 @@ import Control.Lens.Getter (Getter, to, view)
 import qualified LLVM.AST as L (Operand)
 import qualified LLVM.AST.Type as L
 
-import Common.FileUtils (writeToFile)
 import Common.Token (Identifier, ConstrIdentifier)
 import Common.PrintAST (pretty)
-import Common.DebugPrint (Debug (debugPrint, debugWrite))
+import Common.DebugPrint (Debug (debugMode))
 import Common.SymbolType (SymbolType (TVar), TypeScheme, ConstType, PosnId, printTypePosn)
 
 -- This module contains the defintion of the Symbol table for the compiler
@@ -207,16 +206,10 @@ debugShow (Context scopes) =
         in line ++ printLine ("Keys", "Entries")  (line ++ scopesTables)
 
 instance (Show k, Show e) => Debug (Context k e) where
-    debugPrint = putStr . debugShow
-    debugWrite f = writeToFile f . debugShow
+    debugMode = Right . debugShow
 
 instance Debug SymbolTable where
-    debugPrint st = do
-        putStrLn "Types Namespace"
-        debugPrint (view types st)
-        putStrLn "Names Namespace"
-        debugPrint (view names st)
-    debugWrite f st = writeToFile f res where
+    debugMode st = Right res where
         res = "Types Namespace\n"
            ++ debugShow (view types st)
            ++ "Names Namespace\n"

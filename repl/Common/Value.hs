@@ -15,6 +15,7 @@ import Common.PrintAST (prettyPrecSepList, Pretty(prettyPrec))
 import Semantics.Utils (SemanticTag)
 
 import Common.Interpreter
+import Common.DebugPrint (Debug (debugMode), PrintConfig (..))
 
 -- This module contains the definitions
 -- for the values of all data types
@@ -62,3 +63,6 @@ instance Pretty Value where
         prettyPrec d (IdT "Array") . prettyDims
         where prettyDims = prettyPrec d LBracketT .
                 prettyPrecSepList d ", " (map ConstIntT dims) . prettyPrec d RBracketT
+
+instance Debug Value where
+    debugMode _ = Left (PrintConfig { color = True, wrapParens = False })

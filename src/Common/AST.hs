@@ -5,7 +5,7 @@ import Data.Bifunctor (Bifunctor (..))
 import Data.Bifoldable (Bifoldable (bifoldMap))
 import Data.Bitraversable (Bitraversable (bitraverse))
 
-import Common.DebugPrint (Debug)
+import Common.DebugPrint (Debug (debugMode), PrintConfig (..))
 import Common.Token (Identifier,
                      ConstrIdentifier,
                      IntConstant,
@@ -214,6 +214,9 @@ instance NameDef Constr where
   ide (Constr i _ _) = i
 
 -- Debugging utils
-instance (Show b) => Debug (LetDef b)
+instance (Show b) => Debug (LetDef b) where
+ debugMode _ = Left (PrintConfig { color = True, wrapParens = False })
 
-instance (Show b) => Debug (TypeDef b)
+instance (Show b) => Debug (TypeDef b) where
+ debugMode _ = Left (PrintConfig { color = True, wrapParens = False })
+

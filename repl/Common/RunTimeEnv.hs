@@ -43,7 +43,7 @@ data RunTimeEnvF v = RunTimeEnv { frame_pointer :: ActivationRecordF v
     deriving (Show, Functor)
 
 instance (Show v, Pretty v) => Debug (RunTimeEnvF v) where
-    debugPrint rtenv =
+    debugMode rtenv =
         let prettyMaybe = maybe "null"
             prettyNestedAr nar = show (offset nar)
             prettyAr ar =
@@ -53,4 +53,4 @@ instance (Show v, Pretty v) => Debug (RunTimeEnvF v) where
                 ++ " | access_link: " ++ prettyMaybe prettyNestedAr (access_link ar)
                 ++ " |"
             traverseStack ar = prettyAr ar ++ maybe "" (("\n" ++) . traverseStack) (control_link ar)
-        in putStrLn $ traverseStack (frame_pointer rtenv)
+        in Right $ traverseStack (frame_pointer rtenv)

@@ -1,7 +1,7 @@
 module Parser.Utils (scanM, parseM, analyzeM, initAnalyzeM, genM,
                      parseString, parseFile, parseLine,
                      parse, analyze,
-                     debug, debugRepl) where
+                     runDebug, debugRepl) where
 
 import Control.Lens (view)
 import Data.Text.Lazy (Text)
@@ -65,8 +65,8 @@ analyze :: Source -> String -> Either Error (AST SemanticTag)
 analyze src = fst . parseString initAnalyzeM src
 
 -- Util function for debugging end to end
-debug :: String -> IO ()
-debug s = do
+runDebug :: String -> IO ()
+runDebug s = do
   let (res, state) = parseString initAnalyzeM (FileIn "debugIn") s
   -- let (res, state) = parseString (genM "debug from ghci") (FileIn "debugIn") s
   debugPrint (view sem_state state)
@@ -79,5 +79,5 @@ debug s = do
 debugRepl :: IO ()
 debugRepl = do
   s <- getLine
-  debug s
+  runDebug s
   debugRepl

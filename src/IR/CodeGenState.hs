@@ -6,7 +6,7 @@ import LLVM.IRBuilder (ModuleBuilderState (..), IRBuilderState (..), emptyIRBuil
 import LLVM.IRBuilder.Internal.SnocList (SnocList(unSnocList))
 import LLVM.Pretty (ppll)
 
-import Common.DebugPrint (Debug(..), PrintConfig(..), debugPrintDef, debugWriteDef)
+import Common.DebugPrint (Debug(..), PrintConfig(..), debugMode)
 
 -- This module defines the state of the code generation
 
@@ -24,8 +24,7 @@ instance Show CodeGenState where
         ++ "}"
 
 instance Debug CodeGenState where
-  debugPrint = debugPrintDef (PrintConfig { color = True, wrapParens = True })
-  debugWrite = debugWriteDef (PrintConfig { color = False, wrapParens = True })
+  debugMode _ = Left (PrintConfig { color = True, wrapParens = True })
 
 initCodeGenState :: CodeGenState
 initCodeGenState = CodeGenState

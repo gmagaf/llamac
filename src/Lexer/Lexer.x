@@ -11,7 +11,7 @@ import Control.Monad (when)
 -- import Debug.Trace (trace)
 
 import Common.Token (Token(..))
-import Common.DebugPrint (Debug)
+import Common.DebugPrint (Debug (debugMode), PrintConfig (..))
 }
 
 %wrapper "monadUserState"
@@ -115,7 +115,8 @@ rules :-
 -- Show and debugging state info
 deriving instance Show AlexState
 
-instance Debug AlexState
+instance Debug AlexState where
+  debugMode _ = Left (PrintConfig { color = True, wrapParens = True })
 
 instance Ord AlexPosn where
     compare (AlexPn o _ _) (AlexPn o' _ _) = compare o o'

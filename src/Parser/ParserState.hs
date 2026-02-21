@@ -7,7 +7,7 @@ module Parser.ParserState (ParserState,
 import Control.Lens (makeLenses)
 import Control.Lens.Getter (view)
 
-import Common.DebugPrint (Debug(..), PrintConfig(..), debugPrintDef, debugWriteDef)
+import Common.DebugPrint (Debug(..), PrintConfig(..), debugMode)
 import Common.Source (Source, printSource)
 import Common.SymbolTable (SymbolTable, emptySymbolTable)
 import Lexer.Lexer (AlexState(..), AlexPosn, alexStartPos, alexInitUserState, printPosn)
@@ -37,8 +37,7 @@ instance Show ParserState where
     ++ "}"
 
 instance Debug ParserState where
-  debugPrint = debugPrintDef (PrintConfig { color = True, wrapParens = True })
-  debugWrite = debugWriteDef (PrintConfig { color = False, wrapParens = True })
+  debugMode _ = Left (PrintConfig { color = True, wrapParens = True })
 
 initAlexState :: String -> AlexState
 initAlexState input = AlexState {alex_pos = alexStartPos,

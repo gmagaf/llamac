@@ -3,6 +3,7 @@
 module Lexer.Lexer (Alex(Alex), AlexState(..), AlexPosn(AlexPn),
                     alexStartPos, alexInitUserState, alexMonadScan,
                     printPosn, getCurrentTokenPosn,
+                    printPosnShort, getLineOfPosn, getColumnOfPosn,
                     lexer, alexTokens, parseHex) where
 
 import Text.Read (readMaybe)
@@ -170,6 +171,9 @@ getColumnOfPosn (AlexPn _ _ col) = col
 printPosn :: AlexPosn -> String
 printPosn posn = "line: " ++ show (getLineOfPosn posn) ++
             " and column: " ++ show (getColumnOfPosn posn)
+
+printPosnShort :: AlexPosn -> String
+printPosnShort posn = show (getLineOfPosn posn) ++ ":" ++ show (getColumnOfPosn posn)
 
 -- Error handling utils
 lexicalError :: AlexPosn -> String -> Alex a

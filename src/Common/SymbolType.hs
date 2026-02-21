@@ -9,11 +9,11 @@ import Data.Functor.Identity (Identity (Identity, runIdentity))
 import Data.Bifunctor (Bifunctor(first))
 import Data.Bitraversable (bimapM)
 
-import Common.Source (Source, printSource)
+import Common.Source (Source(..), printSource)
 import Common.Token (Identifier)
 import Common.AST (Type(..), TypeF(..))
 import Common.PrintAST (Pretty(prettyPrec, showPretty))
-import Lexer.Lexer (AlexPosn, printPosn)
+import Lexer.Lexer (AlexPosn, printPosnShort, getColumnOfPosn)
 
 -- A positioned identifier for user defined types with definition position info
 
@@ -28,7 +28,9 @@ instance Pretty PosnId where
     showPretty = showPretty . identifier
 
 printTypePosn :: PosnId -> String
-printTypePosn p = printSource (source p) ++ ":" ++ printPosn (posn p)
+printTypePosn p = case source p of
+    ReplIn _ -> printSource (source p) ++ ":" ++ show (getColumnOfPosn . posn $ p)
+    FileIn _ -> printSource (source p) ++ ":" ++ printPosnShort (posn p)
 
 -- A representation for semantic types
 

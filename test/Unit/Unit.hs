@@ -74,6 +74,7 @@ testSemGuidedSuite :: IO ()
 testSemGuidedSuite = mapM_ testGuidedSem suite where
     suite = [ ("helloWorld.llama", helloWorldSemAST, "./test/resources/helloWorld.llama")
             , ("hanoi.llama", hanoiSemAST, "./test/resources/hanoi.llama")
+            , ("hanoiType.llama", hanoiTypeSemAST, "./test/resources/hanoiType.llama")
             ]
 
 semSpec :: String -> Int -> [(String, Bool)] -> Spec

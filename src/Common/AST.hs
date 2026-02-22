@@ -22,7 +22,8 @@ class Node n => NameDef n where
 
 -- Definitions of all the ASTs of Llama
 
-type AST t = [Either (LetDef t) (TypeDef t)]
+data AST t = AST [Either (LetDef t) (TypeDef t)] t
+  deriving (Eq, Show)
 
 -- This is useful for repl
 data ProgramOrExpr t = Program (AST t)
@@ -155,12 +156,21 @@ data PatternF p = IntConstPattern PatternSign IntConstant
 
 -- Utils for fmapping all tags
 
-mapAST :: (a -> b) -> AST a -> AST b
-mapAST f = map g where
-  g (Left l)  = Left (fmap f l)
-  g (Right t) = Right (fmap f t)
+instance Functor AST where
+  fmap f (AST ast tg) = AST (map g ast) (f tg) where
+    g (Left l)  = Left (fmap f l)
+    g (Right t) = Right (fmap f t)
+
+instance Foldable AST where
+  foldMap f (AST ast t) = foldr (mappend . bifoldMap (foldMap f) (foldMap f)) mempty ast `mappend` f t
+
+instance Traversable AST where
+  traverse f (AST ast t) = AST <$> traverse (bitraverse (traverse f) (traverse f)) ast <*> f t
 
 -- Instantiations of the node classes
+instance Node AST where
+  tag (AST _ t) = t
+
 instance Node LetDef where
   tag (Let _ b)    = b
   tag (LetRec _ b) = b
@@ -214,9 +224,6 @@ instance NameDef Constr where
   ide (Constr i _ _) = i
 
 -- Debugging utils
-instance (Show b) => Debug (LetDef b) where
- debugMode _ = Left (PrintConfig { color = True, wrapParens = False })
-
-instance (Show b) => Debug (TypeDef b) where
+instance Show b => Debug (AST b) where
  debugMode _ = Left (PrintConfig { color = True, wrapParens = False })
 

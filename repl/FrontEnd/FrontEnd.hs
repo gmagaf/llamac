@@ -18,7 +18,7 @@ import Parser.ParserM (putAlexState, throwSemanticError, throwInternalError, get
 import Parser.SymbolTableUtils (getSymbols, queryName, queryType)
 import Parser.Utils (initAnalyzeM, analyzeM)
 import Semantics.Utils (getNodeType, resolveType)
-import Semantics.Semantics (analyzeAST, Analyzable (sem), TypeAble (infer))
+import Semantics.Semantics (Analyzable (sem), TypeAble (infer))
 
 import Common.Utils (initInterpreterState)
 import Common.Interpreter
@@ -147,7 +147,7 @@ repl = catchRunTimeError loop (\e -> print' (show e) >> repl) where
         Program p -> do
             l <- getReplLine
             liftParser (putSource (ReplIn l))
-            semP <- liftParser (analyzeAST p)
+            semP <- liftParser (sem p)
             runAST semP
         Expression e -> do
             l <- getReplLine

@@ -1,12 +1,11 @@
 module Semantics.Semantics (Analyzable, sem, semTag,
-                            TypeAble, infer, typeCheck,
-                            analyzeAST) where
+                            TypeAble, infer, typeCheck) where
 
 import Data.Bitraversable (Bitraversable(bitraverse))
 import Control.Lens.Getter (view)
 import Control.Lens.Setter (set)
 
-import Common.AST (Expr, Type, TypeDef, LetDef, AST, Node(..))
+import Common.AST (Expr, Type, TypeDef, LetDef, AST (AST), Node(..))
 import Common.SymbolType (SymbolType)
 import Lexer.Lexer (AlexPosn)
 import Parser.ParserM (Parser)
@@ -38,17 +37,17 @@ class Analyzable f => TypeAble f where
     typeCheck f t = (t ==) <$> infer f
 
 -- Functions for analyzing nodes
-analyzeAST :: AST AlexPosn -> Parser (AST SemanticTag)
-analyzeAST ast = do
-    -- Run semantic analysis on let and type definitions
-    semAst <- mapM (bitraverse sem sem) ast
-    -- Resolve let defs using the unifier
-    finalAst <- mapM (bitraverse (mapM resolveTag) return) semAst
-    -- Resolve all the def entries in symbol table
-    overNamesM $ mapM (\fullEntry -> do
-                e <- resolveTableEntry (view basicInfo fullEntry)
-                return (set basicInfo e fullEntry))
-    return finalAst
+instance Analyzable AST where
+    sem (AST ast p) = do
+        -- Run semantic analysis on let and type definitions
+        semAst <- mapM (bitraverse sem sem) ast
+        -- Resolve let defs using the unifier
+        finalAst <- mapM (bitraverse (mapM resolveTag) return) semAst
+        -- Resolve all the def entries in symbol table
+        overNamesM $ mapM (\fullEntry -> do
+                    e <- resolveTableEntry (view basicInfo fullEntry)
+                    return (set basicInfo e fullEntry))
+        return $ AST finalAst (SemTag p NotTypable)
 
 -- Util function to resolve the type of a tag
 resolveTag :: SemanticTag -> Parser SemanticTag

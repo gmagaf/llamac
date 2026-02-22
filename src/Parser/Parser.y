@@ -104,7 +104,7 @@ import Parser.ParserM (Parser, lexerWrap, getPosn, throwAtPosn, throwParsingErro
 %%
 
 AST :: { AST AlexPosn }
-  : AST_                            { reverse $1 }
+  : P AST_                          { AST (reverse $2) $1 }
 -- reversing the lists so that all definitions are in the correct order
 
 AST_ :: { [Either (LetDef AlexPosn) (TypeDef AlexPosn)] }
@@ -115,11 +115,14 @@ AST_ :: { [Either (LetDef AlexPosn) (TypeDef AlexPosn)] }
 P :: { AlexPosn }
   : {- empty -}                     {% getPosn }
 
+REPL_AST_ :: { [Either (LetDef AlexPosn) (TypeDef AlexPosn)] }
+  : {- emtpy -}                     { [] }
+  | LetDef REPL_AST_                { (Left $1) : $2 }
+  | TypeDef REPL_AST_               { (Right $1) : $2 }
+
 REPL :: { ProgramOrExpr AlexPosn }
-  :  {- empty -}                    { Program [] }
-  | LetDef AST                      { Program (Left $1 : $2) }
-  | TypeDef AST                     { Program (Right $1 : $2) }
-  | Expr                            { Expression $1 }
+  : P REPL_AST_                     { Program (AST $2 $1) }
+  | P Expr                          { Expression $2 }
 
 LetDef :: { LetDef AlexPosn }
   : P LetDef_                       { $2 $1 }

@@ -28,9 +28,9 @@ import Common.Interpreter
 -}
 
 runAST :: AST SemanticTag -> Interpreter ()
-runAST []              = return ()
-runAST (Left ldef:ast) = runLet ldef >> runAST ast
-runAST (Right _:ast)   = runAST ast
+runAST (AST ast _) = mapM_ r ast where
+    r (Left ldef) = runLet ldef
+    r (Right _)   = return ()
 
 runLet :: LetDef SemanticTag -> Interpreter ()
 runLet (Let defs _) = do

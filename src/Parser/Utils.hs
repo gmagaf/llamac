@@ -16,7 +16,7 @@ import Parser.Parser (calc)
 import Parser.ParserM (Error, Parser, runParser, liftAlex)
 import Parser.ParserState (ParserState, symbols, initParserState, sem_state)
 import Semantics.Utils (SemanticTag)
-import Semantics.Semantics (analyzeAST)
+import Semantics.Semantics (sem)
 import RunTime.LibHeaders (initSymbolTable)
 import IR.CodeGen (genAST)
 import IR.Utils (codegenProgram)
@@ -29,13 +29,13 @@ parseM :: Parser (AST AlexPosn)
 parseM = calc
 
 analyzeM :: Parser (AST SemanticTag)
-analyzeM = calc >>= analyzeAST
+analyzeM = calc >>= sem
 
 initAnalyzeM :: Parser (AST SemanticTag)
-initAnalyzeM = initSymbolTable >> calc >>= analyzeAST
+initAnalyzeM = initSymbolTable >> calc >>= sem
 
 genM :: String -> Parser Text
-genM s = initSymbolTable >> calc >>= analyzeAST >>= genAST >> codegenProgram s
+genM s = initSymbolTable >> calc >>= sem >>= genAST >> codegenProgram s
 
 -- Util that initilizes a parser state and runs a parser monad
 parseString :: Parser a -> Source -> String -> (Either Error a, ParserState)

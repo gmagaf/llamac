@@ -25,7 +25,7 @@ instance Arbitrary ArbPosn where
    arbitrary = ArbPosn <$> (AlexPn <$> arbitrary <*> arbitrary <*> arbitrary)
 
 arbitraryAST :: Arbitrary b => Gen (AST b)
-arbitraryAST = boundedListOf (0, 6) g where
+arbitraryAST = AST <$> boundedListOf (0, 6) g <*> arbitrary where
   g = frequency [(2, Left <$> arbLetDef), (1, Right <$> arbTypeDef)]
 
 arbTypeDef :: Arbitrary b => Gen (TypeDef b)

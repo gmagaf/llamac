@@ -8,7 +8,7 @@ import qualified LLVM.AST as L (Operand (..), mkName)
 import qualified LLVM.IRBuilder as L
 import qualified LLVM.AST.Type as L
 
-import Common.AST (Expr(..), ExprF (..), BinOp (..), LetDef (..), Def (FunDef), Param(..), NameDef (ide), AST)
+import Common.AST (Expr(..), ExprF (..), BinOp (..), LetDef (..), Def (FunDef), Param(..), NameDef (ide), AST (AST))
 import Common.SymbolType (outFunType)
 import Common.SymbolTable (mkFullTableEntry, insert, names, TableEntry (ParamEntry, FunEntry), query, optInfo)
 import Parser.SymbolTableUtils (openScopeInNames, closeScopeInNames)
@@ -22,9 +22,9 @@ import IR.TypeUtils
 
 
 genAST :: AST SemanticTag -> Parser ()
-genAST [] = return ()
-genAST (Left def:ast) = genDefs def >> genAST ast
-genAST (Right _:ast) = genAST ast -- TODO: Define types gen
+genAST (AST ast _) = mapM_ gen ast where
+    gen (Left def) = genDefs def
+    gen (Right _)  = return () -- TODO: Define types gen
 
 genDefs :: LetDef SemanticTag -> Parser ()
 genDefs (Let defs _) = do

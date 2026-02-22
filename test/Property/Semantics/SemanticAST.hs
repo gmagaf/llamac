@@ -48,8 +48,8 @@ logSize n = ceiling (logBase 2 (fromIntegral n + 1) :: Double) :: Int
 semanticTypesAST :: Arbitrary b => Gen (AST b)
 semanticTypesAST = sized $ \n -> do
   k <- choose (0 :: Int, logSize n)
-  f n S.empty k where
-    f :: Arbitrary b => Int -> TypeScope -> Int -> Gen (AST b)
+  AST <$> f n S.empty k <*> arbitrary where
+    f :: Arbitrary b => Int -> TypeScope -> Int -> Gen [Either (LetDef b) (TypeDef b)]
     f _ _  0 = return []
     f n ts k = do
       (tdef, _, ts') <- arbTypeDef ts
@@ -96,8 +96,8 @@ arbTypeF s r = sized gen where
 semanticScopesAST :: Arbitrary b => Gen (AST b)
 semanticScopesAST = sized $ \n -> do
   k <- choose (0 :: Int, logSize n :: Int)
-  f M.empty S.empty k where
-    f :: Arbitrary b => Scope -> TypeScope -> Int -> Gen (AST b)
+  AST <$> f M.empty S.empty k <*> arbitrary where
+    f :: Arbitrary b => Scope -> TypeScope -> Int -> Gen [Either (LetDef b) (TypeDef b)]
     f _ _ 0 = return []
     f s ts k = do
       (ldef, ls) <- arbLetDef s ts

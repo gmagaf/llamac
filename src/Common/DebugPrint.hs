@@ -59,9 +59,6 @@ debugString a = case debugMode a of
 instance Debug a => Debug [a] where
     debugMode _ = Left (PrintConfig { color = True, wrapParens = False })
 
-instance (Debug a, Debug b) => Debug (Either a b) where
-    debugMode _ = Left (PrintConfig { color = True, wrapParens = False })
-
 instance Debug L.Text where
     debugMode s = Right (L.unpack s)
     debug s = trace (L.unpack $ pShowOpt textOpt s)

@@ -70,7 +70,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
   prettyPrec d (Right b) = prettyPrec d b
 
 prettyAST :: AST b -> String
-prettyAST = prettySepList "\n\n"
+prettyAST (AST ast _) = prettySepList "\n\n" ast
 
 instance Pretty (TypeDef b) where
   pretty (TypeDef tDefs _) = showPretty TypeT . showString " " $

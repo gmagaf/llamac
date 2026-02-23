@@ -1,9 +1,11 @@
 module Unit.Unit (testParserSuite,
-                  testParserGuidedSuite,
+                  testGuidedParser,
                   testSemSuite,
-                  testSemGuidedSuite) where
+                  testGuidedSem) where
 
-import Test.Hspec (Spec, hspec, describe, it, shouldBe)
+import Test.Hspec (Spec, describe, it, shouldBe)
+import Test.Hspec.Runner (hspecWith, defaultConfig)
+import Test.Hspec.Api.Formatters.V1 (Formatter, useFormatter, checks)
 import Test.QuickCheck (Gen, generate, vectorOf, elements)
 import Unit.Parser.ExpectedASTs
 import Unit.Semantics.SemanticTestSuites
@@ -15,33 +17,28 @@ import Lexer.Lexer (AlexPosn)
 import Parser.Utils (parse, analyze)
 import Semantics.Utils (SemanticTag)
 
-testGuidedParser :: (String, AST AlexPosn, FilePath) -> IO ()
-testGuidedParser (descr, p, f) = do
-  s <- readFileB f
-  hspec $ do
-    describe "Unit testing suite: (parse program == Expected AST)" $ do
-      it descr $ do
-        parse (FileIn f) s `shouldBe` Right p
+-- Some utils
 
-testParserGuidedSuite :: IO ()
-testParserGuidedSuite = mapM_ testGuidedParser suite where
-    suite = [("helloWorld.llama", helloWorldAST, "./test/resources/helloWorld.llama")
-            ,("hanoi.llama", hanoiAST, "./test/resources/hanoi.llama")
-            ,("hanoiType.llama", hanoiTypeAST, "./test/resources/hanoiType.llama")
-            ,("primes.llama", primesAST, "./test/resources/primes.llama")
-            ,("reverse.llama", reverseAST, "./test/resources/reverse.llama")
-            ,("bubbleSort.llama", bubbleSortAST, "./test/resources/bubbleSort.llama")
-            ,("mean.llama", meanAST, "./test/resources/mean.llama")
-            ,("arrayMult.llama", arrayMultAST, "./test/resources/arrayMult.llama")
-            ,("binTrees.llama", binTreesAST, "./test/resources/binTrees.llama")
-            ]
+formatter :: Formatter
+formatter = checks
 
-parserSpec :: [(String, String)] -> Spec
-parserSpec [] = return ()
-parserSpec ((descr, s):ts) = do
+hspec :: Spec -> IO ()
+hspec = hspecWith (useFormatter ("checks-formatter", formatter) defaultConfig)
+
+hspecWithDescr :: String -> Spec -> IO ()
+hspecWithDescr descr spec = hspec $ do
+    describe descr spec
+
+hspecSuite :: Foldable t => String -> (a -> Spec) -> t a -> IO ()
+hspecSuite descr f suite = hspecWithDescr descr (mapM_ f suite)
+
+-- Simple Unit Tests
+
+-- Parser
+parserSpec :: (String, String) -> Spec
+parserSpec (descr, s) = do
   it descr $ do
-    isCorrect descr s `shouldBe` True
-  parserSpec ts where
+    isCorrect descr s `shouldBe` True where
       isCorrect f i = case parse (FileIn f) i of
         Left _  -> False
         Right _ -> True
@@ -54,29 +51,13 @@ testParserSuite k = do
       then "Unit testing suite: (parse program -> Correct Syntax)"
       else "Unit (random " ++ show k ++ ") testing suite: (parse program -> Correct Syntax)"
   s <- mapM fun ns
-  hspec $ do
-    describe descr $ do
-      parserSpec s where
+  hspecSuite descr parserSpec s where
     fun n = do
       let fileName = "p" ++ show n ++ ".lla"
       f <- readFileB $ "test/resources/1000-llamas/" ++ fileName
       return (fileName, f)
 
-testGuidedSem :: (String, AST SemanticTag, FilePath) -> IO ()
-testGuidedSem (descr, p, f) = do
-  s <- readFileB f
-  hspec $ do
-    describe "Unit testing suite: (sem program == Expected AST)" $ do
-      it descr $ do
-        analyze (FileIn f) s `shouldBe` Right p
-
-testSemGuidedSuite :: IO ()
-testSemGuidedSuite = mapM_ testGuidedSem suite where
-    suite = [ ("helloWorld.llama", helloWorldSemAST, "./test/resources/helloWorld.llama")
-            , ("hanoi.llama", hanoiSemAST, "./test/resources/hanoi.llama")
-            , ("hanoiType.llama", hanoiTypeSemAST, "./test/resources/hanoiType.llama")
-            ]
-
+-- Semantic Analysis
 semSpec :: String -> Int -> [(String, Bool)] -> Spec
 semSpec _ _ [] = return ()
 semSpec descr i ((p, expectation):ts) = do
@@ -91,9 +72,65 @@ semSpec descr i ((p, expectation):ts) = do
 testSemSuite :: IO ()
 testSemSuite = do
   let descr = "Unit testing suite: (analyze program -> Correct semantics)"
-  hspec $ do
-    describe descr $ do
+  hspecWithDescr descr $ do
       semSpec "types" 0 typeDefSuite
       semSpec "let" 0 letDefSuite
       semSpec "let-rec" 0 letRecSuites
       semSpec "expr" 0 exprSuites
+
+-- Guided Unit Tests
+
+resourcePath :: String
+resourcePath = "./test/resources/"
+
+prepareSuite :: (String, e) -> IO (String, e, (String, String))
+prepareSuite (fileName, expected) = do
+  let f = resourcePath ++ fileName
+  s <- readFileB f
+  return (fileName, expected, (f, s))
+
+hspecGuidedSuite :: Traversable t => String -> ((String, e, (String, String)) -> Spec) -> t (String, e) -> IO ()
+hspecGuidedSuite descr spec suite = do
+  suite' <- mapM prepareSuite suite
+  hspecSuite descr spec suite'
+
+-- Parser
+guidedParserSuite :: [(String, AST AlexPosn)]
+guidedParserSuite = [("helloWorld.llama", helloWorldAST)
+        ,("hanoi.llama", hanoiAST)
+        ,("hanoiType.llama", hanoiTypeAST)
+        ,("primes.llama", primesAST)
+        ,("reverse.llama", reverseAST)
+        ,("bubbleSort.llama", bubbleSortAST)
+        ,("mean.llama", meanAST)
+        ,("arrayMult.llama", arrayMultAST)
+        ,("binTrees.llama", binTreesAST)
+        ]
+
+guidedParserSpec :: (String, AST AlexPosn, (String, String)) -> Spec
+guidedParserSpec (descr, p, (f, s)) = do
+    it descr $ do
+      parse (FileIn f) s `shouldBe` Right p
+
+testGuidedParser :: IO ()
+testGuidedParser = do
+  let descr = "Unit testing suite: (parse program == Expected AST)"
+  hspecGuidedSuite descr guidedParserSpec guidedParserSuite
+
+-- Semantic Analysis
+guidedSemSuite :: [(String, AST SemanticTag)]
+guidedSemSuite =
+        [ ("helloWorld.llama", helloWorldSemAST)
+        , ("hanoi.llama", hanoiSemAST)
+        , ("hanoiType.llama", hanoiTypeSemAST)
+        ]
+
+guidedSemSpec :: (String, AST SemanticTag, (String, String)) -> Spec
+guidedSemSpec (descr, p, (f, s)) = do
+    it descr $ do
+      analyze (FileIn f) s `shouldBe` Right p
+
+testGuidedSem :: IO ()
+testGuidedSem = do
+  let descr = "Unit testing suite: (sem program == Expected AST)"
+  hspecGuidedSuite descr guidedSemSpec guidedSemSuite

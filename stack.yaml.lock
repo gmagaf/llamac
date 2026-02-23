@@ -65,6 +65,13 @@ packages:
   original:
     hackage: hspec-core-2.10.10
 - completed:
+    hackage: hspec-api-2.10.0@sha256:68690737181eae90d25e214803d966658e661215ddf5e24f1495b54a71a09364,1509
+    pantry-tree:
+      sha256: 5f40ff2d1b0e137530fd5ea0790e0f8a08ea1552cf570627861e666bd291fad0
+      size: 665
+  original:
+    hackage: hspec-api-2.10.0
+- completed:
     hackage: haskell-lexer-1.1.1@sha256:4ce310678b7e56b51acb558c0233d2f71a3f3553f8a88e9b48c0bc68301f799b,1296
     pantry-tree:
       sha256: 3aee632065f6299466efeb01bf2622b75617a2c55872f8da5a7bc0aff1fc8b88

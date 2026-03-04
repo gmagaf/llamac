@@ -11,7 +11,7 @@ import Common.Token (ConstrIdentifier,
                     CharConstant,
                     Token(..))
 import Common.AST (Expr)
-import Common.PrintAST (prettyPrecSepList, Pretty(prettyPrec))
+import Common.PrintAST (prettyPPrecSepList, Pretty(prettyPrec))
 import Semantics.Utils (SemanticTag)
 
 import Common.Interpreter
@@ -54,7 +54,7 @@ instance Pretty Value where
     prettyPrec d (FunVal f _ _)      = prettyPrec d (IdT f)
     prettyPrec d (ConstrVal i _ as)  = showParen (d > app_prec && not (null as)) $
         prettyPrec d (IdConstrT i) .
-        showString sep . prettyPrecSepList (app_prec + 1) " " as
+        showString sep . prettyPPrecSepList False (app_prec + 1) " " as
         where app_prec = 5
               sep = if null as then "" else " "
     prettyPrec d (RefVal ha r)       = prettyPrec d (ConstIntT ha) . prettyPrec d (IdT "@") . showsPrec d r
@@ -62,7 +62,7 @@ instance Pretty Value where
     prettyPrec d (ArrayVal dims a _) = prettyPrec d (ConstIntT a) . prettyPrec d (IdT "@") .
         prettyPrec d (IdT "Array") . prettyDims
         where prettyDims = prettyPrec d LBracketT .
-                prettyPrecSepList d ", " (map ConstIntT dims) . prettyPrec d RBracketT
+                prettyPPrecSepList False d ", " (map ConstIntT dims) . prettyPrec d RBracketT
 
 instance Debug Value where
     debugMode _ = Left (PrintConfig { color = True, wrapParens = False })

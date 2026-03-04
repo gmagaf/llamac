@@ -146,6 +146,7 @@ test-suite test
                       hspec-api >= 2.8,
                       llamac
  other-modules:       Unit.Unit
+                      Unit.PrintAST.PrettyASTSuites
                       Unit.Parser.ExpectedASTs
                       Unit.Semantics.SemanticTestSuites
                       Unit.Semantics.AnalyzedASTs

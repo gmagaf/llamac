@@ -90,7 +90,9 @@ import Parser.ParserM (Parser, lexerWrap, getPosn, throwAtPosn, throwParsingErro
   ','                   { CommaT }
   ':'                   { ColonT }
 
+%nonassoc in
 %left ';'
+%nonassoc IF_OP
 %nonassoc ':='
 %left '||'
 %left '&&'
@@ -98,6 +100,10 @@ import Parser.ParserM (Parser, lexerWrap, getPosn, throwAtPosn, throwParsingErro
 %left '+' '-' '+.' '-.'
 %left '*' '/' '*.' '/.' mod
 %right '**'
+%nonassoc UN_OP
+%nonassoc FUN_CALL
+%nonassoc '!'
+%nonassoc new
 
 %expect 1 -- always choose shift in dangling else conflict
 
@@ -105,7 +111,7 @@ import Parser.ParserM (Parser, lexerWrap, getPosn, throwAtPosn, throwParsingErro
 
 AST :: { AST AlexPosn }
   : P AST_                          { AST (reverse $2) $1 }
--- reversing the lists so that all definitions are in the correct order
+  -- reversing the lists so that all definitions are in the correct order
 
 AST_ :: { [Either (LetDef AlexPosn) (TypeDef AlexPosn)] }
   : {- emtpy -}                     { [] }
@@ -115,14 +121,14 @@ AST_ :: { [Either (LetDef AlexPosn) (TypeDef AlexPosn)] }
 P :: { AlexPosn }
   : {- empty -}                     {% getPosn }
 
+REPL :: { ProgramOrExpr AlexPosn }
+  : P REPL_AST_                     { Program (AST $2 $1) }
+  | P Expr                          { Expression $2 }
+
 REPL_AST_ :: { [Either (LetDef AlexPosn) (TypeDef AlexPosn)] }
   : {- emtpy -}                     { [] }
   | LetDef REPL_AST_                { (Left $1) : $2 }
   | TypeDef REPL_AST_               { (Right $1) : $2 }
-
-REPL :: { ProgramOrExpr AlexPosn }
-  : P REPL_AST_                     { Program (AST $2 $1) }
-  | P Expr                          { Expression $2 }
 
 LetDef :: { LetDef AlexPosn }
   : P LetDef_                       { $2 $1 }
@@ -194,15 +200,12 @@ Param_ :: { AlexPosn -> Param AlexPosn }
   | '(' id ':' Type ')'             { TypedParam $2 $4 }
 
 Type :: { Type AlexPosn }
-  : ArrayType '->' Type             { Type (FunType $1 $3) (tag $1) }
-  | ArrayType                       { $1 }
+  : P ArrayType '->' Type           { Type (FunType ($2 $1) $4) $1 }
+  | P ArrayType                     { $2 $1 }
 
-ArrayType :: { Type AlexPosn }
-  : P ArrayType_                    { $2 $1 }
+ArrayType :: { AlexPosn -> Type AlexPosn }
+  : array Dims of P ArrayType       { Type (ArrayType $2 ($5 $4)) }
   | RefType                         { $1 }
-
-ArrayType_ :: { AlexPosn -> Type AlexPosn }
-  : array Dims of ArrayType         { Type (ArrayType $2 $4) }
 
 Dims :: { Int }
   : {- empty -}                     { 1 }
@@ -212,12 +215,9 @@ Stars :: { Int }
   : '*'                             { 1 }
   | Stars ',' '*'                   { $1 + 1 }
 
-RefType :: { Type AlexPosn }
-  : RefType ref                     { Type (RefType $1) (tag $1) }
-  | BaseType                        { $1 }
-
-BaseType :: { Type AlexPosn }
-  : P BaseType_                     { $2 $1 }
+RefType :: { AlexPosn -> Type AlexPosn }
+  : RefType ref                     { \p -> Type (RefType ($1 p)) p }
+  | BaseType_                       { $1 }
 
 BaseType_ :: { AlexPosn -> Type AlexPosn }
   : unit                            { Type UnitType }
@@ -229,106 +229,60 @@ BaseType_ :: { AlexPosn -> Type AlexPosn }
   | '(' Type ')'                    { const $2 }
 
 Expr :: { Expr AlexPosn }
-  : LetExpr                         { $1 }
-  | SemicolonExpr                   { $1 }
-  | SemicolonLetExpr                { $1 }
+  : P Expr_                         { $2 $1 }
 
-LetExpr :: { Expr AlexPosn }
-  : LetDef in Expr                  { LetIn $1 $3 (tag $1) }
-
-SemicolonExpr :: { Expr AlexPosn }
-  : SemicolonExpr ';' SemicolonExpr { Expr (BinOpExpr SemicolonOp $1 $3) (tag $1) }
-  | IfExpr                          { $1 }
-
-SemicolonLetExpr :: { Expr AlexPosn } -- Cannot have let in lhs
-  : SemicolonExpr ';' LetExpr       { Expr (BinOpExpr SemicolonOp $1 $3) (tag $1) }
-
-LetIfExpr :: { Expr AlexPosn }
-  : LetDef in IfExpr                { LetIn $1 $3 (tag $1) }
-  | IfExpr                          { $1 }
-
-IfExpr :: { Expr AlexPosn } -- Cannot have semicolon in last Expr
-  : P IfExpr_                       { $2 $1 }
-  | LogicalExpr                     { $1 }
-
-IfExpr_ :: { AlexPosn -> Expr AlexPosn }
-  : if Expr then LetIfExpr          { Expr (IfThenExpr $2 $4) }
-  | if Expr then LetIfExpr else LetIfExpr
-                                    { Expr (IfThenElseExpr $2 $4 $6) }
-
-LogicalExpr :: { Expr AlexPosn }
-  : LogicalExpr ':=' LogicalExpr    { Expr (BinOpExpr AssignMutableOp $1 $3) (tag $1) }
-  | LogicalExpr '||' LogicalExpr    { Expr (BinOpExpr OrOp $1 $3) (tag $1) }
-  | LogicalExpr '&&' LogicalExpr    { Expr (BinOpExpr AndOp $1 $3) (tag $1) }
-  | LogicalExpr '='  LogicalExpr    { Expr (BinOpExpr EqOp $1 $3) (tag $1) }
-  | LogicalExpr '<>' LogicalExpr    { Expr (BinOpExpr NotEqOp $1 $3) (tag $1) }
-  | LogicalExpr '<'  LogicalExpr    { Expr (BinOpExpr LTOp $1 $3) (tag $1) }
-  | LogicalExpr '>'  LogicalExpr    { Expr (BinOpExpr GTOp $1 $3) (tag $1) }
-  | LogicalExpr '<=' LogicalExpr    { Expr (BinOpExpr LEqOp $1 $3) (tag $1) }
-  | LogicalExpr '>=' LogicalExpr    { Expr (BinOpExpr GEqOp $1 $3) (tag $1) }
-  | LogicalExpr '==' LogicalExpr    { Expr (BinOpExpr NatEqOp $1 $3) (tag $1) }
-  | LogicalExpr '!=' LogicalExpr    { Expr (BinOpExpr NotNatEqOp $1 $3) (tag $1) }
-  | ArithmExpr                      { $1 }
-
-ArithmExpr :: { Expr AlexPosn }
-  : ArithmExpr '+'  ArithmExpr      { Expr (BinOpExpr PlusOp $1 $3) (tag $1) }
-  | ArithmExpr '-'  ArithmExpr      { Expr (BinOpExpr MinusOp $1 $3) (tag $1) }
-  | ArithmExpr '*'  ArithmExpr      { Expr (BinOpExpr TimesOp $1 $3) (tag $1) }
-  | ArithmExpr '/'  ArithmExpr      { Expr (BinOpExpr DivOp $1 $3) (tag $1) }
-  | ArithmExpr '+.' ArithmExpr      { Expr (BinOpExpr PlusFloatOp $1 $3) (tag $1) }
-  | ArithmExpr '-.' ArithmExpr      { Expr (BinOpExpr MinusFloatOp $1 $3) (tag $1) }
-  | ArithmExpr '*.' ArithmExpr      { Expr (BinOpExpr TimesFloatOp $1 $3) (tag $1) }
-  | ArithmExpr '/.' ArithmExpr      { Expr (BinOpExpr DivFloatOp $1 $3) (tag $1) }
-  | ArithmExpr mod  ArithmExpr      { Expr (BinOpExpr ModOp $1 $3) (tag $1) }
-  | ArithmExpr '**' ArithmExpr      { Expr (BinOpExpr ExpOp $1 $3) (tag $1) }
-  | UnOpExpr                        { $1 }
-
-UnOpExpr :: { Expr AlexPosn }
-  : P UnOpExpr_                     { $2 $1 }
-  | FunAppExpr                      { $1 }
-
-UnOpExpr_ :: { AlexPosn -> Expr AlexPosn }
-  : '+' UnOpExpr                    { Expr (UnOpExpr PlusUnOp $2) }
-  | '-' UnOpExpr                    { Expr (UnOpExpr MinusUnOp $2) }
-  | '+.' UnOpExpr                   { Expr (UnOpExpr PlusFloatUnOp $2) }
-  | '-.' UnOpExpr                   { Expr (UnOpExpr MinusFloatUnOp $2) }
-  | not UnOpExpr                    { Expr (UnOpExpr NotOp $2) }
-  | delete UnOpExpr                 { Expr (DeleteExpr $2) }
+Expr_ :: { AlexPosn -> Expr AlexPosn }
+  : LetDef_ in P Expr_              { \p -> LetIn ($1 p) ($4 $3) p }
+  | Expr_ ';' P Expr_               { \p -> Expr (BinOpExpr SemicolonOp ($1 p) ($4 $3)) p }
+  | if P Expr_ then P Expr_
+                        %prec IF_OP { Expr (IfThenExpr ($3 $2) ($6 $5)) }
+  | if P Expr_ then P Expr_ else P Expr_
+                        %prec IF_OP { Expr (IfThenElseExpr ($3 $2) ($6 $5) ($9 $8) ) }
+  | Expr_ ':=' P Expr_              { \p -> Expr (BinOpExpr AssignMutableOp ($1 p) ($4 $3)) p }
+  | Expr_ '||' P Expr_              { \p -> Expr (BinOpExpr OrOp ($1 p) ($4 $3)) p }
+  | Expr_ '&&' P Expr_              { \p -> Expr (BinOpExpr AndOp ($1 p) ($4 $3)) p }
+  | Expr_ '='  P Expr_              { \p -> Expr (BinOpExpr EqOp ($1 p) ($4 $3)) p }
+  | Expr_ '<>' P Expr_              { \p -> Expr (BinOpExpr NotEqOp ($1 p) ($4 $3)) p }
+  | Expr_ '<'  P Expr_              { \p -> Expr (BinOpExpr LTOp ($1 p) ($4 $3)) p }
+  | Expr_ '>'  P Expr_              { \p -> Expr (BinOpExpr GTOp ($1 p) ($4 $3)) p }
+  | Expr_ '<=' P Expr_              { \p -> Expr (BinOpExpr LEqOp ($1 p) ($4 $3)) p }
+  | Expr_ '>=' P Expr_              { \p -> Expr (BinOpExpr GEqOp ($1 p) ($4 $3)) p }
+  | Expr_ '==' P Expr_              { \p -> Expr (BinOpExpr NatEqOp ($1 p) ($4 $3)) p }
+  | Expr_ '!=' P Expr_              { \p -> Expr (BinOpExpr NotNatEqOp ($1 p) ($4 $3)) p }
+  | Expr_ '+'  P Expr_              { \p -> Expr (BinOpExpr PlusOp ($1 p) ($4 $3)) p }
+  | Expr_ '-'  P Expr_              { \p -> Expr (BinOpExpr MinusOp ($1 p) ($4 $3)) p }
+  | Expr_ '*'  P Expr_              { \p -> Expr (BinOpExpr TimesOp ($1 p) ($4 $3)) p }
+  | Expr_ '/'  P Expr_              { \p -> Expr (BinOpExpr DivOp ($1 p) ($4 $3)) p }
+  | Expr_ '+.' P Expr_              { \p -> Expr (BinOpExpr PlusFloatOp ($1 p) ($4 $3)) p }
+  | Expr_ '-.' P Expr_              { \p -> Expr (BinOpExpr MinusFloatOp ($1 p) ($4 $3)) p }
+  | Expr_ '*.' P Expr_              { \p -> Expr (BinOpExpr TimesFloatOp ($1 p) ($4 $3)) p }
+  | Expr_ '/.' P Expr_              { \p -> Expr (BinOpExpr DivFloatOp ($1 p) ($4 $3)) p }
+  | Expr_ mod  P Expr_              { \p -> Expr (BinOpExpr ModOp ($1 p) ($4 $3)) p }
+  | Expr_ '**' P Expr_              { \p -> Expr (BinOpExpr ExpOp ($1 p) ($4 $3)) p }
+  | '+' P Expr_         %prec UN_OP { Expr (UnOpExpr PlusUnOp ($3 $2)) }
+  | '-' P Expr_         %prec UN_OP { Expr (UnOpExpr MinusUnOp ($3 $2)) }
+  | '+.' P Expr_        %prec UN_OP { Expr (UnOpExpr PlusFloatUnOp ($3 $2)) }
+  | '-.' P Expr_        %prec UN_OP { Expr (UnOpExpr MinusFloatUnOp ($3 $2)) }
+  | not P Expr_         %prec UN_OP { Expr (UnOpExpr NotOp ($3 $2)) }
+  | delete P Expr_      %prec UN_OP { Expr (DeleteExpr ($3 $2)) }
   | dim id                          { Expr (ArrayDim $2 1) }
   | dim const_int id                { Expr (ArrayDim $3 $2) }
-
-FunAppExpr :: { Expr AlexPosn }
-  : P FunAppExpr_                   { $2 $1 }
-  | DerefExp                        { $1 }
-
-FunAppExpr_ :: { AlexPosn -> Expr AlexPosn }
-  : id Args                         { Expr (FunAppExpr $1 (reverse $2)) }
-  | id_constr Args                  { Expr (ConstrAppExpr $1 (reverse $2)) }
+  | id Args          %prec FUN_CALL { Expr (FunAppExpr $1 (reverse $2)) }
+  | id_constr Args   %prec FUN_CALL { Expr (ConstrAppExpr $1 (reverse $2)) }
+  | '!' P Expr_                     { Expr (UnOpExpr BangOp ($3 $2)) }
+  | id '[' ExprsComma ']'           { Expr (ArrayAccess $1 (reverse $3)) }
+  | new Type                        { NewType $2 }
+  | BaseExpr_                       { $1 }
 
 Args :: { [Expr AlexPosn] }
-  : DerefExp                        { $1 : [] }
-  | Args DerefExp                   { $2 : $1 }
+  : Arg                             { $1 : [] }
+  | Args Arg                        { $2 : $1 }
 
-DerefExp :: { Expr AlexPosn }
-  : P DerefExp_                     { $2 $1 }
-  | ArrayExpr                       { $1 }
-
-DerefExp_ :: { AlexPosn -> Expr AlexPosn }
-  : '!' DerefExp                    { Expr (UnOpExpr BangOp $2) }
-
-ArrayExpr :: { Expr AlexPosn }
-  : P ArrayExpr_                    { $2 $1 }
-  | NewTExpr                        { $1 }
-
-ArrayExpr_ :: { AlexPosn -> Expr AlexPosn }
-  : id '[' ExprsComma ']'           { Expr (ArrayAccess $1 (reverse $3)) }
-
-NewTExpr :: { Expr AlexPosn }
-  : P NewTExpr_                     { $2 $1 }
+Arg :: { Expr AlexPosn }
+  : P '!' Arg                       { Expr (UnOpExpr BangOp $3) $1 }
+  | P id '[' ExprsComma ']'         { Expr (ArrayAccess $2 (reverse $4)) $1 }
+  | P new Type                      { NewType $3 $1}
   | BaseExpr                        { $1 }
-
-NewTExpr_ :: { AlexPosn -> Expr AlexPosn }
-  : new Type                        { NewType $2 }
 
 BaseExpr :: { Expr AlexPosn }
   : P BaseExpr_                     { $2 $1 }
@@ -357,14 +311,14 @@ Clauses :: { [Clause AlexPosn] }
   | Clauses '|' Clause              { $3 : $1 }
 
 Clause :: { Clause AlexPosn }
-  : Pattern '->' Expr               { Match $1 $3 (tag $1) }
+  : P Pattern_ '->' Expr            { Match ($2 $1) $4 $1 }
 
 Pattern :: { Pattern AlexPosn }
   : P Pattern_                      { $2 $1 }
-  | PatArg                          { $1 }
 
 Pattern_ :: { AlexPosn -> Pattern AlexPosn }
   : id_constr PatArgs               { Pattern (ConstrPattern $1 (reverse $2)) }
+  | PatArg_                         { $1 }
 
 PatArgs :: { [Pattern AlexPosn] }
   : PatArg                          { $1 : [] }

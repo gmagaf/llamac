@@ -44,15 +44,22 @@ removeASTtags = fmap (const ())
 
 parsedPrettyASTisAST :: Show b => Bool -> Gen (AST b) -> Property
 parsedPrettyASTisAST parens gen =
-  forAll gen (\p ->
-    let s = prettyP parens p
+  forAll gen $ \p ->
+    let s = prettyP False p
         ast = parse (FileIn "test.llama") s
         res = fmap removeASTtags ast
-    in res `shouldBe` Right (removeASTtags p))
+        sp = prettyP True p
+        astp = parse (FileIn "test.llama") sp
+        resp = fmap removeASTtags astp
+    in if parens
+       then (res, resp) `shouldBe` (Right (removeASTtags p), Right (removeASTtags p))
+       else res `shouldBe` Right (removeASTtags p)
 
 checkParsedPrettyAST :: Bool -> Int -> IO Result
 checkParsedPrettyAST parens n = do
-  putStrLn $ "Testing property (parse . prettyP " ++ show parens ++ " $ AST == AST) for size: " ++ show n
+  if parens
+    then putStrLn $ "Testing property (parse . prettyP False $ AST == parse . prettyP True $ AST == AST) for size: " ++ show n
+    else putStrLn $ "Testing property (parse . prettyP " ++ show parens ++ " $ AST == AST) for size: " ++ show n
   checkForSize (parsedPrettyASTisAST parens) (arbitraryAST :: Gen (AST ())) n
 
 -- Semantic tests

@@ -286,7 +286,7 @@ prettyPPrecExprF pInfo d e = let
         let (p, tok) = opToTok op
         in prettyUnOpExp p tok pInfo d u
       DeleteExpr u -> showParen parens $
-        showPretty DeleteT . showString " " . prettyPPrecExpr pInfo' (un_op_prec + 1) u where
+        showPretty DeleteT . showString " " . prettyPPrecExpr pInfo' un_op_prec u where
           parens = showParenOp pInfo d un_op_prec
           pInfo' = pInfo{ isRightMostLet = isRightMostLet pInfo || parens
                         , isRightMostIf = isRightMostIf pInfo || parens
@@ -351,9 +351,12 @@ prettyUnOpExp prec tok pInfo d u =
       pInfo' = pInfo{ isRightMostLet = isRightMostLet pInfo || parens
                     , isRightMostIf = isRightMostIf pInfo || parens
                     , elseFollows = not parens && elseFollows pInfo }
-      sep = if tok == NotT then " " else ""
+      sep = case u of
+        Expr (UnOpExpr _ _) _ -> " "
+        Expr (DeleteExpr _) _ -> " "
+        _ -> if tok == NotT then " " else ""
   in showParen parens $
-     showPretty tok . showString sep . prettyPPrecExpr pInfo' (prec + 1) u
+     showPretty tok . showString sep . prettyPPrecExpr pInfo' prec u
 
 data Assoc = L | R | Non
   deriving Eq

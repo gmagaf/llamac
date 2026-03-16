@@ -12,25 +12,25 @@ import Data.Bitraversable (bimapM)
 import Common.Source (Source(..), printSource)
 import Common.Token (Identifier)
 import Common.AST (Type(..), TypeF(..))
-import Common.PrintAST (Pretty(prettyPrec, showPretty))
+import Common.PrintAST (Pretty(pretty, prettyPrec))
 import Lexer.Lexer (AlexPosn, printPosnShort, getColumnOfPosn)
 
 -- A positioned identifier for user defined types with definition position info
 
 data PosnId = PosnId
             { identifier :: Identifier
-            , source :: Source
-            , posn :: AlexPosn
+            , def_source :: Source
+            , def_posn   :: AlexPosn
             }
     deriving (Show, Eq, Ord)
 
 instance Pretty PosnId where
-    showPretty = showPretty . identifier
+    pretty = pretty . identifier
 
 printTypePosn :: PosnId -> String
-printTypePosn p = case source p of
-    ReplIn _ -> printSource (source p) ++ ":" ++ show (getColumnOfPosn . posn $ p)
-    FileIn _ -> printSource (source p) ++ ":" ++ printPosnShort (posn p)
+printTypePosn p = case def_source p of
+    ReplIn _ -> printSource (def_source p) ++ ":" ++ show (getColumnOfPosn . def_posn $ p)
+    FileIn _ -> printSource (def_source p) ++ ":" ++ printPosnShort (def_posn p)
 
 -- A representation for semantic types
 
@@ -39,7 +39,7 @@ newtype ConstType = ConstType { unConstType :: TypeF PosnId ConstType }
     deriving (Show, Eq, Ord)
 
 instance Pretty ConstType where
-    prettyPrec d (ConstType t) = prettyPrec d t
+    prettyPrec always d (ConstType t) = prettyPrec always d t
 
 -- Some useful consts
 intConstType :: ConstType
@@ -61,8 +61,8 @@ data SymbolType = SymType (TypeF PosnId SymbolType)
     deriving (Show, Eq)
 
 instance Pretty SymbolType where
-    prettyPrec d (SymType t) = prettyPrec d t
-    prettyPrec _ (TVar i)    = showString $ "@" ++ show i
+    prettyPrec always d (SymType t) = prettyPrec always d t
+    prettyPrec _ _ (TVar i)         = showString $ "@" ++ show i
 
 -- Type schemes are polymorphic types
 data TypeScheme = MonoType SymbolType
@@ -70,10 +70,10 @@ data TypeScheme = MonoType SymbolType
     deriving (Show, Eq)
 
 instance Pretty TypeScheme where
-    prettyPrec d (MonoType t)  = prettyPrec d t
-    prettyPrec d (AbsType v t) =
+    prettyPrec always d (MonoType t)  = prettyPrec always d t
+    prettyPrec always d (AbsType v t) =
         showString ("forall @" ++ show v ++ ". ") .
-        prettyPrec d t
+        prettyPrec always d t
 
 -- Abstract away the implementation details of different type data types
 

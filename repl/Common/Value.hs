@@ -11,7 +11,7 @@ import Common.Token (ConstrIdentifier,
                     CharConstant,
                     Token(..))
 import Common.AST (Expr)
-import Common.PrintAST (prettyPPrecSepList, Pretty(prettyPrec))
+import Common.PrintAST (prettyPrecSepList, Pretty(prettyPrec))
 import Semantics.Utils (SemanticTag)
 
 import Common.Interpreter
@@ -45,24 +45,24 @@ instance Show a => Show (IORef a) where
     show _ = "IORef"
 
 instance Pretty Value where
-    prettyPrec d UnitVal             = prettyPrec d LParenT . prettyPrec d RParenT
-    prettyPrec d (IntVal n)          = prettyPrec d (ConstIntT n)
-    prettyPrec d (FloatVal f)        = prettyPrec d (ConstFloatT f)
-    prettyPrec d (CharVal c)         = prettyPrec d (ConstCharT c)
-    prettyPrec d (BoolVal True)      = prettyPrec d TrueT
-    prettyPrec d (BoolVal False)     = prettyPrec d FalseT
-    prettyPrec d (FunVal f _ _)      = prettyPrec d (IdT f)
-    prettyPrec d (ConstrVal i _ as)  = showParen (d > app_prec && not (null as)) $
-        prettyPrec d (IdConstrT i) .
-        showString sep . prettyPPrecSepList False (app_prec + 1) " " as
+    prettyPrec p d UnitVal             = prettyPrec p d LParenT . prettyPrec p d RParenT
+    prettyPrec p d (IntVal n)          = prettyPrec p d (ConstIntT n)
+    prettyPrec p d (FloatVal f)        = prettyPrec p d (ConstFloatT f)
+    prettyPrec p d (CharVal c)         = prettyPrec p d (ConstCharT c)
+    prettyPrec p d (BoolVal True)      = prettyPrec p d TrueT
+    prettyPrec p d (BoolVal False)     = prettyPrec p d FalseT
+    prettyPrec p d (FunVal f _ _)      = prettyPrec p d (IdT f)
+    prettyPrec p d (ConstrVal i _ as)  = showParen ((p || d > app_prec) && not (null as)) $
+        prettyPrec p d (IdConstrT i) .
+        showString sep . prettyPrecSepList p (app_prec + 1) " " as
         where app_prec = 5
               sep = if null as then "" else " "
-    prettyPrec d (RefVal ha r)       = prettyPrec d (ConstIntT ha) . prettyPrec d (IdT "@") . showsPrec d r
-    prettyPrec d Undefined           = prettyPrec d (IdT "Undefined")
-    prettyPrec d (ArrayVal dims a _) = prettyPrec d (ConstIntT a) . prettyPrec d (IdT "@") .
-        prettyPrec d (IdT "Array") . prettyDims
-        where prettyDims = prettyPrec d LBracketT .
-                prettyPPrecSepList False d ", " (map ConstIntT dims) . prettyPrec d RBracketT
+    prettyPrec p d (RefVal ha r)       = prettyPrec p d (ConstIntT ha) . prettyPrec p d (IdT "@") . showsPrec d r
+    prettyPrec p d Undefined           = prettyPrec p d (IdT "Undefined")
+    prettyPrec p d (ArrayVal dims a _) = prettyPrec p d (ConstIntT a) . prettyPrec p d (IdT "@") .
+        prettyPrec p d (IdT "Array") . prettyDims
+        where prettyDims = prettyPrec p d LBracketT .
+                prettyPrecSepList p d ", " (map ConstIntT dims) . prettyPrec p d RBracketT
 
 instance Debug Value where
     debugMode _ = Left (PrintConfig { color = True, wrapParens = False })

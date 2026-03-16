@@ -5,10 +5,8 @@ module Common.PrintAST (Pretty,
                         pretty,
                         prettyP,
                         prettyPrec,
-                        prettyPPrec,
-                        showPretty,
                         prettyPSepList,
-                        prettyPPrecSepList) where
+                        prettyPrecSepList) where
 
 import Common.AST
 import Common.Token
@@ -25,16 +23,15 @@ import Common.Token
 
 class Pretty a where
   -- False omits parentheses whenever possible
-  prettyPPrec :: Bool -> Int -> a -> ShowS
-  prettyPPrec p _ a s = prettyP p a ++ s
-  prettyPrec :: Int -> a -> ShowS
-  prettyPrec = prettyPPrec False
+  prettyPrec :: Bool -> Int -> a -> ShowS
+  prettyPrec _ _ a s = pretty a ++ s
   prettyP :: Bool -> a -> String
-  prettyP p a = prettyPPrec p 0 a ""
+  prettyP p a = prettyPrec p 0 a ""
   pretty :: a -> String
   pretty = prettyP False
-  showPretty :: a -> ShowS
-  showPretty = showString . pretty
+
+showPretty :: Pretty a => a -> ShowS
+showPretty = showString . pretty
 
 -- Pretty printing tokens
 
@@ -45,7 +42,7 @@ prettyId :: Identifier -> ShowS
 prettyId = showPretty . IdT
 
 instance Pretty Identifier where
-  showPretty = prettyId
+  pretty = pretty . IdT
 
 prettyConstrId :: ConstrIdentifier -> ShowS
 prettyConstrId = showPretty . IdConstrT
@@ -66,42 +63,42 @@ prettyStringC = showPretty . ConstStringT
 
 prettyPSepList :: Pretty a => Bool -> String -> [a] -> ShowS
 prettyPSepList _ _ []          = id
-prettyPSepList always _ [x]    = prettyPPrec always 0 x
-prettyPSepList always s (x:xs) = prettyPPrec always 0 x . showString s . prettyPSepList always s xs
+prettyPSepList always _ [x]    = prettyPrec always 0 x
+prettyPSepList always s (x:xs) = prettyPrec always 0 x . showString s . prettyPSepList always s xs
 
-prettyPPrecSepList :: Pretty a => Bool -> Int -> String -> [a] -> ShowS
-prettyPPrecSepList _ _ _ []          = id
-prettyPPrecSepList always d _ [x]    = prettyPPrec always d x
-prettyPPrecSepList always d s (x:xs) = prettyPPrec always d x . showString s . prettyPPrecSepList always d s xs
+prettyPrecSepList :: Pretty a => Bool -> Int -> String -> [a] -> ShowS
+prettyPrecSepList _ _ _ []          = id
+prettyPrecSepList always d _ [x]    = prettyPrec always d x
+prettyPrecSepList always d s (x:xs) = prettyPrec always d x . showString s . prettyPrecSepList always d s xs
 
 -- Pretty printing ast
 
 instance (Pretty a, Pretty b) => Pretty (Either a b) where
-  prettyPPrec always d (Left a)  = prettyPPrec always d a
-  prettyPPrec always d (Right b) = prettyPPrec always d b
+  prettyPrec always d (Left a)  = prettyPrec always d a
+  prettyPrec always d (Right b) = prettyPrec always d b
 
 instance Pretty (AST b) where
-  prettyPPrec always _ (AST ast _) = prettyPSepList always "\n\n" ast
+  prettyPrec always _ (AST ast _) = prettyPSepList always "\n\n" ast
 
 instance Pretty (TypeDef b) where
-  prettyPPrec always _ (TypeDef tDefs _) = showPretty TypeT . showString " " .
+  prettyPrec always _ (TypeDef tDefs _) = showPretty TypeT . showString " " .
     prettyPSepList always ("\n" ++ pretty AndT ++ "  ") tDefs
 
 instance Pretty (TDef b) where
-  prettyPPrec always _ (TDef i constrs _) = prettyId i . showString " " .
+  prettyPrec always _ (TDef i constrs _) = prettyId i . showString " " .
     showPretty EqualsT . showString " " .
     prettyPSepList always (" " ++ pretty BarT ++ " ") constrs
 
 instance Pretty (Constr b) where
-  prettyPPrec _      _ (Constr i [] _) = prettyConstrId i
-  prettyPPrec always _ (Constr i ts _) = prettyConstrId i . showString " " .
+  prettyPrec _      _ (Constr i [] _) = prettyConstrId i
+  prettyPrec always _ (Constr i ts _) = prettyConstrId i . showString " " .
     showPretty OfT . showString " " . prettyPSepList always " " ts
 
 instance Pretty (Type b) where
-  prettyPPrec always d (Type t _) = prettyPPrec always d t
+  prettyPrec always d (Type t _) = prettyPrec always d t
 
 instance (Pretty i, Pretty t) => Pretty (TypeF i t) where
-  prettyPPrec always d tf =
+  prettyPrec always d tf =
     let
       ref_prec = 3
       array_prec = 2
@@ -117,50 +114,50 @@ instance (Pretty i, Pretty t) => Pretty (TypeF i t) where
       FloatType -> showPretty FloatT
       UserDefinedType i -> showPretty i
       RefType u -> showParen (always || d > ref_prec) $
-            prettyPPrec always (ref_prec + 1) u .
+            prettyPrec always (ref_prec + 1) u .
             showString " " .
             showPretty RefT
       ArrayType 1 u -> showParen (always || d > array_prec) $
             showPretty ArrayT . showString " " .
             showPretty OfT . showString " " .
-            prettyPPrec always (array_prec + 1) u
+            prettyPrec always (array_prec + 1) u
       ArrayType n u -> showParen (always || d > array_prec) $
             showPretty ArrayT . showString " " .
             showPretty LBracketT . showsStars n . showPretty RBracketT .
             showString " " . showPretty OfT . showString " " .
-            prettyPPrec always (array_prec + 1) u
+            prettyPrec always (array_prec + 1) u
       FunType u v -> showParen (always || d > fun_prec) $
-            prettyPPrec always (fun_prec + 1) u .
+            prettyPrec always (fun_prec + 1) u .
             showString " " . showPretty ArrowT . showString " " .
-            prettyPPrec always fun_prec v
+            prettyPrec always fun_prec v
 
 instance Pretty (LetDef b) where
-  prettyPPrec always _ (Let defs _)    = showPretty LetT . showString " " .
+  prettyPrec always _ (Let defs _)    = showPretty LetT . showString " " .
     prettyPSepList always ("\n" ++ pretty AndT ++ " ") defs
-  prettyPPrec always _ (LetRec defs _) = showPretty LetT . showString " " .
+  prettyPrec always _ (LetRec defs _) = showPretty LetT . showString " " .
     showPretty RecT . showString " " .
     prettyPSepList always ("\n" ++ pretty AndT ++ " ") defs
 
 instance Pretty (Def b) where
-  prettyPPrec always _ def = case def of
+  prettyPrec always _ def = case def of
     FunDef i ps mt e _ ->
       prettyId i . showString sep . prettyPSepList always " " ps . showString " " .
-      maybe id (\t -> showPretty ColonT . showString " " . prettyPPrec always 0 t . showString " ") mt .
-      showPretty EqualsT . showString " " . prettyPPrec always 0 e where
+      maybe id (\t -> showPretty ColonT . showString " " . prettyPrec always 0 t . showString " ") mt .
+      showPretty EqualsT . showString " " . prettyPrec always 0 e where
         sep = if null ps then "" else " "
     VarDef i mt _ ->
       showPretty MutableT . showString " " . prettyId i .
-      maybe id (\t -> showString " " . showPretty ColonT . showString " " . prettyPPrec always 0 t) mt
+      maybe id (\t -> showString " " . showPretty ColonT . showString " " . prettyPrec always 0 t) mt
     ArrayDef i es mt _ ->
       showPretty MutableT . showString " " . prettyId i .
-      showString " " . showPretty LBracketT . prettyPPrecSepList always 0 ", " es . showPretty RBracketT .
-      maybe id (\t -> showString " " . showPretty ColonT . showString " " . prettyPPrec always 0 t) mt
+      showString " " . showPretty LBracketT . prettyPrecSepList always 0 ", " es . showPretty RBracketT .
+      maybe id (\t -> showString " " . showPretty ColonT . showString " " . prettyPrec always 0 t) mt
 
 instance Pretty (Param b) where
-  prettyPPrec _ _ (Param i _)             = prettyId i
-  prettyPPrec always _ (TypedParam i t _) = showParen True param where
+  prettyPrec _ _ (Param i _)             = prettyId i
+  prettyPrec always _ (TypedParam i t _) = showParen True param where
     param = prettyId i . showString " " . showPretty ColonT .
-            showString " " . prettyPPrec always 0 t
+            showString " " . prettyPrec always 0 t
 
 -- Pretty printing expressions
 -- This is a bit more complicated
@@ -194,11 +191,11 @@ data ParenInfo = ParenInfo
               , elseFollows :: Bool
               }
 
-prettyPPrecSepListExpr :: ParenInfo -> Int -> String -> [Expr a] -> ShowS
-prettyPPrecSepListExpr _ _ _ []         = id
-prettyPPrecSepListExpr pInfo d _ [x]    = prettyPPrecExpr pInfo d x
-prettyPPrecSepListExpr pInfo d s (x:xs) = prettyPPrecExpr pInfo d x .
-  showString s . prettyPPrecSepListExpr pInfo d s xs
+prettyPrecSepListExpr :: ParenInfo -> Int -> String -> [Expr a] -> ShowS
+prettyPrecSepListExpr _ _ _ []         = id
+prettyPrecSepListExpr pInfo d _ [x]    = prettyPrecExpr pInfo d x
+prettyPrecSepListExpr pInfo d s (x:xs) = prettyPrecExpr pInfo d x .
+  showString s . prettyPrecSepListExpr pInfo d s xs
 
 showParenOp :: ParenInfo -> Int -> Int -> Bool
 showParenOp pInfo d prec = isAlways pInfo || d > prec
@@ -216,42 +213,42 @@ showParenIfThen pInfo d = always || left || elseF where
   elseF = isRightMostIf pInfo && elseFollows pInfo
 
 instance Pretty (Expr b) where
-  prettyPPrec always = prettyPPrecExpr
+  prettyPrec always = prettyPrecExpr
     ParenInfo { isAlways = always
               , isRightMostLet = True
               , isRightMostIf = True
               , elseFollows = False
               }
 
-prettyPPrecExpr :: ParenInfo -> Int -> Expr b -> ShowS
-prettyPPrecExpr pInfo d expr =
+prettyPrecExpr :: ParenInfo -> Int -> Expr b -> ShowS
+prettyPrecExpr pInfo d expr =
     let always = isAlways pInfo
     in case expr of
-      Expr e _         -> prettyPPrecExprF pInfo d e
+      Expr e _         -> prettyPrecExprF pInfo d e
       NewType t _      -> showParen (showParenOp pInfo d new_prec) $
         showPretty NewT . showString " " .
-        prettyPPrec always 0 t
+        prettyPrec always 0 t
       LetIn def u _    -> showParen paren $
-        prettyPPrec always d def . showString " " . showPretty InT .
-        showString " " . prettyPPrecExpr pInfo' let_prec u where
+        prettyPrec always d def . showString " " . showPretty InT .
+        showString " " . prettyPrecExpr pInfo' let_prec u where
           paren = showParenLet pInfo d
           pInfo' = pInfo{ isRightMostLet = True
                         , isRightMostIf = True
                         , elseFollows = elseFollows pInfo && not paren }
       MatchExpr u cs _ -> showPretty MatchT . showString " " .
-        prettyPPrec always 0 u . showString " " . showPretty WithT . showString "\n" .
-        prettyPPrecSepList (isAlways pInfo) 0 ("\n" ++ pretty BarT ++ " ") cs . showString "\n" .
+        prettyPrec always 0 u . showString " " . showPretty WithT . showString "\n" .
+        prettyPrecSepList (isAlways pInfo) 0 ("\n" ++ pretty BarT ++ " ") cs . showString "\n" .
         showPretty EndT
 
 instance Pretty (ExprF (Expr b)) where
-  prettyPPrec always = prettyPPrecExprF
+  prettyPrec always = prettyPrecExprF
     ParenInfo { isAlways = always
               , isRightMostLet = True
               , isRightMostIf = True
               , elseFollows = False }
 
-prettyPPrecExprF :: ParenInfo -> Int -> ExprF (Expr b) -> ShowS
-prettyPPrecExprF pInfo d e = let
+prettyPrecExprF :: ParenInfo -> Int -> ExprF (Expr b) -> ShowS
+prettyPrecExprF pInfo d e = let
     always = isAlways pInfo
   in case e of
       IntCExpr i -> prettyIntC i
@@ -270,23 +267,23 @@ prettyPPrecExprF pInfo d e = let
         showString " " . prettyId i
       ArrayAccess i es -> showParen (showParenOp pInfo d array_access_prec) $
         prettyId i . showPretty LBracketT .
-        prettyPPrecSepList always 0 ", " es .
+        prettyPrecSepList always 0 ", " es .
         showPretty RBracketT
       FunAppExpr i ps -> showParen (always || (d > app_prec && not (null ps))) $
         prettyId i . showString sep .
-        prettyPPrecSepListExpr pInfo' (app_prec + 1) " " ps where
+        prettyPrecSepListExpr pInfo' (app_prec + 1) " " ps where
           sep = if null ps then "" else " "
           pInfo' = pInfo{ isRightMostLet = False, isRightMostIf = False }
       ConstrAppExpr i ps -> showParen (always || (d > app_prec && not (null ps))) $
         prettyConstrId i . showString sep .
-        prettyPPrecSepListExpr pInfo' (app_prec + 1) " " ps where
+        prettyPrecSepListExpr pInfo' (app_prec + 1) " " ps where
           sep = if null ps then "" else " "
           pInfo' = pInfo{ isRightMostLet = False, isRightMostIf = False }
       UnOpExpr op u ->
         let (p, tok) = opToTok op
         in prettyUnOpExp p tok pInfo d u
       DeleteExpr u -> showParen parens $
-        showPretty DeleteT . showString " " . prettyPPrecExpr pInfo' un_op_prec u where
+        showPretty DeleteT . showString " " . prettyPrecExpr pInfo' un_op_prec u where
           parens = showParenOp pInfo d un_op_prec
           pInfo' = pInfo{ isRightMostLet = isRightMostLet pInfo || parens
                         , isRightMostIf = isRightMostIf pInfo || parens
@@ -295,18 +292,18 @@ prettyPPrecExprF pInfo d e = let
         let (assoc, p, tok) = binOpPrec op
         in prettyBinOpExp assoc p tok pInfo d u w
       IfThenExpr u v -> showParen parens $
-        showPretty IfT . showString " " . prettyPPrec always 0 u . showString " " .
-        showPretty ThenT . showString " " . prettyPPrecExpr pInfoThen if_then_prec v where
+        showPretty IfT . showString " " . prettyPrec always 0 u . showString " " .
+        showPretty ThenT . showString " " . prettyPrecExpr pInfoThen if_then_prec v where
           parens = showParenIfThen pInfo d
           pInfoThen = pInfo{ isRightMostLet = isRightMostLet pInfo || parens
                            , isRightMostIf = isRightMostIf pInfo || parens
                            , elseFollows = not parens && elseFollows pInfo
                            }
       IfThenElseExpr u v w -> showParen parens $
-        showPretty IfT . showString " " . prettyPPrec always 0 u . showString " " .
+        showPretty IfT . showString " " . prettyPrec always 0 u . showString " " .
         showPretty ThenT . showString " " .
-        prettyPPrecExpr pInfoThen if_then_else_prec v . showString " " .
-        showPretty ElseT . showString " " . prettyPPrecExpr pInfoElse else_prec w where
+        prettyPrecExpr pInfoThen if_then_else_prec v . showString " " .
+        showPretty ElseT . showString " " . prettyPrecExpr pInfoElse else_prec w where
           parens = showParenIfThenElse pInfo d
           pInfoThen = pInfo{ isRightMostLet = True, isRightMostIf = True, elseFollows = True }
           pInfoElse = pInfo{ isRightMostLet = isRightMostLet pInfo || parens
@@ -314,24 +311,24 @@ prettyPPrecExprF pInfo d e = let
                            , elseFollows = not parens && elseFollows pInfo
                            }
       BeginExpr u -> showParen always $
-        showPretty BeginT . showString " " . prettyPPrec always 0 u .
+        showPretty BeginT . showString " " . prettyPrec always 0 u .
         showString " " . showPretty EndT
       WhileExpr u v -> showParen always $
         showPretty WhileT . showString " " .
-        prettyPPrec always 0 u . showString " " . showPretty DoT .
-        showString " " . prettyPPrec always 0 v . showString " " . showPretty DoneT
+        prettyPrec always 0 u . showString " " . showPretty DoT .
+        showString " " . prettyPrec always 0 v . showString " " . showPretty DoneT
       ForExpr i u v w -> showParen always $
         showPretty ForT . showString " " . prettyId i .
         showString " " . showPretty EqualsT . showString " " .
-        prettyPPrec always 0 u . showString " " . showPretty ToT . showString " " .
-        prettyPPrec always 0 v . showString " " . showPretty DoT . showString " " .
-        prettyPPrec always 0 w . showString " " . showPretty DoneT
+        prettyPrec always 0 u . showString " " . showPretty ToT . showString " " .
+        prettyPrec always 0 v . showString " " . showPretty DoT . showString " " .
+        prettyPrec always 0 w . showString " " . showPretty DoneT
       ForDownExpr i u v w -> showParen always $
         showPretty ForT . showString " " . prettyId i .
         showString " " . showPretty EqualsT . showString " " .
-        prettyPPrec always 0 u . showString " " . showPretty DowntoT . showString " " .
-        prettyPPrec always 0 v . showString " " . showPretty DoT . showString " " .
-        prettyPPrec always 0 w . showString " " . showPretty DoneT
+        prettyPrec always 0 u . showString " " . showPretty DowntoT . showString " " .
+        prettyPrec always 0 v . showString " " . showPretty DoT . showString " " .
+        prettyPrec always 0 w . showString " " . showPretty DoneT
 
 opToTok :: UnOp -> (Int, Token)
 opToTok op = case op of
@@ -356,7 +353,7 @@ prettyUnOpExp prec tok pInfo d u =
         Expr (DeleteExpr _) _ -> " "
         _ -> if tok == NotT then " " else ""
   in showParen parens $
-     showPretty tok . showString sep . prettyPPrecExpr pInfo' prec u
+     showPretty tok . showString sep . prettyPrecExpr pInfo' prec u
 
 data Assoc = L | R | Non
   deriving Eq
@@ -391,9 +388,9 @@ instance Pretty BinOp where
 
 prettyBinOpExp :: Assoc -> Int -> Token -> ParenInfo -> Int -> Expr b -> Expr b -> ShowS
 prettyBinOpExp a prec tok pInfo d u w = showParen parens $
-  prettyPPrecExpr pInfoL precL u . showString " " .
+  prettyPrecExpr pInfoL precL u . showString " " .
   showPretty tok . showString " " .
-  prettyPPrecExpr pInfoR precR w where
+  prettyPrecExpr pInfoR precR w where
     parens = showParenOp pInfo d prec
     (precL, precR) = case a of
       L   -> (prec, prec + 1)
@@ -408,14 +405,14 @@ prettyBinOpExp a prec tok pInfo d u w = showParen parens $
 -- Pretty printing of Clauses and Patterns
 
 instance Pretty (Clause b) where
-  prettyPPrec always _ (Match p e _) = prettyPPrec always 0 p . showString " " . showPretty ArrowT .
-    showString " " . prettyPPrec always 0 e
+  prettyPrec always _ (Match p e _) = prettyPrec always 0 p . showString " " . showPretty ArrowT .
+    showString " " . prettyPrec always 0 e
 
 instance Pretty (Pattern b) where
-  prettyPPrec always d (Pattern p _) = prettyPPrec always d p
+  prettyPrec always d (Pattern p _) = prettyPrec always d p
 
 instance Pretty p => Pretty (PatternF p) where
-  prettyPPrec always d pf = case pf of
+  prettyPrec always d pf = case pf of
     IntConstPattern NoSign i -> prettyIntC i
     IntConstPattern Plus i -> showPretty PlusT . prettyIntC i
     IntConstPattern Minus i -> showPretty MinusT . prettyIntC i
@@ -427,6 +424,6 @@ instance Pretty p => Pretty (PatternF p) where
     FalsePattern -> showPretty FalseT
     IdPattern i -> prettyId i
     ConstrPattern i ps -> showParen (always || (d > prec && not (null ps))) $
-      prettyConstrId i . showString sep . prettyPPrecSepList always (prec + 1) " " ps where
+      prettyConstrId i . showString sep . prettyPrecSepList always (prec + 1) " " ps where
         sep = if null ps then "" else " "
         prec = 1

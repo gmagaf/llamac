@@ -52,7 +52,7 @@ insertTypeDef typesInDef (TDef tId cs p) =
         checkDuplicateConstrs
         constrs <- mapM checkConstrParams cs
         src <- getSource
-        let typeId = PosnId {identifier = tId, source = src, posn = p}
+        let typeId = PosnId {identifier = tId, def_source = src, def_posn = p}
         insertType tId (TypeEntry typeId constrs)
 
 analyzeTDef :: PosnId -> TDef AlexPosn -> Parser (TDef SemanticTag)

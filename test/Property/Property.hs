@@ -9,20 +9,22 @@ import Test.QuickCheck (Gen, Property, Result, forAll)
 import Test.Hspec (shouldBe)
 
 import Common.Token (Token)
-import Common.AST (AST)
+import Common.AST (AST, TypeF (UserDefinedType))
 import Common.PrintAST (Pretty(prettyP))
 import Common.Source (Source (FileIn))
-import Lexer.Lexer (lexer)
+import Common.SymbolType
+import Lexer.Lexer (lexer, AlexPosn (AlexPn))
 import Parser.Utils (parse)
 import Parser.ParserState (initParserState)
 import Parser.ParserM (evalParser)
-import Semantics.Utils (SemanticTag(..))
+import Semantics.Utils (SemanticTag(..), TypeInfo (NodeType, NotTypable, DefType))
 import Semantics.Semantics (sem)
 
 import Property.Utils (checkForSize)
-import Property.Parser.ArbitraryAST (arbitraryAST, ArbPosn (arb_posn))
-import Property.Semantics.SemanticAST (semanticTypesAST, semanticScopesAST)
 import Property.Lexer.ArbitraryTokens (arbTokens)
+import Property.Parser.ArbitraryAST (arbitraryAST)
+import Property.Semantics.SemanticAST (semanticTypesAST)
+import Property.Semantics.SemanticScopeAST (semanticScopesAST)
 
 -- This module defines the desired test properties and tests
 
@@ -63,21 +65,30 @@ checkParsedPrettyAST parens n = do
   checkForSize (parsedPrettyASTisAST parens) (arbitraryAST :: Gen (AST ())) n
 
 -- Semantic tests
-semanticASTisOK :: Gen (AST ArbPosn) -> Property
+semanticASTisOK :: Gen (AST SemanticTag) -> Property
 semanticASTisOK gen =
-  forAll gen (\p ->
-    let p' = fmap arb_posn p
-        parser = sem p'
-        semAst = evalParser (initParserState (FileIn "test.llama") "") parser
-        res = fmap (fmap posn) semAst
-    in res `shouldBe` Right p') -- check that semantic analysis only affects tags
+  forAll gen (\ast ->
+    let p = fmap posn ast
+        parser = sem p
+        res = evalParser (initParserState (FileIn "test.llama") "") parser
+        res' = fmap (fmap f) res
+    in res' `shouldBe` Right ast) where
+      removeDefPosn (SymType (UserDefinedType p)) = SymType (UserDefinedType p{ def_posn = AlexPn 0 0 0 })
+      removeDefPosn t = t
+      removeDefPosnST = bottomUp removeDefPosn
+      f (SemTag p ti) =
+        let ti' = case ti of
+              NodeType st -> NodeType $ removeDefPosnST st
+              DefType ts  -> DefType $ mapTypeScheme removeDefPosnST ts
+              NotTypable  -> ti
+        in SemTag p ti'
 
 checkSemTypesAST :: Int -> IO Result
 checkSemTypesAST n = do
-  putStrLn $ "Testing property (removeTags . analyzeAST typesAST == typesAST) for size: " ++ show n
-  checkForSize semanticASTisOK (semanticTypesAST :: Gen (AST ArbPosn)) n
+  putStrLn $ "Testing property (analyzeAST . removeTags $ typesAST == typesAST) for size: " ++ show n
+  checkForSize semanticASTisOK semanticTypesAST n
 
 checkSemScopesAST :: Int -> IO Result
 checkSemScopesAST n = do
-  putStrLn $ "Testing property (removeTags . analyzeAST scopeAST == scopeAST) for size: " ++ show n
-  checkForSize semanticASTisOK (semanticScopesAST :: Gen (AST ArbPosn)) n
+  putStrLn $ "Testing property (analyzeAST . removeTags $ scopeAST == scopeAST) for size: " ++ show n
+  checkForSize semanticASTisOK semanticScopesAST n

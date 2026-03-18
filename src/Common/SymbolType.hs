@@ -157,6 +157,10 @@ paraM alg = mapM (mapM fanout) . out >=> alg where
 paraM2 :: (Monad m, TypeFWrapper f t) => (t -> f (TypeF (TypeId t) a) -> m a) -> t -> m a
 paraM2 alg t = (mapM (mapM (paraM2 alg)) . out $ t) >>= alg t
 
+mapTypeScheme :: (SymbolType -> SymbolType) -> TypeScheme -> TypeScheme
+mapTypeScheme f (MonoType st) = MonoType (f st)
+mapTypeScheme f (AbsType u t) = AbsType u (mapTypeScheme f t)
+
 -- Type theoretic utils
 subst :: Int -> SymbolType -> SymbolType -> SymbolType
 subst v t = bottomUp f where

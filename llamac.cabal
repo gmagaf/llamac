@@ -155,6 +155,7 @@ test-suite test
                       Property.Lexer.ArbitraryTokens
                       Property.Parser.ArbitraryAST
                       Property.Semantics.SemanticAST
+                      Property.Semantics.SemanticScopeAST
  ghc-options:         -Wall
                       -Wcompat
                       -Widentities

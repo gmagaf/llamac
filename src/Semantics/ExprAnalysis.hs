@@ -155,8 +155,8 @@ semConstConstrExpr :: ConstrIdentifier -> Parser (Expr SemanticTag)
 semConstConstrExpr i = do
     entry <- findName i
     case entry of
-        ConstrEntry _ [] outT -> do
-            retE (ConstConstrExpr i) (constTypeToSymbolType outT)
+        ConstrEntry t _ _ -> do
+            retE (ConstConstrExpr i) (constTypeToSymbolType t)
         _                 -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i
 

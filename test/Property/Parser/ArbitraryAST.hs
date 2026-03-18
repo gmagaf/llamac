@@ -1,10 +1,9 @@
-module Property.Parser.ArbitraryAST (arbitraryAST, ArbPosn(..)) where
+module Property.Parser.ArbitraryAST (arbitraryAST) where
 
 import Test.QuickCheck
 
 import Common.Token
 import Common.AST
-import Lexer.Lexer (AlexPosn(..))
 
 import Property.Utils
 import Property.Lexer.ArbitraryTokens
@@ -17,12 +16,6 @@ import Property.Lexer.ArbitraryTokens
 
 -- This module defines a generator for syntactically correct
 -- programs.
-
-newtype ArbPosn = ArbPosn {arb_posn :: AlexPosn}
-  deriving Show
-
-instance Arbitrary ArbPosn where
-   arbitrary = ArbPosn <$> (AlexPn <$> arbitrary <*> arbitrary <*> arbitrary)
 
 arbitraryAST :: Arbitrary b => Gen (AST b)
 arbitraryAST = AST <$> boundedListOf (0, 6) g <*> arbitrary where

@@ -1,37 +1,25 @@
-module Property.Semantics.SemanticAST (semanticTypesAST, semanticScopesAST) where
+module Property.Semantics.SemanticAST (semanticTypesAST) where
 
-import Data.Bitraversable (bimapM)
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.Char (isUpper)
+
 import Test.QuickCheck
 
-import Common.Source
 import Common.Token
 import Common.AST
 import Common.SymbolType
-import Lexer.Lexer
-import Semantics.Utils (hasDuplicates)
+import Semantics.Utils (hasDuplicates, SemanticTag (..), TypeInfo (..))
 
 import Property.Utils
 import Property.Lexer.ArbitraryTokens
     ( arbIdWithLength,
-      arbConstrIdWithLength,
-      arbitraryIntConstant,
-      arbitraryFloatConstant,
-      arbitraryCharConstant )
+      arbConstrIdWithLength )
 
 type Scope = M.Map String ConstType
 type TypeScope = S.Set PosnId
 
-arbId :: Gen Identifier
-arbId = ("id_" ++) <$> arbIdWithLength 7
-
 arbTypeId :: Gen PosnId
-arbTypeId = addPosn <$> ("ty_" ++) <$> arbIdWithLength 7
-
-addPosn :: Identifier -> PosnId
-addPosn i = PosnId {identifier = i, source = FileIn "test.llama", posn = AlexPn 0 0 0}
+arbTypeId = addPosn . ("ty_" ++) <$> arbIdWithLength 7
 
 arbConstrId :: Gen ConstrIdentifier
 arbConstrId = ("Co_" ++) <$> arbConstrIdWithLength 7
@@ -39,23 +27,20 @@ arbConstrId = ("Co_" ++) <$> arbConstrIdWithLength 7
 typeInScope :: TypeScope -> Gen Identifier
 typeInScope s = identifier <$> elements (S.toList s)
 
-logSize :: Integral p => p -> Int
-logSize n = ceiling (logBase 2 (fromIntegral n + 1) :: Double) :: Int
-
 -- Generator for semantically correct programs
 -- that define types.
 
-semanticTypesAST :: Arbitrary b => Gen (AST b)
+semanticTypesAST :: Gen (AST SemanticTag)
 semanticTypesAST = sized $ \n -> do
   k <- choose (0 :: Int, logSize n)
-  AST <$> f n S.empty k <*> arbitrary where
-    f :: Arbitrary b => Int -> TypeScope -> Int -> Gen [Either (LetDef b) (TypeDef b)]
+  AST <$> f n S.empty k <*> arbTag NotTypable where
+    f :: Int -> TypeScope -> Int -> Gen [Either (LetDef SemanticTag) (TypeDef SemanticTag)]
     f _ _  0 = return []
     f n ts k = do
       (tdef, _, ts') <- arbTypeDef ts
       (Right tdef :) <$> f n ts' (k - 1)
 
-arbTypeDef :: Arbitrary b => TypeScope -> Gen (TypeDef b, Scope, TypeScope)
+arbTypeDef :: TypeScope -> Gen (TypeDef SemanticTag, Scope, TypeScope)
 arbTypeDef s = sized $ \n -> do
   typesToDef <- boundedListOf (1, logSize n) arbTypeId
   let s' = S.union s (S.fromList typesToDef)
@@ -63,339 +48,29 @@ arbTypeDef s = sized $ \n -> do
   let f outT (Constr i ts _) = (i, paramsToFun (map (typeTo addPosn :: Type b -> ConstType) ts) outT)
   let getConstrs (TDef i cs p) = map (f (typeTo addPosn $ Type (UserDefinedType i) p)) cs
   let constrs = foldl (\acc td -> getConstrs td ++ acc) [] arbTDefs
-  td <- TypeDef arbTDefs <$> arbitrary
+  td <- TypeDef arbTDefs <$> arbTag NotTypable
   return (td, M.fromList constrs, s')
 
-arbTDef :: Arbitrary b => TypeScope -> Identifier -> Gen (TDef b)
+arbTDef :: TypeScope -> Identifier -> Gen (TDef SemanticTag)
 arbTDef s t = sized $ \n -> do
   cIds <- suchThat (boundedListOf (1, logSize n) arbConstrId) (not . hasDuplicates)
-  TDef t <$> mapM (arbConstr s) cIds <*> arbitrary
+  TDef t <$> mapM (arbConstr s) cIds <*> arbTag NotTypable
 
-arbConstr :: Arbitrary b => TypeScope -> ConstrIdentifier -> Gen (Constr b)
-arbConstr s i = sized $ \n -> Constr i <$> boundedListOf (0, logSize n) (arbType s) <*> arbitrary
+arbConstr :: TypeScope -> ConstrIdentifier -> Gen (Constr SemanticTag)
+arbConstr s i = sized $ \n -> Constr i <$> boundedListOf (0, logSize n) (arbType s) <*> arbTag NotTypable
 
-arbType :: Arbitrary b => TypeScope -> Gen (Type b)
+arbType :: TypeScope -> Gen (Type SemanticTag)
 arbType s = sized g where
-  g n = Type <$> arbTypeF s (resize (div n 2) (arbType s)) <*> arbitrary
+  g n = Type <$> arbTypeF s (resize (div n 2) (arbType s)) <*> arbTag NotTypable
 
 arbTypeF :: TypeScope -> Gen t -> Gen (TypeF Identifier t)
 arbTypeF s r = sized gen where
   gen 0 = do
     let baseTypes = [UnitType, IntType, CharType, BoolType, FloatType]
-    if S.null s then elements baseTypes
+    if null s then elements baseTypes
     else do
       i <- typeInScope s
       elements $ UserDefinedType i : baseTypes
   gen n = do
     i <- choose (1, 3) :: Gen Int
     oneof [gen (div n 2), RefType <$> r, ArrayType i <$> r, FunType <$> r <*> r]
-
--- Generator for semantically correct programs
--- that define functions.
-
-semanticScopesAST :: Arbitrary b => Gen (AST b)
-semanticScopesAST = sized $ \n -> do
-  k <- choose (0 :: Int, logSize n :: Int)
-  AST <$> f M.empty S.empty k <*> arbitrary where
-    f :: Arbitrary b => Scope -> TypeScope -> Int -> Gen [Either (LetDef b) (TypeDef b)]
-    f _ _ 0 = return []
-    f s ts k = do
-      (ldef, ls) <- arbLetDef s ts
-      (tdef, s', ts') <- arbSimpleTypeDef
-      (d, s'', ts'') <- frequency
-        [(10, return (Left ldef, ls, ts)),
-         (1, return (Right tdef, s', ts'))]
-      (d:) <$> f s'' ts'' (k - 1)
-
-arbSimpleTypeDef :: Arbitrary b => Gen (TypeDef b, Scope, TypeScope)
-arbSimpleTypeDef = do
-  b <- arbitrary
-  elements
-    [
-      (TypeDef [TDef "t1" [Constr "C1" [] b, Constr "C2" [Type IntType b] b, Constr "C3" [Type (UserDefinedType "t1") b] b] b] b,
-        M.fromList [("C1", ConstType (UserDefinedType $ addPosn "t1")),
-                    ("C2", ConstType (FunType (ConstType IntType) (ConstType (UserDefinedType $ addPosn "t1")))),
-                    ("C3", ConstType (FunType (ConstType (UserDefinedType $ addPosn "t1")) (ConstType (UserDefinedType $ addPosn "t1"))))],
-        S.fromList [addPosn "t1"]),
-      (TypeDef [TDef "t2" [Constr "D1" [] b, Constr "D2" [Type IntType b] b, Constr "D3" [Type (UserDefinedType "t2") b] b] b] b,
-        M.fromList [("D1", ConstType (UserDefinedType $ addPosn "t2")),
-                    ("D2", ConstType (FunType (ConstType IntType) (ConstType (UserDefinedType $ addPosn "t2")))),
-                    ("D3", ConstType (FunType (ConstType (UserDefinedType $ addPosn "t2")) (ConstType (UserDefinedType $ addPosn "t2"))))],
-        S.fromList [addPosn "t2"]),
-        (TypeDef [TDef "t3" [Constr "E1" [] b, Constr "E2" [Type IntType b] b, Constr "E3" [Type (UserDefinedType "t3") b] b] b] b,
-        M.fromList [("E1", ConstType (UserDefinedType $ addPosn "t3")),
-                    ("E2", ConstType (FunType (ConstType IntType) (ConstType (UserDefinedType $ addPosn "t3")))),
-                    ("E3", ConstType (FunType (ConstType (UserDefinedType $ addPosn "t3")) (ConstType (UserDefinedType $ addPosn "t3"))))],
-        S.fromList [addPosn "t3"]),
-        (TypeDef [TDef "t4" [Constr "F1" [] b, Constr "F2" [Type IntType b] b, Constr "F3" [Type (UserDefinedType "t4") b] b] b] b,
-        M.fromList [("F1", ConstType (UserDefinedType $ addPosn "t4")),
-                    ("F2", ConstType (FunType (ConstType IntType) (ConstType (UserDefinedType $ addPosn "t4")))),
-                    ("F3", ConstType (FunType (ConstType (UserDefinedType $ addPosn "t4")) (ConstType (UserDefinedType $ addPosn "t4"))))],
-        S.fromList [addPosn "t4"])
-    ]
-
-arbSimpleType :: Arbitrary b => TypeScope -> Gen (Type b)
-arbSimpleType ts = sized gen where
-  user = map (UserDefinedType . identifier) (S.toList ts)
-  basicTf = [UnitType, IntType, CharType, BoolType, FloatType] ++ user
-  gen 0 = do
-    b <- arbitrary
-    elements $ map (`Type` b) basicTf
-  gen n = do
-    let r = gen (div n 2)
-    i <- choose (1, 3) :: Gen Int
-    oneof [r,
-           Type . RefType <$> r <*> arbitrary,
-           Type . ArrayType i <$> r <*> arbitrary,
-           Type <$> (FunType <$> r <*> r) <*> arbitrary]
-
-arbLetDef :: Arbitrary b => Scope -> TypeScope -> Gen (LetDef b, Scope)
-arbLetDef s ts = sized $ \n -> do
-  ids <- boundedListOf (1, logSize n) arbId
-  let idc = length ids
-  types <- listGen idc (arbSimpleType ts)
-  let pairs = zip ids types
-  let constTypes = map (typeTo addPosn) types
-  let entries = zip ids constTypes
-  let s' = M.union s (M.fromList entries)
-  isRec <- elements [True, False]
-  b <- arbitrary
-  if isRec
-    then do
-      -- Let rec -> run with s'
-      defs <- mapM (arbDef s') pairs
-      return (LetRec defs b, s')
-    else do
-      -- Let case -> run with s
-      defs <- mapM (arbDef s) pairs
-      return (Let defs b, s')
-
-arbDef :: Arbitrary b => Scope -> (Identifier, Type b) -> Gen (Def b)
-arbDef s (i, t@(Type tf _)) = case tf of
-  RefType t'       -> frequency [(2, VarDef i Nothing <$> arbitrary),
-                                 (1, VarDef i (Just t') <$> arbitrary)]
-  ArrayType dim t' -> do
-    b <- arbitrary
-    let intType = Type IntType b
-    frequency [(2, ArrayDef i <$> es intType <*> return Nothing <*> arbitrary),
-               (1, ArrayDef i <$> es intType <*> return (Just t') <*> arbitrary)] where
-      es et = listGen dim (arbExpr s et)
-  FunType _ _      -> do
-    let types = funToTypes t
-    let pc = length types - 1
-    let argTypes = take pc types
-    let outT = last types
-    pids <- suchThat (listGen pc arbId) (not . hasDuplicates)
-    ps <- mapM arbParam (zip pids argTypes)
-    let s' = M.union s (M.fromList $ zipWith pEntry ps argTypes)
-    frequency [(2, FunDef i ps Nothing <$> arbExpr s' outT <*> arbitrary),
-               (3, FunDef i ps (Just outT) <$> arbExpr s' outT <*> arbitrary)] where
-      pEntry :: Param b -> Type b -> (Identifier, ConstType)
-      pEntry p t' = (ide p, typeTo addPosn t')
-  _ -> frequency [(2, FunDef i [] Nothing <$> arbExpr s t <*> arbitrary),
-                  (1, FunDef i [] (Just t) <$> arbExpr s t <*> arbitrary)]
-
-arbParam :: Arbitrary b => (Identifier, Type b) -> Gen (Param b)
-arbParam (i, t) = oneof [Param i <$> arbitrary,
-                         TypedParam i t <$> arbitrary]
-
-arbExpr :: Arbitrary b => Scope -> Type b -> Gen (Expr b)
-arbExpr s t@(Type tf _) = sized gen where
-  gen 0 = do
-    case tf of
-      IntType -> do
-        let intExpr = Expr . IntCExpr <$> arbitraryIntConstant <*> arbitrary
-        let arrays = filter (typeIsArray . snd) (M.toList s)
-        if null arrays
-          then intExpr
-          else do
-            (ref, ct) <- elements arrays
-            case ct of
-              ConstType (ArrayType dim _) -> do
-                i <- choose (1, dim)
-                frequency [(1, Expr (ArrayDim ref i) <$> arbitrary),
-                          (4, intExpr)]
-              _ -> intExpr
-      FloatType -> (Expr . FloatCExpr <$> arbitraryFloatConstant) <*> arbitrary
-      CharType -> (Expr . CharCExpr <$> arbitraryCharConstant) <*> arbitrary
-      BoolType -> Expr <$> elements [TrueCExpr, FalseCExpr] <*> arbitrary
-      UnitType -> do
-        let unitExpr = Expr UnitCExpr <$> arbitrary
-        let refs = filter (typeIsRef . snd) (M.toList s)
-        if null refs
-          then unitExpr
-          else do
-            (ref, _) <- elements refs
-            frequency [(1, ((Expr <$> DeleteExpr) . Expr (ConstExpr ref) <$> arbitrary) <*> arbitrary),
-                       (4, unitExpr)]
-      RefType (Type (ArrayType _ _) _) -> do
-        b <- arbitrary
-        def <- resize 0 $ arbDef s ("id_ref_arr", t)
-        return (LetIn (Let [def] b) (Expr (ConstExpr "id_ref_arr") b) b)
-      RefType t' -> NewType t' <$> arbitrary
-      UserDefinedType _ -> do
-        i <- fst <$> suchThat (elements (M.toList s)) (\(_, ct) -> typeTo addPosn t == ct)
-        if isUpper (head i)
-          then Expr (ConstConstrExpr i) <$> arbitrary
-          else Expr (ConstExpr i) <$> arbitrary
-      ArrayType 1 (Type CharType _) -> Expr (StringCExpr "TEST_STRING") <$> arbitrary
-      ArrayType _ _ -> do
-        b <- arbitrary
-        def <- resize 0 $ arbDef s ("id_arr", t)
-        return (LetIn (Let [def] b) (Expr (ConstExpr "id_arr") b) b)
-      FunType _ _ -> do
-        b <- arbitrary
-        def <- resize 0 $ arbDef s ("id_fun", t)
-        return (LetIn (Let [def] b) (Expr (ConstExpr "id_fun") b) b)
-  gen n = do
-    let r = resize (div n 2) . arbExpr s
-    frequency [(5, funAppGen s t r),
-               (2, ifGen t r),
-               (2, loopGen n s t r),
-               (1, (Expr . BeginExpr <$> r t) <*> arbitrary),
-               (2, arrayAccGen s t r),
-               (3, unOpGen t r),
-               (3, binOpGen t r)]
-    {-- TODO: MatchExpr --}
-
-ctToType :: Arbitrary b' => ConstType -> Gen (Type b')
-ctToType (ConstType tf) =do
-    b <- arbitrary
-    tf' <- bimapM (return . identifier) ctToType tf
-    return (Type tf' b)
-
-typeIsRef :: ConstType -> Bool
-typeIsRef ct = case ct of
-  ConstType (RefType _) -> True
-  _ -> False
-
-typeIsArray :: ConstType -> Bool
-typeIsArray ct = case ct of
-  ConstType (ArrayType _ _) -> True
-  _ -> False
-
-funAppGen :: Arbitrary b => Scope -> Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
-funAppGen s t r =
-  let funs = filter (\(_, ct) -> outFunType ct == typeTo addPosn t) (M.toList s)
-  in if null funs
-    then resize 0 (r t)
-    else do
-      (fun, ct) <- elements funs
-      let argctTypes = funToArgs ct
-      argTypes <- mapM ctToType argctTypes
-      args <- mapM r argTypes
-      if isUpper (head fun)
-      then if null args then Expr (ConstConstrExpr fun) <$> arbitrary
-                        else Expr (ConstrAppExpr fun args) <$> arbitrary
-      else if null args then Expr (ConstExpr fun) <$> arbitrary
-                        else Expr (FunAppExpr fun args) <$> arbitrary
-
-ifGen :: Arbitrary b => Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
-ifGen t@(Type tf _) r = case tf of
-  UnitType -> do
-    b <- arbitrary
-    condExpr <- r (Type BoolType b)
-    e <- r t
-    return (Expr (IfThenExpr condExpr e) b)
-  _ -> do
-    b <- arbitrary
-    condExpr <- r (Type BoolType b)
-    e1 <- r t
-    e2 <- r t
-    return (Expr (IfThenElseExpr condExpr e1 e2) b)
-
-loopGen :: Arbitrary b => Int -> Scope -> Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
-loopGen n s t@(Type tf _) r = case tf of
-  UnitType -> do
-    b <- arbitrary
-    condExpr <- r (Type BoolType b)
-    lExpr <- r (Type IntType b)
-    uExpr <- r (Type IntType b)
-    e <- r t
-    i <- arbId
-    fe <- resize (div n 2) $ arbExpr (M.insert i (ConstType IntType) s) t
-    elements [Expr (WhileExpr condExpr e) b,
-              Expr (ForExpr i lExpr uExpr fe) b,
-              Expr (ForDownExpr i uExpr lExpr fe) b]
-  _ -> do
-    b <- arbitrary
-    e1 <- r t
-    e2 <- r (Type UnitType b)
-    return (Expr (BinOpExpr SemicolonOp e2 e1) b)
-
-arrayAccGen :: Arbitrary b => Scope -> Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
-arrayAccGen s reft@(Type (RefType t) b) r = do
-  let ct = typeTo addPosn t
-  let isArrayOfT (ConstType (ArrayType _ arrt)) = arrt == ct
-      isArrayOfT _ = False
-  let arrs = filter (isArrayOfT . snd) (M.toList s)
-  if null arrs
-    then do
-      def <- arbDef s ("new_array_to_access", Type (ArrayType 4 t) b)
-      let s' = M.insert "new_array_to_access" (typeTo addPosn (Type (ArrayType 4 t) b)) s
-      arrAcc <- arrayAccGen s' reft r
-      b' <- arbitrary
-      return (LetIn (Let [def] b') arrAcc b')
-    else do
-      (arr, arrCt) <- elements arrs
-      case arrCt of
-        ConstType (ArrayType d _) -> do
-          b' <- arbitrary
-          args <- mapM (const $ r (Type IntType b')) [1..d]
-          return (Expr (ArrayAccess arr args) b')
-        _ -> r reft
-arrayAccGen _ t r = r t
-
-unOpGen :: Arbitrary b => Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
-unOpGen t@(Type tf _) r = case tf of
-  IntType -> do
-    op <- elements [PlusUnOp, MinusUnOp]
-    e <- r t
-    Expr (UnOpExpr op e) <$> arbitrary
-  FloatType -> do
-    op <- elements [PlusFloatUnOp, MinusFloatUnOp]
-    e <- r t
-    Expr (UnOpExpr op e) <$> arbitrary
-  BoolType -> do
-    e <- r t
-    Expr (UnOpExpr NotOp e) <$> arbitrary
-  _ -> do
-    b <- arbitrary
-    e <- r (Type (RefType t) b)
-    Expr (UnOpExpr BangOp e) <$> arbitrary
-
-binOpGen :: Arbitrary b => Type b -> (Type b -> Gen (Expr b)) -> Gen (Expr b)
-binOpGen t@(Type tf _) r = case tf of
-  IntType -> do
-    op <- elements [PlusOp, MinusOp, TimesOp, DivOp, ModOp]
-    e1 <- r t
-    e2 <- r t
-    Expr (BinOpExpr op e1 e2) <$> arbitrary
-  FloatType -> do
-    op <- elements [PlusFloatOp, MinusFloatOp, TimesFloatOp, DivFloatOp, ExpOp]
-    e1 <- r t
-    e2 <- r t
-    Expr (BinOpExpr op e1 e2) <$> arbitrary
-  BoolType -> do
-    op <- elements [AndOp, OrOp]
-    e1 <- r t
-    e2 <- r t
-    let boolOp = Expr (BinOpExpr op e1 e2) <$> arbitrary
-    let compTypes = [Type CharType <$> arbitrary, Type IntType <$> arbitrary, Type FloatType <$> arbitrary]
-    t' <- oneof $ compTypes ++ [Type UnitType <$> arbitrary, Type BoolType <$> arbitrary, Type FloatType <$> arbitrary, Type <$> (RefType <$> (Type FloatType <$> arbitrary)) <*> arbitrary]
-    op' <- elements [EqOp, NotEqOp, NatEqOp, NotNatEqOp]
-    e1' <- r t'
-    e2' <- r t'
-    let eqOp = Expr (BinOpExpr op' e1' e2') <$> arbitrary
-    t'' <- oneof compTypes
-    op'' <- elements [LTOp, GTOp, LEqOp, GEqOp]
-    e1'' <- r t''
-    e2'' <- r t''
-    let compOp = Expr (BinOpExpr op'' e1'' e2'') <$> arbitrary
-    oneof [boolOp, eqOp, compOp]
-  UnitType -> do
-    b <- arbitrary
-    e1 <- r (Type (RefType t) b)
-    e2 <- r t
-    Expr (BinOpExpr AssignMutableOp e1 e2) <$> arbitrary
-  _ -> r t

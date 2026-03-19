@@ -483,12 +483,6 @@ indSemPat (ConstrPattern i pats) = do
                 GT -> throwSem $ "Constructor " ++ i ++ " is applied to too many patterns"
                 EQ -> do
                     zipWithM_ (unifyNode . constTypeToSymbolType) argT pats
-                    mapM_ verifyParamPat pats
                     retP (ConstrPattern i pats) (constTypeToSymbolType outT)
-            where verifyParamPat (Pattern (ConstrPattern _ []) _) = return ()
-                  verifyParamPat (Pattern (ConstrPattern p _) tg) =
-                    throwSemAtPosn ("Pattern param " ++ p ++
-                        " cannot be a pattern of a constructor with parameters") (posn tg)
-                  verifyParamPat _ = return ()
         _ -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i

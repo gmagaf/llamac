@@ -2,12 +2,13 @@ module Property.Semantics.SemanticScopeAST (module Property.Semantics.SemanticSc
 
 import Data.Char (isUpper)
 import Data.Maybe (fromMaybe)
+import Data.Foldable (foldlM)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
 import Test.QuickCheck
 
-import Common.Token (Identifier)
+import Common.Token (Identifier, ConstrIdentifier)
 import Common.AST
 import Common.SymbolType
 import Common.PrintAST (pretty)
@@ -18,7 +19,7 @@ import Property.Lexer.ArbitraryTokens
     ( arbIdWithLength,
       arbitraryIntConstant,
       arbitraryFloatConstant,
-      arbitraryCharConstant )
+      arbitraryCharConstant)
 
 -- Define data structures for simple scoping
 type Scope = M.Map String ConstType
@@ -56,17 +57,20 @@ arbSimpleTypeDef =
             let t = constUserT tId
             in M.fromList [(cPrefix ++ "1", t)
                          , (cPrefix ++ "2", ConstType (FunType intConstType t))
-                         , (cPrefix ++ "3", ConstType (FunType t t))]
+                         , (cPrefix ++ "3", ConstType (FunType t t))
+                         , (cPrefix ++ "4", ConstType (FunType t (ConstType (FunType t (ConstType (FunType t t))))))]
         tDefGen tId cPrefix = do
             b1 <- arbTag NotTypable
             b2 <- arbTag NotTypable
             b3 <- arbTag NotTypable
+            b4 <- arbTag NotTypable
             bInt <- arbTag NotTypable
             bU <- arbTag NotTypable
             bt <- arbTag NotTypable
             TypeDef [TDef tId [ Constr (cPrefix ++ "1") [] b1
                               , Constr (cPrefix ++ "2") [Type IntType bInt] b2
                               , Constr (cPrefix ++ "3") [Type (UserDefinedType tId) bU] b3
+                              , Constr (cPrefix ++ "4") [Type (UserDefinedType tId) bU, Type (UserDefinedType tId) bU, Type (UserDefinedType tId) bU] b4
                               ] bt] <$> arbTag NotTypable
     in do
         tD1 <- tDefGen "t1" "C"
@@ -171,7 +175,7 @@ arbExpr scps@(s, ts) t = sized gen where
               , (2, loopGen s r t)
               , (1, (Expr . BeginExpr <$> r' t) <*> tg)
               , (2, arrayAccGen s r t)
-              -- TODO: Add pattern matching generator
+              , (1, matchGen (s, ts) r t)
               ]
 
 baseExprGen :: (Scope, TypeScope) -> ConstType -> Gen (Expr SemanticTag)
@@ -386,9 +390,69 @@ matchGen (s, ts) r t = sized $ \n -> do
 
 clauseGen :: Scope -> (Scope -> ConstType -> Gen (Expr SemanticTag)) -> ConstType -> ConstType -> Gen (Clause SemanticTag)
 clauseGen s r pt t = do
-  (p, s') <- patternGen s undefined pt
+  (p, s') <- patternGen s pt
   e <- r s' t
   Match p e <$> arbTag NotTypable
 
-patternGen :: Scope -> (Scope -> ConstType -> Gen (Pattern SemanticTag)) -> ConstType -> Gen (Pattern SemanticTag, Scope)
-patternGen = undefined
+patternGen :: Scope -> ConstType -> Gen (Pattern SemanticTag, Scope)
+patternGen s t = sized gen where
+  gen 0 = basePatternGen s t
+  gen n = do
+    tg <- arbTag (NodeType (constTypeToSymbolType t))
+    let r scope = resize (div n 2) . patternGen scope
+    mc <- arbConstrFromScope s t
+    case (t, mc) of
+      (ConstType (UserDefinedType _), Just (c, ct)) -> do
+        let argTs = funToArgs ct
+        (ps, s') <- foldlM (\(ps, s') pt -> do
+                                        (p, s'') <- r s' pt
+                                        return (p:ps, s'')) ([], s) argTs
+        frequency [ (1, r s t)
+                  , (2, return (Pattern (ConstrPattern c (reverse ps)) tg, s'))
+                  ]
+      _ -> r s t
+
+arbConstrFromScope :: Scope -> ConstType -> Gen (Maybe (ConstrIdentifier, ConstType))
+arbConstrFromScope s t = if not $ null res then Just <$> elements res else return Nothing
+  where
+    fltr (i:_, ct) = isUpper i && t == outFunType ct
+    fltr _ = False
+    res = filter fltr $ M.toList s
+
+arbConstConstrFromScope :: Scope -> ConstType -> Gen (Maybe ConstrIdentifier)
+arbConstConstrFromScope s t = if not $ null res then Just <$> elements res else return Nothing
+  where
+    fltr (i:_, ct) = isUpper i && null (funToArgs ct) && t == outFunType ct
+    fltr _ = False
+    res = map fst $ filter fltr $ M.toList s
+
+basePatternGen :: Scope -> ConstType -> Gen (Pattern SemanticTag, Scope)
+basePatternGen s t@(ConstType tf) = do
+  sign <- elements [NoSign, Plus, Minus]
+  tg <- arbTag (NodeType (constTypeToSymbolType t))
+  case tf of
+    IntType -> do
+      c <- arbitraryIntConstant
+      return (Pattern (IntConstPattern sign c) tg, s)
+    FloatType -> do
+      c <- arbitraryFloatConstant
+      return (Pattern (FloatConstPattern sign c) tg, s)
+    CharType -> do
+      c <- arbitraryCharConstant
+      return (Pattern (CharConstPattern c) tg, s)
+    BoolType -> do
+      c <- elements [TruePattern, FalsePattern]
+      return (Pattern c tg, s)
+    UserDefinedType _ -> do
+      mc <- arbConstConstrFromScope s t
+      case mc of
+        Nothing -> do
+          x <- arbId
+          return (Pattern (IdPattern x) tg, M.insert x t s)
+        Just ci -> do
+          x <- arbId
+          frequency [ (2, return (Pattern (ConstrPattern ci []) tg, s))
+                    , (1, return (Pattern (IdPattern x) tg, M.insert x t s))]
+    _ -> do
+      x <- arbId
+      return (Pattern (IdPattern x) tg, M.insert x t s)

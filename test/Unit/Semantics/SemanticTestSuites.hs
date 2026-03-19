@@ -280,6 +280,8 @@ exprSuites =
         ("type t = T of bool and s = S of t let main s = match s with S t -> match t with T true -> () end end", True),
         ("type t = T of int let main x = match x with T f -> f = f end", True),
         ("let f x = match x with x -> let g y = x in x end", True),
+        ("type t = T of bool and s = S of t let main s = match s with S (T true) -> () end", True),
+        ("type t = T of int let aux (f : int -> t) : t = f 0 let main = aux T", True),
         -- Failing cases
         ("type t = T of t int \nlet t (t : t) = t\nlet g t : t -> t = T t", False),
         ("let rec mutable a [1, 2, 3] and d = dim 0 a", False),
@@ -378,7 +380,6 @@ exprSuites =
         ("let main x = match x with y -> y [0] end", False),
         ("let main x = match x with y -> !y end", False),
         ("let rec main x = match x with y -> y (main y) end", False),
-        ("type t = T of bool and s = S of t let main s = match s with S (T true) -> () end", False),
         ("let f x = match x with x -> let g y = y == x in g 42 end", False),
         ("let main x = match x with f -> f end + 3", False)
     ]

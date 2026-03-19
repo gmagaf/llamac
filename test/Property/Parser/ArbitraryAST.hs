@@ -125,12 +125,14 @@ arbPatternF :: Gen p -> Gen (PatternF p)
 arbPatternF genP = sized gen where
   gen n = do
     sign <- elements [NoSign, Plus, Minus]
-    let baseGens = [IntConstPattern sign <$> arbitraryIntConstant,
-           FloatConstPattern sign <$> arbitraryFloatConstant,
-           CharConstPattern <$> arbitraryCharConstant,
-           return TruePattern, return FalsePattern,
-           IdPattern <$> arbitraryIdentifier]
+    let baseGens = [ IntConstPattern sign <$> arbitraryIntConstant
+                   , FloatConstPattern sign <$> arbitraryFloatConstant
+                   , CharConstPattern <$> arbitraryCharConstant
+                   , return TruePattern
+                   , return FalsePattern
+                   , IdPattern <$> arbitraryIdentifier
+                   , ConstrPattern <$> arbitraryConstrIdentifier <*> pure []]
     let ps = boundedListOf (0, 3) genP
     if n == 0 then
       oneof baseGens
-    else frequency [(1, ConstrPattern <$> arbitraryConstrIdentifier <*> ps), (1, oneof baseGens)]
+    else frequency [(2, ConstrPattern <$> arbitraryConstrIdentifier <*> ps), (1, oneof baseGens)]

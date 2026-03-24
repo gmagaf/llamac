@@ -171,14 +171,15 @@ semFunAppExpr i es = do
                 EQ -> do
                     ts <- mapM getNodeType es
                     v <- freshTVar
+                    checkConstraintHere v (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty v)
                     t <- inst ft
                     let inf = paramsToFun ts v
                     unifyHere t inf
-                    checkConstraintHere v (NotAllowedFunType $ "Function " ++ i ++ " cannot return function type: " ++ pretty v)
                     retE (FunAppExpr i es) v
         ParamEntry t _ -> do
             ts <- mapM getNodeType es
             v <- freshTVar
+            checkConstraintHere v (NotAllowedFunType $ "Param " ++ i ++ " cannot return function type: " ++ pretty v)
             let inf = paramsToFun ts v
             unifyHere t inf
             rt <- resolveType t
@@ -190,6 +191,7 @@ semFunAppExpr i es = do
         PatternEntry t -> do
             ts <- mapM getNodeType es
             v <- freshTVar
+            checkConstraintHere v (NotAllowedFunType $ "Pattern " ++ i ++ " cannot return function type: " ++ pretty v)
             let inf = paramsToFun ts v
             unifyHere t inf
             rt <- resolveType t
@@ -213,10 +215,10 @@ semConstrAppExpr i es = do
                 EQ -> do
                     ts <- mapM getNodeType es
                     v <- freshTVar
+                    checkConstraintHere v (NotAllowedFunType $ "Constructor " ++ i ++ " cannot return function type: " ++ pretty v)
                     unifyHere (constTypeToSymbolType outT) v
                     let inf = paramsToFun ts v
                     unifyHere (constTypeToSymbolType t) inf
-                    checkConstraintHere v (NotAllowedFunType $ "Constructor " ++ i ++ " cannot return function type: " ++ pretty v)
                     retE (ConstrAppExpr i es) v
         _ -> throwInternalError $
             "Entry: " ++ show entry ++ " is not expected for constructor identifier key " ++ i

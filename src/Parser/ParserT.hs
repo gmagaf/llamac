@@ -5,7 +5,7 @@
 module Parser.ParserT (ParserT(..),
                        parserT, pureParserT,
                        evalParserT, runParserT,
-                       throw, withExcept, catch
+                       throw, withExcept, catch, finally
                        ) where
 
 import Control.Monad.Trans.Class (MonadTrans(lift))
@@ -51,6 +51,9 @@ withExcept f = ParserT . Except.withExceptT f . getParserT
 
 catch :: Monad m => (e -> ParserT e' s m a) -> ParserT e s m a -> ParserT e' s m a
 catch handle p = ParserT $ Except.catchE (getParserT p) (getParserT . handle)
+
+finally :: Monad m => (Either e a -> ParserT e s m a) -> ParserT e s m a -> ParserT e s m a
+finally f p = ParserT $ Except.catchE (getParserT (p >>= (f . Right))) (getParserT . f . Left)
 
 instance Functor f => Functor (ParserT e s f) where
   fmap :: forall a b. (a -> b) -> ParserT e s f a -> ParserT e s f b

@@ -3,6 +3,7 @@ module Semantics.Unifier (inst, gen, checkConstraint, unify,
                           unifyAt, unifyNode, unifyHere,
                           checkConstraintAt, checkConstraintNode, checkConstraintHere) where
 
+import Prelude hiding (traverse)
 import Data.Maybe (isNothing)
 import Control.Monad (when, unless)
 import Data.Foldable (forM_)
@@ -18,7 +19,6 @@ import Semantics.Utils (SemanticTag (posn), getNodeType,
                         getConstraints, putConstraints,
                         resolveType, freshTVar, getFreeTVars, removeDuplicates)
 import Semantics.TypeConstraints
-import Prelude hiding (traverse)
 
 
 {-
@@ -80,32 +80,30 @@ copyConstraints _ = return ()
 -- Check if a type complies with a type constraint
 -- If it doesn't throw an error
 checkConstraint :: SymbolType -> TypeConstraint t -> Parser ()
-checkConstraint t@(SymType ft) tc = case (ft, tc) of
-    (FunType {}, NotAllowedFunType s) ->
+checkConstraint t' tc = do
+  t <- resolveType t'
+  case t of
+    SymType ft -> case (ft, tc) of
+      (FunType {}, NotAllowedFunType s) ->
         throwSemanticError $ "Type constraint failed: " ++ s
-    (_, NotAllowedFunType _) -> return ()
-    (ArrayType {}, NotAllowedArrayType s) ->
+      (_, NotAllowedFunType _) -> return ()
+      (ArrayType {}, NotAllowedArrayType s) ->
         throwSemanticError $ "Type constraint failed: " ++ s
-    (_, NotAllowedArrayType _) -> return ()
-    (ArrayType d _, ArrayOfAtLeastDim l s) ->
+      (_, NotAllowedArrayType _) -> return ()
+      (ArrayType d _, ArrayOfAtLeastDim l s) ->
         when (d < l) $ throwSemanticError $ "Type constraint failed: " ++ s
-    (_, ArrayOfAtLeastDim _ s) ->
+      (_, ArrayOfAtLeastDim _ s) ->
         throwSemanticError $ "Type constraint failed: " ++ s
-    (_, AllowedTypes ts s) ->
+      (_, AllowedTypes ts s) ->
         let eqTypes = any (\ct -> t == constTypeToSymbolType ct) ts
         in unless eqTypes . throwSemanticError $ "Type constraint failed for type " ++ pretty t ++ ": " ++ s
-    (UserDefinedType {}, AllowedUserDefinedType _) -> return ()
-    (_, AllowedUserDefinedType s) ->
+      (UserDefinedType {}, AllowedUserDefinedType _) -> return ()
+      (_, AllowedUserDefinedType s) ->
         throwSemanticError $ "Type constraint failed: for type " ++ pretty t ++ ". " ++ s
-    (_, NotPolymorphicVar {}) -> return () -- This constraint only makes sense for type variables
-checkConstraint (TVar v) c = do
-    let tv = TVar v
-    f <- getUnifier
-    when (isNothing (f tv)) $
-        throwSemanticError ("Unable to add constraint: " ++ show c ++
-                  " . Variable " ++ pretty tv ++ " has never been used before")
-    cs <- getConstraints
-    putConstraints $ insertConstrWith union v (singletonSet c) cs
+      (_, NotPolymorphicVar {}) -> return () -- This constraint only makes sense for type variables
+    TVar v -> do
+        cs <- getConstraints
+        putConstraints $ insertConstrWith union v (singletonSet tc) cs
 
 -- Apply the type constraints of a type variable
 -- to the unified type

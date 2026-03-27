@@ -1,7 +1,7 @@
 module Parser.Utils (scanM, parseM, analyzeM, initAnalyzeM, genM,
                      parseString, parseFile, parseLine,
                      parse, analyze,
-                     runDebug, debugRepl) where
+                     runDebug, debugRepl, debugFile) where
 
 import Control.Lens (view)
 import Data.Text.Lazy (Text)
@@ -81,3 +81,8 @@ debugRepl = do
   s <- getLine
   runDebug s
   debugRepl
+
+debugFile :: String -> IO ()
+debugFile f = do
+  code <- readFileB f
+  runDebug code

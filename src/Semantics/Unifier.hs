@@ -4,7 +4,6 @@ module Semantics.Unifier (inst, gen, checkConstraint, unify,
                           checkConstraintAt, checkConstraintNode, checkConstraintHere) where
 
 import Prelude hiding (traverse)
-import Data.Maybe (isNothing)
 import Control.Monad (when, unless)
 import Data.Foldable (forM_)
 import qualified Data.IntSet as S
@@ -14,8 +13,7 @@ import Common.PrintAST (pretty)
 import Lexer.Lexer (AlexPosn)
 import Common.SymbolType(SymbolType(..), TypeScheme (..), constTypeToSymbolType, notVarInType, substScheme, cataM, PosnId (identifier), printTypePosn)
 import Parser.ParserM (Parser, throwSemanticError, throwAtPosn, getPosn)
-import Semantics.Utils (SemanticTag (posn), getNodeType,
-                        getUnifier, putUnifier,
+import Semantics.Utils (SemanticTag (posn), getNodeType, putUnifier,
                         getConstraints, putConstraints,
                         resolveType, freshTVar, getFreeTVars, removeDuplicates)
 import Semantics.TypeConstraints

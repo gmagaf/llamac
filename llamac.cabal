@@ -148,8 +148,26 @@ test-suite test
  other-modules:       Unit.Unit
                       Unit.PrintAST.PrettyASTSuites
                       Unit.Parser.ExpectedASTs
+                      Unit.Parser.HelloWorld
+                      Unit.Parser.Hanoi
+                      Unit.Parser.HanoiType
+                      Unit.Parser.Primes
+                      Unit.Parser.Reverse
+                      Unit.Parser.BubbleSort
+                      Unit.Parser.Mean
+                      Unit.Parser.ArrayMult
+                      Unit.Parser.BinTrees
                       Unit.Semantics.SemanticTestSuites
                       Unit.Semantics.AnalyzedASTs
+                      Unit.Semantics.HelloWorld
+                      Unit.Semantics.Hanoi
+                      Unit.Semantics.HanoiType
+                      Unit.Semantics.Primes
+                      Unit.Semantics.Reverse
+                      Unit.Semantics.BubbleSort
+                      Unit.Semantics.Mean
+                      Unit.Semantics.ArrayMult
+                      Unit.Semantics.BinTrees
                       Property.Utils
                       Property.Property
                       Property.Lexer.ArbitraryTokens

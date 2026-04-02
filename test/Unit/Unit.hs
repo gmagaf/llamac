@@ -139,6 +139,12 @@ guidedSemSuite =
         [ ("helloWorld.llama", helloWorldSemAST)
         , ("hanoi.llama", hanoiSemAST)
         , ("hanoiType.llama", hanoiTypeSemAST)
+        , ("primes.llama", primesSemAST)
+        , ("reverse.llama", reverseSemAST)
+        , ("bubbleSort.llama", bubbleSortSemAST)
+        , ("mean.llama", meanSemAST)
+        , ("arrayMult.llama", arrayMultSemAST)
+        , ("binTrees.llama", binTreesSemAST)
         ]
 
 testGuidedSem :: IO ()
